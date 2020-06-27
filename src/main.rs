@@ -1,6 +1,6 @@
 use std::io;
 
-fn main() {
+fn read_user_input() -> f64 {
     let mut user_input_buffer = String::new();
 
     println!("Enter a number...");
@@ -9,10 +9,19 @@ fn main() {
         .read_line(&mut user_input_buffer)
         .expect("Failed to read user input!");
 
-    let user_input: f64 = user_input_buffer
+    user_input_buffer
         .trim()
         .parse()
-        .expect("That's not a number!");
+        .expect("That's not a number!")
+}
 
-    println!("You entered: {}", user_input);
+fn compute_square_root(x: f64) -> f64 {
+	x
+}
+
+fn main() {
+    let x = read_user_input();
+    println!("You entered: {}", x);
+    let y = compute_square_root(x);
+    println!("The square root of {} is {}", x, y);
 }
