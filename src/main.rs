@@ -1,5 +1,12 @@
 use std::io;
 
+// TODO:
+// - create a separate file that implements the square root function
+// - generalize Newtons method to work for any function
+// - create some unit tests
+// - see if we can do auto-diff
+
+
 fn read_user_input() -> f64 {
     let mut user_input_buffer = String::new();
 
