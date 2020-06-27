@@ -1,0 +1,6 @@
+[package]
+name = "mpk-rust"
+version = "0.1.0"
+authors = ["Matt Kelly <matthew.kelly2@gmail.com>"]
+
+[dependencies]
