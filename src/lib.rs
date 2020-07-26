@@ -25,11 +25,25 @@ pub mod numerical_methods {
     }
 }
 
+pub mod mandelbrot_set {
+
+    pub struct Complex {
+        pub real: f64,
+        pub imag: f64,
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn complex_constructor() {
+        let complex = crate::mandelbrot_set::Complex {
+            real: 1.0,
+            imag: 2.0,
+        };
+        assert_eq!(complex.real, 1.0);
+        assert_eq!(complex.imag, 2.0);
     }
 
     #[test]
