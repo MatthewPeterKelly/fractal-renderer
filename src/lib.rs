@@ -23,12 +23,6 @@ pub mod numerical_methods {
         }
         y
     }
-
-    pub fn as_fraction(num: u32, den: u32) -> f64 {
-        let num = num as f64;
-        let den = den as f64;
-        num / den
-    }
 }
 
 pub mod mandelbrot_set {
@@ -49,7 +43,7 @@ pub mod mandelbrot_set {
 
 #[cfg(test)]
 mod tests {
-    
+
     use std::fs::File;
     use std::io::prelude::*; // write_all
 
@@ -75,40 +69,34 @@ mod tests {
 
     #[test]
     fn write_simple_png_file() -> std::io::Result<()> {
+        // Parameters
+        let max_normalized_scale = 1.0;  // [0 = black, 1 = white] 
+        const BUFFER_SIZE: usize = 1024;
+        const U8_BIN_COUNT: f64 = 256.0;
+        let n_rows = 128;
+        let n_cols = BUFFER_SIZE as u32;
 
-        // Next:  make wider bands and then check if we can actually see 16 vs 8 bit image quality difference
-
-        let n_rows = 512;
-        let n_cols = 512;
-        let mut data_buffer: [u8; 512] = [0; 512]; // TODO:  make larger chunk size?
-        let chunk_size = data_buffer.len();
-        let file = File::create("bar.png")?;
+        // Setup for the PNG writer object
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
+        let file = File::create("grayscale_demo.png")?;
         let ref mut w = BufWriter::new(file);
-        // TODO:  figure out how to stream into larger files
-        let mut encoder = png::Encoder::new(
-            w,
-            n_cols, /*width*/
-            n_rows,                         /*height*/
-        ); //
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Eight); // TODO:  experiment with Sixteen bit grayscale
+        encoder.set_depth(png::BitDepth::Eight); 
         let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(chunk_size);
-        for i_row in 0..n_rows {
+        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
 
-            let alpha = crate::numerical_methods::as_fraction(i_row, n_rows-1);
-            for i_col in 0..n_cols {
-                let beta = crate::numerical_methods::as_fraction(i_col, n_cols-1);
-
-                let mut value: f64 = 0.5 * (alpha + beta);
-                if value >= 1.0 {
-                    value = value - 1.0;
-                }
-                value = value * (n_rows as f64);
-                let value = value as u8;
-                data_buffer[i_col as usize] = value;
-            }
-            stream_writer.write(&data_buffer[0..])?; // first line
+        // Populate the data for a single row
+        let scale = 1.0 / ((n_cols -1) as f64);
+        for i_col in 0..n_cols {
+            let beta = scale * (i_col as f64);
+            let value: f64 = beta* U8_BIN_COUNT * max_normalized_scale;
+            let value = value as u8;
+            data_buffer[i_col as usize] = value;
+        }
+        // Copy that data into every row
+        for _ in 0..n_rows {
+            stream_writer.write(&data_buffer[0..])?;
         }
         Ok(())
     }
