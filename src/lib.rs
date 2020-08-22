@@ -39,11 +39,29 @@ pub mod mandelbrot_set {
             self.real = temp;
         }
     }
-
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::prelude::*; // write_all
+
+    #[test]
+    fn hello_world_file_io() -> std::io::Result<()> {
+        {
+            // Write a file
+            let mut file = File::create("foo.txt")?;
+            file.write_all(b"Hello, world!")?;
+        }
+        {
+            // Read the file:
+            let mut file = File::open("foo.txt")?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            assert_eq!(contents, "Hello, world!");
+        }
+        Ok(())
+    }
 
     #[test]
     fn complex_constructor() {
@@ -54,7 +72,6 @@ mod tests {
         assert_eq!(complex.real, 1.0);
         assert_eq!(complex.imag, 2.0);
     }
-
 
     #[test]
     fn mandelbrot_update() {
@@ -78,6 +95,9 @@ mod tests {
     fn square_root() {
         assert_eq!(crate::numerical_methods::compute_square_root(4.0), 2.0);
         assert_eq!(crate::numerical_methods::compute_square_root(9.0), 3.0);
-        assert_eq!(crate::numerical_methods::compute_square_root(10234.0), 101.16323442832382);
+        assert_eq!(
+            crate::numerical_methods::compute_square_root(10234.0),
+            101.16323442832382
+        );
     }
 }
