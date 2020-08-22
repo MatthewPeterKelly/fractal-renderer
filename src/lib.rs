@@ -43,10 +43,11 @@ pub mod mandelbrot_set {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
     use std::fs::File;
     use std::io::prelude::*; // write_all
 
-    // For reading and opening files    
+    // For reading and opening files
     use std::io::BufWriter;
 
     #[test]
@@ -68,17 +69,36 @@ mod tests {
 
     #[test]
     fn write_simple_png_file() -> std::io::Result<()> {
+
+        // Next:  make wider bands and then check if we can actually see 16 vs 8 bit image quality difference
+
+        let n_rows = 256;
+        let mut data_buffer: [u8; 256] = [0; 256]; // TODO:  make larger chunk size?
+        let chunk_size = data_buffer.len();
         let file = File::create("bar.png")?;
         let ref mut w = BufWriter::new(file);
         // TODO:  figure out how to stream into larger files
-        let mut encoder = png::Encoder::new(w, 8 /*width*/, 2/*height*/); // 
+        let mut encoder = png::Encoder::new(
+            w,
+            chunk_size.try_into().unwrap(), /*width*/
+            n_rows,                         /*height*/
+        ); //
         encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Eight);  // TODO:  experiment with Sixteen bit grayscale
+        encoder.set_depth(png::BitDepth::Eight); // TODO:  experiment with Sixteen bit grayscale
         let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(8);
-        let data = [0,1,2,3,4,5,6,7]; // An array containing a grayscale values.
-        stream_writer.write(&data[0..])?;  // first line
-        stream_writer.write(&data[0..])?;  // second line
+        let mut stream_writer = writer.stream_writer_with_size(chunk_size);
+        for i_row in 0..n_rows {
+            let mut val: u8 = i_row.try_into().unwrap();
+            for i_col in 0..chunk_size {
+                data_buffer[i_col] = val;
+                if val == 255 {
+                    val = 0;
+                } else {
+                    val = val + 1;
+                }
+            }
+            stream_writer.write(&data_buffer[0..])?; // first line
+        }
         Ok(())
     }
 
