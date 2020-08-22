@@ -46,6 +46,9 @@ mod tests {
     use std::fs::File;
     use std::io::prelude::*; // write_all
 
+    // For reading and opening files    
+    use std::io::BufWriter;
+
     #[test]
     fn hello_world_file_io() -> std::io::Result<()> {
         {
@@ -60,6 +63,20 @@ mod tests {
             file.read_to_string(&mut contents)?;
             assert_eq!(contents, "Hello, world!");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn write_simple_png_file() -> std::io::Result<()> {
+        let file = File::create("bar.png")?;
+        let ref mut w = BufWriter::new(file);
+        // TODO:  figure out how to stream into larger files
+        let mut encoder = png::Encoder::new(w, 10 /*width*/, 1/*height*/); // 
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Eight);  // TODO:  experiment with Sixteen bit grayscale
+        let mut writer = encoder.write_header().unwrap();
+        let data = [0,1,2,3,4,5,6,7,8,9]; // An array containing a grayscale values.
+        writer.write_image_data(&data).unwrap(); // Save
         Ok(())
     }
 
