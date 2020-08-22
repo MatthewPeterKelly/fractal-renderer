@@ -78,9 +78,9 @@ mod tests {
 
         // Next:  make wider bands and then check if we can actually see 16 vs 8 bit image quality difference
 
-        let n_rows = 256;
-        let n_cols = 256;
-        let mut data_buffer: [u8; 256] = [0; 256]; // TODO:  make larger chunk size?
+        let n_rows = 512;
+        let n_cols = 512;
+        let mut data_buffer: [u8; 512] = [0; 512]; // TODO:  make larger chunk size?
         let chunk_size = data_buffer.len();
         let file = File::create("bar.png")?;
         let ref mut w = BufWriter::new(file);
@@ -100,7 +100,7 @@ mod tests {
             for i_col in 0..n_cols {
                 let beta = crate::numerical_methods::as_fraction(i_col, n_cols-1);
 
-                let mut value: f64 = alpha + beta;
+                let mut value: f64 = 0.5 * (alpha + beta);
                 if value >= 1.0 {
                     value = value - 1.0;
                 }
