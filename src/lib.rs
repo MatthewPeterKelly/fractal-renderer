@@ -39,6 +39,29 @@ pub mod mandelbrot_set {
             self.real = temp;
         }
     }
+
+    pub struct PixelIter {
+        i_row: u32,
+    }
+
+    impl PixelIter {
+       pub fn new() -> PixelIter {
+            PixelIter{ i_row: 0}
+        }
+    }
+
+    impl Iterator for PixelIter {
+        type Item = u32;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.i_row += 1;
+            if self.i_row < 10 {
+                Some(self.i_row)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -49,6 +72,13 @@ mod tests {
 
     // For reading and opening files
     use std::io::BufWriter;
+
+    #[test]
+    fn pixel_iter_test() {
+        for i_row in crate::mandelbrot_set::PixelIter::new() {
+            println!("i_row: {}", i_row);
+        }
+    }
 
     #[test]
     fn hello_world_file_io() -> std::io::Result<()> {
@@ -102,7 +132,7 @@ mod tests {
             let value1_u = value1 as u8;
             let value1_shift = value1_u << 4;
             // Write the elements into the buffer
-            println!("i0: {}, i1: {}, value0: {}, value1: {}, value0_u: {}, value1_u: {}, value1_shift: {}", i0, i1, value0, value1,  value0_u, value1_u, value1_shift);
+            // println!("i0: {}, i1: {}, value0: {}, value1: {}, value0_u: {}, value1_u: {}, value1_shift: {}", i0, i1, value0, value1,  value0_u, value1_u, value1_shift);
             let value_sum = value0_u + value1_shift;
             data_buffer[i_block as usize] = value_sum;
         }
