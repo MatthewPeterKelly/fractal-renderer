@@ -27,6 +27,7 @@ pub mod numerical_methods {
 
 pub mod mandelbrot_set {
 
+    #[derive(Debug, Copy, Clone)]
     pub struct Complex {
         pub real: f64,
         pub imag: f64,
@@ -57,10 +58,9 @@ pub mod mandelbrot_set {
     }
 
     /// Iterates through an image along rows
-    /// ```
     /// 0 1 2 3
     /// 4 5 ...
-    /// ``
+    #[derive(Debug, Copy, Clone)]
     pub struct PixelIter {
         n_cols: u32, // total number of cols
         total: u32,  // total number of pixels
