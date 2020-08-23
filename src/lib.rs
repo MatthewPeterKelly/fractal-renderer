@@ -40,6 +40,7 @@ pub mod mandelbrot_set {
         }
     }
 
+    /// A specific pixel in the image
     #[derive(Debug, Copy, Clone)]
     pub struct Pixel {
         pub row: u32,
@@ -47,18 +48,32 @@ pub mod mandelbrot_set {
     }
 
     impl Pixel {
-       pub fn new() -> Pixel {
-            Pixel{ row:0, col:0  }
+        pub fn new(row_index: u32, col_index: u32) -> Pixel {
+            Pixel {
+                row: row_index,
+                col: col_index,
+            }
         }
     }
 
+    /// Iterates through an image along rows
+    /// ```
+    /// 0 1 2 3
+    /// 4 5 ...
+    /// ``
     pub struct PixelIter {
-        pixel: Pixel,
+        n_cols: u32, // total number of cols
+        total: u32,  // total number of pixels
+        index: u32,  // current index within the image
     }
 
     impl PixelIter {
-       pub fn new() -> PixelIter {
-            PixelIter{ pixel: Pixel::new() }
+        pub fn new(n_rows: u32, n_cols: u32) -> PixelIter {
+            PixelIter {
+                n_cols,
+                index: 0,
+                total: n_rows * n_cols,
+            }
         }
     }
 
@@ -66,13 +81,16 @@ pub mod mandelbrot_set {
         type Item = Pixel;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.pixel.row += 1;
-            self.pixel.col+= 1;
-            if self.pixel.row < 10 {
-                Some(self.pixel)
+            let result = if self.index < self.total {
+                Some(Pixel::new(
+                    self.index / self.n_cols,
+                    self.index % self.n_cols,
+                ))
             } else {
                 None
-            }
+            };
+            self.index += 1;
+            result
         }
     }
 }
@@ -88,7 +106,7 @@ mod tests {
 
     #[test]
     fn pixel_iter_test() {
-        for pixel in crate::mandelbrot_set::PixelIter::new() {
+        for pixel in crate::mandelbrot_set::PixelIter::new(5, 10) {
             println!("pixe: {:?}", pixel);
         }
     }
@@ -110,10 +128,10 @@ mod tests {
         Ok(())
     }
 
-   #[test]
+    #[test]
     fn write_png_u4_demo() -> std::io::Result<()> {
         // Parameters
-        let max_normalized_scale = 1.0;  // [0 = black, 1 = white] 
+        let max_normalized_scale = 1.0; // [0 = black, 1 = white]
         const BUFFER_SIZE: usize = 512;
         const U4_BIN_COUNT: f64 = 16.0;
         let n_rows = 128;
@@ -121,27 +139,27 @@ mod tests {
         let n_cols = 2 * BUFFER_SIZE as u32;
 
         // Setup for the PNG writer object
-        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
         let file = File::create("grayscale_demo_u4.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Four); 
+        encoder.set_depth(png::BitDepth::Four);
         let mut writer = encoder.write_header().unwrap();
         let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
 
         // Populate the data for a single row
         let scale = 1.0 / (n_cols as f64);
         for i_block in 0..n_blocks {
-            let i0 = 2*i_block;
+            let i0 = 2 * i_block;
             let i1 = i0 + 1;
             // First element in the block
             let beta0 = scale * (i0 as f64);
-            let value0: f64 = beta0* U4_BIN_COUNT * max_normalized_scale;
+            let value0: f64 = beta0 * U4_BIN_COUNT * max_normalized_scale;
             let value0_u = value0 as u8;
             // Sectond element in the block
             let beta1 = scale * (i1 as f64);
-            let value1: f64 = beta1* U4_BIN_COUNT * max_normalized_scale;
+            let value1: f64 = beta1 * U4_BIN_COUNT * max_normalized_scale;
             let value1_u = value1 as u8;
             let value1_shift = value1_u << 4;
             // Write the elements into the buffer
@@ -159,27 +177,27 @@ mod tests {
     #[test]
     fn write_png_gradient_demo() -> std::io::Result<()> {
         // Parameters
-        let max_normalized_scale = 1.0;  // [0 = black, 1 = white] 
+        let max_normalized_scale = 1.0; // [0 = black, 1 = white]
         const BUFFER_SIZE: usize = 1024;
         const U8_BIN_COUNT: f64 = 256.0;
         let n_rows = 128;
         let n_cols = BUFFER_SIZE as u32;
 
         // Setup for the PNG writer object
-        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
         let file = File::create("grayscale_demo.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Eight); 
+        encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header().unwrap();
         let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
 
         // Populate the data for a single row
-        let scale = 1.0 / ((n_cols -1) as f64);
+        let scale = 1.0 / ((n_cols - 1) as f64);
         for i_col in 0..n_cols {
             let beta = scale * (i_col as f64);
-            let value: f64 = beta* U8_BIN_COUNT * max_normalized_scale;
+            let value: f64 = beta * U8_BIN_COUNT * max_normalized_scale;
             let value = value as u8;
             data_buffer[i_col as usize] = value;
         }
