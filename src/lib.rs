@@ -67,8 +67,54 @@ mod tests {
         Ok(())
     }
 
+   #[test]
+    fn write_png_u4_demo() -> std::io::Result<()> {
+        // Parameters
+        let max_normalized_scale = 1.0;  // [0 = black, 1 = white] 
+        const BUFFER_SIZE: usize = 512;
+        const U4_BIN_COUNT: f64 = 16.0;
+        let n_rows = 128;
+        let n_blocks = BUFFER_SIZE as u32;
+        let n_cols = 2 * BUFFER_SIZE as u32;
+
+        // Setup for the PNG writer object
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE]; 
+        let file = File::create("grayscale_demo_u4.png")?;
+        let ref mut w = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Four); 
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
+
+        // Populate the data for a single row
+        let scale = 1.0 / (n_cols as f64);
+        for i_block in 0..n_blocks {
+            let i0 = 2*i_block;
+            let i1 = i0 + 1;
+            // First element in the block
+            let beta0 = scale * (i0 as f64);
+            let value0: f64 = beta0* U4_BIN_COUNT * max_normalized_scale;
+            let value0_u = value0 as u8;
+            // Sectond element in the block
+            let beta1 = scale * (i1 as f64);
+            let value1: f64 = beta1* U4_BIN_COUNT * max_normalized_scale;
+            let value1_u = value1 as u8;
+            let value1_shift = value1_u << 4;
+            // Write the elements into the buffer
+            println!("i0: {}, i1: {}, value0: {}, value1: {}, value0_u: {}, value1_u: {}, value1_shift: {}", i0, i1, value0, value1,  value0_u, value1_u, value1_shift);
+            let value_sum = value0_u + value1_shift;
+            data_buffer[i_block as usize] = value_sum;
+        }
+        // Copy that data into every row
+        for _ in 0..n_rows {
+            stream_writer.write(&data_buffer[0..])?;
+        }
+        Ok(())
+    }
+
     #[test]
-    fn write_simple_png_file() -> std::io::Result<()> {
+    fn write_png_gradient_demo() -> std::io::Result<()> {
         // Parameters
         let max_normalized_scale = 1.0;  // [0 = black, 1 = white] 
         const BUFFER_SIZE: usize = 1024;
