@@ -40,23 +40,36 @@ pub mod mandelbrot_set {
         }
     }
 
+    #[derive(Debug, Copy, Clone)]
+    pub struct Pixel {
+        pub row: u32,
+        pub col: u32,
+    }
+
+    impl Pixel {
+       pub fn new() -> Pixel {
+            Pixel{ row:0, col:0  }
+        }
+    }
+
     pub struct PixelIter {
-        i_row: u32,
+        pixel: Pixel,
     }
 
     impl PixelIter {
        pub fn new() -> PixelIter {
-            PixelIter{ i_row: 0}
+            PixelIter{ pixel: Pixel::new() }
         }
     }
 
     impl Iterator for PixelIter {
-        type Item = u32;
+        type Item = Pixel;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.i_row += 1;
-            if self.i_row < 10 {
-                Some(self.i_row)
+            self.pixel.row += 1;
+            self.pixel.col+= 1;
+            if self.pixel.row < 10 {
+                Some(self.pixel)
             } else {
                 None
             }
@@ -75,8 +88,8 @@ mod tests {
 
     #[test]
     fn pixel_iter_test() {
-        for i_row in crate::mandelbrot_set::PixelIter::new() {
-            println!("i_row: {}", i_row);
+        for pixel in crate::mandelbrot_set::PixelIter::new() {
+            println!("pixe: {:?}", pixel);
         }
     }
 
