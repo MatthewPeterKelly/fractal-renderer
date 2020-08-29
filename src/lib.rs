@@ -153,7 +153,7 @@ pub mod mandelbrot_set {
                 png::BitDepth::Eight => self.set_8_bit_virtual_element(value, index),
                 png::BitDepth::Four => self.set_4_bit_virtual_element(value, index),
                 png::BitDepth::Two => self.set_2_bit_virtual_element(value, index),
-                _ => panic!("not yet implemented!"),
+                png::BitDepth::One => self.set_1_bit_virtual_element(value, index),
             }
         }
 
@@ -191,6 +191,14 @@ pub mod mandelbrot_set {
             let minor_index = index % 8;
             // TODO:  figure out how to clear only the matching bits here...
             self.buffer[major_index] += (scaled_value as u16) << (minor_index * 2);
+        }
+
+        /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
+        fn set_1_bit_virtual_element(&mut self, value: f64, index: usize) {
+            let major_index = index / 16; // integer division!
+            let minor_index = index % 16;
+            // TODO:  figure out how to clear only the matching bits here...
+            self.buffer[major_index] += (value as u16) << minor_index;
         }
     }
 
@@ -301,6 +309,23 @@ mod tests {
         for i in 0..8 {
             buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
             data_u16[i] = ((3.0 * data_f64[i]) as u16) << (2 * i);
+        }
+        // manually convert each element into
+        // TODO:  not sure which order is correct here...
+        assert_eq!(buffer.get_concrete_element(0), data_u16.iter().sum());
+    }
+
+    #[test]
+    fn buffer_manager_1_bit_io() {
+        let count = 1;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::One, count);
+        let data_f64 = vec![
+            0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2, 0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2,
+        ];
+        let mut data_u16 = vec![0; 16];
+        for i in 0..16 {
+            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            data_u16[i] = (data_f64[i] as u16) << i;
         }
         // manually convert each element into
         // TODO:  not sure which order is correct here...
