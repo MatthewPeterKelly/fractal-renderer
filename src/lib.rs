@@ -57,6 +57,9 @@ pub mod mandelbrot_set {
         }
     }
 
+    /// Manage a buffer of a specific bit depth
+
+
     /// Iterates through an image along rows
     /// 0 1 2 3
     /// 4 5 ...
@@ -133,21 +136,22 @@ mod tests {
     fn write_png_u4_demo() -> std::io::Result<()> {
         // Parameters
         let max_normalized_scale = 1.0; // [0 = black, 1 = white]
-        const BUFFER_SIZE: usize = 512;
+        let buffer_size: usize = 512;
         const U4_BIN_COUNT: f64 = 16.0;
         let n_rows = 128;
-        let n_blocks = BUFFER_SIZE as u32;
-        let n_cols = 2 * BUFFER_SIZE as u32;
+        let n_blocks = buffer_size as u32;
+        let n_cols = 2 * buffer_size as u32;
 
         // Setup for the PNG writer object
-        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        // let mut data_buffer: [u8; buffer_size] = [0; buffer_size];
+        let mut data_buffer = vec![0.0 as u8; buffer_size];
         let file = File::create("grayscale_demo_u4.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(png::BitDepth::Four);
         let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
+        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
 
         // Populate the data for a single row
         let scale = 1.0 / (n_cols as f64);
