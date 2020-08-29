@@ -40,6 +40,7 @@ pub mod mandelbrot_set {
             self.real = temp;
         }
     }
+    //////////////////////////////////////////////////////////////////////////////////////////
 
     /// A specific pixel in the image
     #[derive(Debug, Copy, Clone)]
@@ -51,14 +52,11 @@ pub mod mandelbrot_set {
 
     impl Pixel {
         pub fn new(row: u32, col: u32, index: u32) -> Pixel {
-            Pixel {
-                row, col, index,
-            }
+            Pixel { row, col, index }
         }
     }
 
-    /// Manage a buffer of a specific bit depth
-
+    //////////////////////////////////////////////////////////////////////////////////////////
 
     /// Iterates through an image along rows
     /// 0 1 2 3
@@ -88,7 +86,7 @@ pub mod mandelbrot_set {
                 Some(Pixel::new(
                     self.index / self.n_cols,
                     self.index % self.n_cols,
-                    self.index
+                    self.index,
                 ))
             } else {
                 None
@@ -97,6 +95,38 @@ pub mod mandelbrot_set {
             result
         }
     }
+
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    /// Manage a buffer of a specific bit depth
+    pub struct BufferManager {
+        bit_depth: png::BitDepth,
+        buffer: Vec<u16>,
+    }
+
+    impl BufferManager {
+        /// Note that size of the buffer is (16 bits * size) = size * two bytes
+        pub fn new(bit_depth: png::BitDepth, size: usize) -> BufferManager {
+            BufferManager {
+                bit_depth,
+                buffer: vec![0.0 as u16; size],
+            }
+        }
+
+        /// Compute the effective size for the selected bit depth
+        /// This is used when writing data at a specific sub-index
+        pub fn get_size_at_bit_depth(&self) -> usize {
+            match self.bit_depth {
+                png::BitDepth::One => 16 * self.buffer.len(),
+                png::BitDepth::Two => 8 * self.buffer.len(),
+                png::BitDepth::Four => 4 * self.buffer.len(),
+                png::BitDepth::Eight => 2 * self.buffer.len(),
+                png::BitDepth::Sixteen => self.buffer.len(),
+            }
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////
 }
 
 #[cfg(test)]
@@ -112,6 +142,31 @@ mod tests {
     fn pixel_iter_test() {
         for pixel in crate::mandelbrot_set::PixelIter::new(5, 10) {
             println!("pixel: {:?}", pixel);
+        }
+    }
+
+    #[test]
+    fn buffer_manager_size() {
+        let count = 8;
+        {
+            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::One, count);
+            assert!(buffer.get_size_at_bit_depth() == count * 16);
+        }
+        {
+            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Two, count);
+            assert!(buffer.get_size_at_bit_depth() == count * 8);
+        }
+        {
+            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
+            assert!(buffer.get_size_at_bit_depth() == count * 4);
+        }
+        {
+            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
+            assert!(buffer.get_size_at_bit_depth() == count * 2);
+        }
+        {
+            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
+            assert!(buffer.get_size_at_bit_depth() == count * 1);
         }
     }
 
