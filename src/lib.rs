@@ -46,13 +46,13 @@ pub mod mandelbrot_set {
     pub struct Pixel {
         pub row: u32,
         pub col: u32,
+        pub index: u32,
     }
 
     impl Pixel {
-        pub fn new(row_index: u32, col_index: u32) -> Pixel {
+        pub fn new(row: u32, col: u32, index: u32) -> Pixel {
             Pixel {
-                row: row_index,
-                col: col_index,
+                row, col, index,
             }
         }
     }
@@ -85,6 +85,7 @@ pub mod mandelbrot_set {
                 Some(Pixel::new(
                     self.index / self.n_cols,
                     self.index % self.n_cols,
+                    self.index
                 ))
             } else {
                 None
@@ -107,7 +108,7 @@ mod tests {
     #[test]
     fn pixel_iter_test() {
         for pixel in crate::mandelbrot_set::PixelIter::new(5, 10) {
-            println!("pixe: {:?}", pixel);
+            println!("pixel: {:?}", pixel);
         }
     }
 
