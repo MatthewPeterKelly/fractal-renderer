@@ -151,6 +151,7 @@ pub mod mandelbrot_set {
                 // TODO:  check that value is on [0,1]?
                 png::BitDepth::Sixteen => self.set_16_bit_virtual_element(value, index),
                 png::BitDepth::Eight => self.set_8_bit_virtual_element(value, index),
+                png::BitDepth::Four => self.set_4_bit_virtual_element(value, index),
                 _ => panic!("not yet implemented!"),
             }
         }
@@ -165,10 +166,20 @@ pub mod mandelbrot_set {
         fn set_8_bit_virtual_element(&mut self, value: f64, index: usize) {
             const BIT_SCALE: f64 = 255.0; // 2^8 - 1
             let scaled_value = value * BIT_SCALE;
-            let major_index = index / 2;  // integer division!
+            let major_index = index / 2; // integer division!
             let minor_index = index % 2;
             // TODO:  figure out how to clear only the matching bits here...
             self.buffer[major_index] += (scaled_value as u16) << (minor_index * 8);
+        }
+
+        /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
+        fn set_4_bit_virtual_element(&mut self, value: f64, index: usize) {
+            const BIT_SCALE: f64 = 15.0; // 2^4 - 1
+            let scaled_value = value * BIT_SCALE;
+            let major_index = index / 4; // integer division!
+            let minor_index = index % 4;
+            // TODO:  figure out how to clear only the matching bits here...
+            self.buffer[major_index] += (scaled_value as u16) << (minor_index * 4);
         }
     }
 
@@ -226,20 +237,48 @@ mod tests {
         assert_eq!(buffer.get_concrete_element(1), 47532);
     }
 
-       #[test]
+    #[test]
     fn buffer_manager_8_bit_io() {
         let count = 2;
         let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
         let data_f64 = vec![0.8, 0.5, 0.3, 0.6];
         let mut data_u16 = vec![0; 4];
         for i in 0..4 {
-            buffer.set_virtual_element(data_f64[i], i);  // TODO: this order feels backwards...
+            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
             data_u16[i] = (255.0 * data_f64[i]) as u16;
         }
         // manually convert each element into
         // TODO:  not sure which order is correct here...
-        assert_eq!(buffer.get_concrete_element(0), data_u16[0] + (data_u16[1] << 8));
-        assert_eq!(buffer.get_concrete_element(1), data_u16[2] + (data_u16[3] << 8));
+        assert_eq!(
+            buffer.get_concrete_element(0),
+            data_u16[0] + (data_u16[1] << 8)
+        );
+        assert_eq!(
+            buffer.get_concrete_element(1),
+            data_u16[2] + (data_u16[3] << 8)
+        );
+    }
+
+    #[test]
+    fn buffer_manager_4_bit_io() {
+        let count = 2;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
+        let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
+        let mut data_u16 = vec![0; 8];
+        for i in 0..8 {
+            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            data_u16[i] = (15.0 * data_f64[i]) as u16;
+        }
+        // manually convert each element into
+        // TODO:  not sure which order is correct here...
+        assert_eq!(
+            buffer.get_concrete_element(0),
+            data_u16[0] + (data_u16[1] << 4) + (data_u16[2] << 8) + (data_u16[3] << 12)
+        );
+        assert_eq!(
+            buffer.get_concrete_element(1),
+            data_u16[4] + (data_u16[5] << 4) + (data_u16[6] << 8) + (data_u16[7] << 12)
+        );
     }
 
     #[test]
