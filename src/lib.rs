@@ -109,7 +109,7 @@ pub mod mandelbrot_set {
         pub fn new(bit_depth: png::BitDepth, size: usize) -> BufferManager {
             BufferManager {
                 bit_depth,
-                buffer: vec![0.0 as u16; size],
+                buffer: vec![0 as u16; size],
             }
         }
 
@@ -123,6 +123,35 @@ pub mod mandelbrot_set {
                 png::BitDepth::Eight => 2 * self.buffer.len(),
                 png::BitDepth::Sixteen => self.buffer.len(),
             }
+        }
+
+        pub fn set_buffer_to_zero(&mut self) {
+            for element in self.buffer.iter_mut() {
+                *element = 0;
+            }
+        }
+
+        /// Ability to read a single 16-bit element from the buffer, independent of the bit depth.
+        pub fn get_concrete_element(&self, index: usize) -> u16 {
+            self.buffer[index]
+        }
+
+        /// Sets a single "virtual" element, which may be at a fractional index in the underlying buffer
+        /// due to the relative bit lengths.
+        /// value: normalized value on [0, 1]
+        /// index: virtual index, on [0, get_size_at_bit_depth)
+        pub fn set_virtual_element(&mut self, value: f64, index: usize) {
+            match self.bit_depth {
+                // TODO:  check that value is on [0,1]?
+                png::BitDepth::Sixteen => self.set_16_bit_virtual_element(value, index),
+                _ => panic!("not yet implemented!"),
+            }
+        }
+
+        fn set_16_bit_virtual_element(&mut self, value: f64, index: usize) {
+            const BIT_SCALE: f64 = 65535.0; // 2^16 - 1
+            let scaled_value = value * BIT_SCALE;
+            self.buffer[index] = scaled_value as u16;
         }
     }
 
@@ -150,24 +179,34 @@ mod tests {
         let count = 8;
         {
             let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::One, count);
-            assert!(buffer.get_size_at_bit_depth() == count * 16);
+            assert_eq!(buffer.get_size_at_bit_depth(), count * 16);
         }
         {
             let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Two, count);
-            assert!(buffer.get_size_at_bit_depth() == count * 8);
+            assert_eq!(buffer.get_size_at_bit_depth(), count * 8);
         }
         {
             let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
-            assert!(buffer.get_size_at_bit_depth() == count * 4);
+            assert_eq!(buffer.get_size_at_bit_depth(), count * 4);
         }
         {
             let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
-            assert!(buffer.get_size_at_bit_depth() == count * 2);
+            assert_eq!(buffer.get_size_at_bit_depth(), count * 2);
         }
         {
             let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
-            assert!(buffer.get_size_at_bit_depth() == count * 1);
+            assert_eq!(buffer.get_size_at_bit_depth(), count * 1);
         }
+    }
+
+    #[test]
+    fn buffer_manager_16_bit_io() {
+        let count = 2;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
+        buffer.set_virtual_element(0.254, 0);
+        buffer.set_virtual_element(0.7253, 1);
+        assert_eq!(buffer.get_concrete_element(0), 16645);
+        assert_eq!(buffer.get_concrete_element(1), 47532);
     }
 
     #[test]
