@@ -136,9 +136,28 @@ pub mod mandelbrot_set {
             self.buffer[index]
         }
 
+        /// Set a single concrete element by reading in a stream of numbers at the correct bit depth
+        pub fn set_concrete_element<'a, I>(&mut self, index: usize, mut stream: I)
+        where
+            I: Iterator<Item = &'a f64>,
+        {
+            let mut sum: u16 = 0;
+
+            // Hard-coded for 8-bit depth
+            const BIT_SCALE: f64 = 255.0; // 2^8 - 1
+
+            for i in 0..2 {
+                if i > 0 {
+                    sum = sum << 8;
+                }
+                let scaled_value = stream.next().unwrap() * BIT_SCALE;
+                sum += scaled_value as u16;
+            }
+            self.buffer[index] = sum;
+        }
+
         /// TODO:  swap the argument order for `set_virtual_element`
         /// TODO:  check that the big vs small endian convention is correct
-        /// TODO:  implement smaller bit depths
         /// TODO:  write all gradient test images
         /// TODO:  common-ize code between virtual element IO stuff
 
