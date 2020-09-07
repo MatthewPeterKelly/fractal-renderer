@@ -137,23 +137,27 @@ pub mod mandelbrot_set {
         }
 
         /// Set a single concrete element by reading in a stream of numbers at the correct bit depth
+        /// NOTE: input stream data must be normalized: [0,1] is the acceptable range
         pub fn set_concrete_element<'a, I>(&mut self, index: usize, mut stream: I) -> I
         where
             I: Iterator<Item = &'a f64>,
         {
-            let mut sum: u16 = 0;
+            // Hard-coded for 8-bit depth:  
+            // Maps 0.0 --> 0 and 1.0 --> 15
+            const BIT_SCALE: f64 = 15.0; // 2^4 -1
+            assert_eq!(self.bit_depth, png::BitDepth::Four);
 
-            // Hard-coded for 8-bit depth
-            const BIT_SCALE: f64 = 255.0; // 2^8 - 1
+            let sum0 = ((stream.next().unwrap() * BIT_SCALE) as u16) << 12;
+            let sum1 = ((stream.next().unwrap() * BIT_SCALE) as u16) << 8;
+            let sum2 = ((stream.next().unwrap() * BIT_SCALE) as u16) << 4;
+            let sum3 = ((stream.next().unwrap() * BIT_SCALE) as u16) << 0;
 
-            for i in 0..2 {
-                if i > 0 {
-                    sum = sum << 8;
-                }
-                let scaled_value = stream.next().unwrap() * BIT_SCALE;
-                sum += scaled_value as u16;
-                println!("scaled value: {:?}, sum: {}", scaled_value, sum);
-            }
+            let sum = sum0 + sum1 + sum2 + sum3;
+            self.buffer[index] = sum;
+            println!(
+                "sum0: {:b},  sum1: {:b},  sum2: {:b},  sum3: {:b},  sum: {:b}",
+                sum0, sum1, sum2, sum3, sum
+            );
             self.buffer[index] = sum;
             stream
         }
@@ -300,25 +304,14 @@ mod tests {
     }
 
     #[test]
-    fn buffer_manager_8_bit_stream() {
-        let count = 2;
-        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
-        let data_f64 = vec![0.0, 1.0, 2.0, 3.0];
-        let mut data_u16 = vec![0; 4];
-        for i in 0..4 {
-            data_u16[i] = (255.0 * data_f64[i]) as u16;
-        }
+    fn buffer_manager_4_bit_stream() {
+        let count = 1;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
+        // NOTE:  these values must be on the range 0-1.
+        let data_f64 = vec![0.5, 0.1, 1.0, 0.8];
         let iter = data_f64.iter();
-        let iter = buffer.set_concrete_element(0, iter);
-        assert_eq!(
-            buffer.get_concrete_element(0),
-            data_u16[0] + (data_u16[1] << 8)
-        );
-        let mut iter = buffer.set_concrete_element(1, iter);
-        assert_eq!(
-            buffer.get_concrete_element(1),
-            data_u16[2] + (data_u16[3] << 8)
-        );
+        let mut iter = buffer.set_concrete_element(0, iter);
+        assert_eq!(buffer.get_concrete_element(0), 29180);
         assert_eq!(iter.next(), None);
     }
 
