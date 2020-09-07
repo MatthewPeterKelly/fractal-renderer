@@ -137,7 +137,7 @@ pub mod mandelbrot_set {
         }
 
         /// Set a single concrete element by reading in a stream of numbers at the correct bit depth
-        pub fn set_concrete_element<'a, I>(&mut self, index: usize, mut stream: I)
+        pub fn set_concrete_element<'a, I>(&mut self, index: usize, mut stream: I) -> I
         where
             I: Iterator<Item = &'a f64>,
         {
@@ -152,8 +152,10 @@ pub mod mandelbrot_set {
                 }
                 let scaled_value = stream.next().unwrap() * BIT_SCALE;
                 sum += scaled_value as u16;
+                println!("scaled value: {:?}, sum: {}", scaled_value, sum);
             }
             self.buffer[index] = sum;
+            stream
         }
 
         /// TODO:  swap the argument order for `set_virtual_element`
@@ -295,6 +297,29 @@ mod tests {
             buffer.get_concrete_element(1),
             data_u16[2] + (data_u16[3] << 8)
         );
+    }
+
+    #[test]
+    fn buffer_manager_8_bit_stream() {
+        let count = 2;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
+        let data_f64 = vec![0.0, 1.0, 2.0, 3.0];
+        let mut data_u16 = vec![0; 4];
+        for i in 0..4 {
+            data_u16[i] = (255.0 * data_f64[i]) as u16;
+        }
+        let iter = data_f64.iter();
+        let iter = buffer.set_concrete_element(0, iter);
+        assert_eq!(
+            buffer.get_concrete_element(0),
+            data_u16[0] + (data_u16[1] << 8)
+        );
+        let mut iter = buffer.set_concrete_element(1, iter);
+        assert_eq!(
+            buffer.get_concrete_element(1),
+            data_u16[2] + (data_u16[3] << 8)
+        );
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
