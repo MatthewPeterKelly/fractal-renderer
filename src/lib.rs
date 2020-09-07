@@ -305,13 +305,15 @@ mod tests {
 
     #[test]
     fn buffer_manager_4_bit_stream() {
-        let count = 1;
+        let count = 2;
         let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
         // NOTE:  these values must be on the range 0-1.
-        let data_f64 = vec![0.5, 0.1, 1.0, 0.8];
+        let data_f64 = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
         let iter = data_f64.iter();
-        let mut iter = buffer.set_concrete_element(0, iter);
-        assert_eq!(buffer.get_concrete_element(0), 29180);
+        let iter = buffer.set_concrete_element(0, iter);
+        assert_eq!(buffer.get_concrete_element(0), 4934); // '0001,0011,0100,0110'
+        let mut iter = buffer.set_concrete_element(1, iter);
+        assert_eq!(buffer.get_concrete_element(1), 31148); // '0111,1001,1010,1100'
         assert_eq!(iter.next(), None);
     }
 
