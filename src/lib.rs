@@ -171,7 +171,7 @@ pub mod mandelbrot_set {
         /// due to the relative bit lengths.
         /// value: normalized value on [0, 1]
         /// index: virtual index, on [0, get_size_at_bit_depth)
-        pub fn set_virtual_element(&mut self, value: f64, index: usize) {
+        pub fn set_virtual_element(&mut self, index: usize, value: f64) {
             match self.bit_depth {
                 // TODO:  check that value is on [0,1]?
                 png::BitDepth::Sixteen => self.set_16_bit_virtual_element(value, index),
@@ -275,8 +275,8 @@ mod tests {
     fn buffer_manager_16_bit_io() {
         let count = 2;
         let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
-        buffer.set_virtual_element(0.254, 0);
-        buffer.set_virtual_element(0.7253, 1);
+        buffer.set_virtual_element(0, 0.254);
+        buffer.set_virtual_element(1, 0.7253);
         assert_eq!(buffer.get_concrete_element(0), 16645);
         assert_eq!(buffer.get_concrete_element(1), 47532);
     }
@@ -288,7 +288,7 @@ mod tests {
         let data_f64 = vec![0.8, 0.5, 0.3, 0.6];
         let mut data_u16 = vec![0; 4];
         for i in 0..4 {
-            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            buffer.set_virtual_element(i, data_f64[i]);
             data_u16[i] = (255.0 * data_f64[i]) as u16;
         }
         // manually convert each element into
@@ -324,7 +324,7 @@ mod tests {
         let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
         let mut data_u16 = vec![0; 8];
         for i in 0..8 {
-            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            buffer.set_virtual_element(i, data_f64[i]); 
             data_u16[i] = (15.0 * data_f64[i]) as u16;
         }
         // manually convert each element into
@@ -346,7 +346,7 @@ mod tests {
         let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
         let mut data_u16 = vec![0; 8];
         for i in 0..8 {
-            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            buffer.set_virtual_element(i, data_f64[i]);
             data_u16[i] = ((3.0 * data_f64[i]) as u16) << (2 * i);
         }
         // manually convert each element into
@@ -363,7 +363,7 @@ mod tests {
         ];
         let mut data_u16 = vec![0; 16];
         for i in 0..16 {
-            buffer.set_virtual_element(data_f64[i], i); // TODO: this order feels backwards...
+            buffer.set_virtual_element(i, data_f64[i]);
             data_u16[i] = (data_f64[i] as u16) << i;
         }
         // manually convert each element into
