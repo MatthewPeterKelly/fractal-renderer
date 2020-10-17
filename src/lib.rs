@@ -113,6 +113,10 @@ pub mod mandelbrot_set {
             }
         }
 
+        pub fn data(&self) -> &[u16] {
+            &self.buffer[0..]
+        }
+
         /// Compute the effective size for the selected bit depth
         /// This is used when writing data at a specific sub-index
         pub fn get_size_at_bit_depth(&self) -> usize {
@@ -404,7 +408,7 @@ mod tests {
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(bit_depth);
         let mut writer = encoder.write_header().unwrap();
-        let mut _stream_writer = writer.stream_writer_with_size(buffer_size);
+        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
 
         // Populate the data for a single row
         let scale = 1.0 / (n_cols as f64);
@@ -413,13 +417,10 @@ mod tests {
             buffer.set_virtual_element(i_col as usize, value);
         }
 
-        // TODO:  figure out how to access the data buffer
-        assert_eq!(true, false);
-
-        // // Copy that data into every row
-        // for _ in 0..n_rows {
-        //     stream_writer.write(&data_buffer[0..])?;
-        // }
+        // Copy that data into every row
+        for _ in 0..n_rows {
+            stream_writer.write(buffer.data())?;
+        }
 
         Ok(())
     }
