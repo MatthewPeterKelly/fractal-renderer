@@ -142,7 +142,7 @@ pub mod mandelbrot_set {
         where
             I: Iterator<Item = &'a f64>,
         {
-            // Hard-coded for 8-bit depth:  
+            // Hard-coded for 8-bit depth:
             // Maps 0.0 --> 0 and 1.0 --> 15
             const BIT_SCALE: f64 = 15.0; // 2^4 -1
             assert_eq!(self.bit_depth, png::BitDepth::Four);
@@ -169,8 +169,8 @@ pub mod mandelbrot_set {
 
         /// Sets a single "virtual" element, which may be at a fractional index in the underlying buffer
         /// due to the relative bit lengths.
-        /// value: normalized value on [0, 1]
         /// index: virtual index, on [0, get_size_at_bit_depth)
+        /// value: normalized value on [0, 1]
         pub fn set_virtual_element(&mut self, index: usize, value: f64) {
             match self.bit_depth {
                 // TODO:  check that value is on [0,1]?
@@ -324,7 +324,7 @@ mod tests {
         let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
         let mut data_u16 = vec![0; 8];
         for i in 0..8 {
-            buffer.set_virtual_element(i, data_f64[i]); 
+            buffer.set_virtual_element(i, data_f64[i]);
             data_u16[i] = (15.0 * data_f64[i]) as u16;
         }
         // manually convert each element into
@@ -391,47 +391,36 @@ mod tests {
     #[test]
     fn write_png_u4_demo() -> std::io::Result<()> {
         // Parameters
-        let max_normalized_scale = 1.0; // [0 = black, 1 = white]
         let buffer_size: usize = 512;
-        const U4_BIN_COUNT: f64 = 16.0;
+        let bit_depth = png::BitDepth::Four;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, buffer_size);
+        let n_cols = buffer.get_size_at_bit_depth() as u32;
         let n_rows = 128;
-        let n_blocks = buffer_size as u32;
-        let n_cols = 2 * buffer_size as u32;
 
         // Setup for the PNG writer object
-        // let mut data_buffer: [u8; buffer_size] = [0; buffer_size];
-        let mut data_buffer = vec![0.0 as u8; buffer_size];
         let file = File::create("grayscale_demo_u4.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Four);
+        encoder.set_depth(bit_depth);
         let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
+        let mut _stream_writer = writer.stream_writer_with_size(buffer_size);
 
         // Populate the data for a single row
         let scale = 1.0 / (n_cols as f64);
-        for i_block in 0..n_blocks {
-            let i0 = 2 * i_block;
-            let i1 = i0 + 1;
-            // First element in the block
-            let beta0 = scale * (i0 as f64);
-            let value0: f64 = beta0 * U4_BIN_COUNT * max_normalized_scale;
-            let value0_u = value0 as u8;
-            // Sectond element in the block
-            let beta1 = scale * (i1 as f64);
-            let value1: f64 = beta1 * U4_BIN_COUNT * max_normalized_scale;
-            let value1_u = value1 as u8;
-            let value1_shift = value1_u << 4;
-            // Write the elements into the buffer
-            // println!("i0: {}, i1: {}, value0: {}, value1: {}, value0_u: {}, value1_u: {}, value1_shift: {}", i0, i1, value0, value1,  value0_u, value1_u, value1_shift);
-            let value_sum = value0_u + value1_shift;
-            data_buffer[i_block as usize] = value_sum;
+        for i_col in 0..n_cols {
+            let value = (i_col as f64) * scale;
+            buffer.set_virtual_element(i_col as usize, value);
         }
-        // Copy that data into every row
-        for _ in 0..n_rows {
-            stream_writer.write(&data_buffer[0..])?;
-        }
+
+        // TODO:  figure out how to access the data buffer
+        assert_eq!(true, false);
+
+        // // Copy that data into every row
+        // for _ in 0..n_rows {
+        //     stream_writer.write(&data_buffer[0..])?;
+        // }
+
         Ok(())
     }
 
