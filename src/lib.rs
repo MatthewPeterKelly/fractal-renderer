@@ -108,21 +108,23 @@ pub mod mandelbrot_set {
     impl BufferManager {
         pub fn new(bit_depth: png::BitDepth, n_virtual_elements: usize) -> BufferManager {
             // TODO:  input validation on element size!
-            let size =       match bit_depth {
+            let size = match bit_depth {
                 png::BitDepth::One => n_virtual_elements / 8,
                 png::BitDepth::Two => n_virtual_elements / 4,
                 png::BitDepth::Four => n_virtual_elements / 2,
-                png::BitDepth::Eight => n_virtual_elements ,
-                png::BitDepth::Sixteen => n_virtual_elements *2,
+                png::BitDepth::Eight => n_virtual_elements,
+                png::BitDepth::Sixteen => n_virtual_elements * 2,
             };
             BufferManager {
                 bit_depth,
                 buffer: vec![0 as u8; size],
-                size
+                size,
             }
         }
 
-        pub fn size(&self) -> usize { self.size }
+        pub fn size(&self) -> usize {
+            self.size
+        }
 
         pub fn data(&self) -> &[u8] {
             &self.buffer[0..]
@@ -133,42 +135,6 @@ pub mod mandelbrot_set {
                 *element = 0;
             }
         }
-
-        /// Ability to read a single 8-bit element from the buffer, independent of the bit depth.
-        pub fn get_concrete_element(&self, index: usize) -> u8 {
-            self.buffer[index]
-        }
-
-        // /// Set a single concrete element by reading in a stream of numbers at the correct bit depth
-        // /// NOTE: input stream data must be normalized: [0,1] is the acceptable range
-        // pub fn set_concrete_element<'a, I>(&mut self, index: usize, mut stream: I) -> I
-        // where
-        //     I: Iterator<Item = &'a f64>,
-        // {
-        //     // Hard-coded for 8-bit depth:
-        //     // Maps 0.0 --> 0 and 1.0 --> 15
-        //     const BIT_SCALE: f64 = 15.0; // 2^4 -1
-        //     assert_eq!(self.bit_depth, png::BitDepth::Four);
-
-        //     let sum0 = ((stream.next().unwrap() * BIT_SCALE) as u8) << 12;
-        //     let sum1 = ((stream.next().unwrap() * BIT_SCALE) as u8) << 8;
-        //     let sum2 = ((stream.next().unwrap() * BIT_SCALE) as u8) << 4;
-        //     let sum3 = ((stream.next().unwrap() * BIT_SCALE) as u8) << 0;
-
-        //     let sum = sum0 + sum1 + sum2 + sum3;
-        //     self.buffer[index] = sum;
-        //     println!(
-        //         "sum0: {:b},  sum1: {:b},  sum2: {:b},  sum3: {:b},  sum: {:b}",
-        //         sum0, sum1, sum2, sum3, sum
-        //     );
-        //     self.buffer[index] = sum;
-        //     stream
-        // }
-
-        /// TODO:  swap the argument order for `set_virtual_element`
-        /// TODO:  check that the big vs small endian convention is correct
-        /// TODO:  write all gradient test images
-        /// TODO:  common-ize code between virtual element IO stuff
 
         /// Sets a single "virtual" element, which may be at a fractional index in the underlying buffer
         /// due to the relative bit lengths.
@@ -195,58 +161,63 @@ pub mod mandelbrot_set {
 
         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_8_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 256.0 ; // 2^8 - 1
+            const BIT_SCALE: f64 = 256.0; // 2^8 
             let scaled_value = value * BIT_SCALE;
             self.buffer[index] = scaled_value as u8;
         }
 
         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_4_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 16.0; // 2^4 - 1
+            const BIT_SCALE: f64 = 16.0; // 2^4 
             let scaled_value = value * BIT_SCALE;
             let major_index = index / 2; // integer division!
             let minor_index = index % 2;
             let int_value = scaled_value as u8;
-            println!("value: {}, scaled_value: {}, int_value: {}", value, scaled_value, int_value);
             // TODO:  figure out how to clear only the matching bits here...
             self.buffer[major_index] += int_value << (minor_index * 4);
         }
 
         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
-        fn set_2_bit_virtual_element(&mut self, _value: f64, _index: usize) {
-            // const BIT_SCALE: f64 = 3.0; // 2^2 - 1
-            // let scaled_value = value * BIT_SCALE;
-            // let major_index = index / 8; // integer division!
-            // let minor_index = index % 8;
-            // // TODO:  figure out how to clear only the matching bits here...
-            // self.buffer[major_index] += (scaled_value as u16) << (minor_index * 2);
-            panic!("This method is not yet implemented!");
+        fn set_2_bit_virtual_element(&mut self, value: f64, index: usize) {
+            const BIT_SCALE: f64 = 4.0; // 2^2 
+            let scaled_value = value * BIT_SCALE;
+            let major_index = index / 4; // integer division!
+            let minor_index = index % 4;
+            let int_value = scaled_value as u8;
+            // TODO:  figure out how to clear only the matching bits here...
+            self.buffer[major_index] += int_value << (minor_index * 2);
         }
 
-        /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
-        fn set_1_bit_virtual_element(&mut self, _value: f64, _index: usize) {
-            // let major_index = index / 16; // integer division!
-            // let minor_index = index % 16;
-            // // TODO:  figure out how to clear only the matching bits here...
-            // self.buffer[major_index] += (value as u16) << minor_index;
-            panic!("This method is not yet implemented!");
+         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
+        fn set_1_bit_virtual_element(&mut self, value: f64, index: usize) {
+            const BIT_SCALE: f64 = 2.0; // 2^1 
+            let scaled_value = value * BIT_SCALE;
+            let major_index = index / 8; // integer division!
+            let minor_index = index % 8;
+            let int_value = scaled_value as u8;
+            // TODO:  figure out how to clear only the matching bits here...
+            self.buffer[major_index] += int_value << minor_index;
         }
     }
-    
+
     use std::fs::File;
     use std::io::prelude::*; // write_all
     use std::io::BufWriter;
 
-    pub fn make_grayscale_test_image(bit_depth: png::BitDepth) -> std::io::Result<()>{
+    pub fn make_grayscale_test_image(bit_depth: png::BitDepth) -> std::io::Result<()> {
         // Parameters
         let n_cols: usize = 512;
         let n_rows: usize = 128;
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
-        let file = File::create("grayscale_demo_u8.png")?;
+        let file = File::create(format!("grayscale_demo_{:?}Bit.png", bit_depth))?;
         let ref mut w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, n_cols as u32 /*width*/, n_rows as u32 /*height*/); //
+        let mut encoder = png::Encoder::new(
+            w,
+            n_cols as u32, /*width*/
+            n_rows as u32, /*height*/
+        ); //
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(bit_depth);
         let mut writer = encoder.write_header().unwrap();
@@ -265,7 +236,6 @@ pub mod mandelbrot_set {
         }
 
         Ok(())
-    
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -287,106 +257,6 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn buffer_manager_16_bit_io() {
-    //     let count = 2;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
-    //     buffer.set_virtual_element(0, 0.254);
-    //     buffer.set_virtual_element(1, 0.7253);
-    //     assert_eq!(buffer.get_concrete_element(0), 16645);
-    //     assert_eq!(buffer.get_concrete_element(1), 47532);
-    // }
-
-    // #[test]
-    // fn buffer_manager_8_bit_io() {
-    //     let count = 2;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
-    //     let data_f64 = vec![0.8, 0.5, 0.3, 0.6];
-    //     let mut data_u16 = vec![0; 4];
-    //     for i in 0..4 {
-    //         buffer.set_virtual_element(i, data_f64[i]);
-    //         data_u16[i] = (255.0 * data_f64[i]) as u16;
-    //     }
-    //     // manually convert each element into
-    //     // TODO:  not sure which order is correct here...
-    //     assert_eq!(
-    //         buffer.get_concrete_element(0),
-    //         data_u16[0] + (data_u16[1] << 8)
-    //     );
-    //     assert_eq!(
-    //         buffer.get_concrete_element(1),
-    //         data_u16[2] + (data_u16[3] << 8)
-    //     );
-    // }
-
-    // #[test]
-    // fn buffer_manager_4_bit_stream() {
-    //     let count = 2;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
-    //     // NOTE:  these values must be on the range 0-1.
-    //     let data_f64 = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
-    //     let iter = data_f64.iter();
-    //     let iter = buffer.set_concrete_element(0, iter);
-    //     assert_eq!(buffer.get_concrete_element(0), 4934); // '0001,0011,0100,0110'
-    //     let mut iter = buffer.set_concrete_element(1, iter);
-    //     assert_eq!(buffer.get_concrete_element(1), 31148); // '0111,1001,1010,1100'
-    //     assert_eq!(iter.next(), None);
-    // }
-
-    // #[test]
-    // fn buffer_manager_4_bit_io() {
-    //     let count = 2;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
-    //     let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
-    //     let mut data_u16 = vec![0; 8];
-    //     for i in 0..8 {
-    //         buffer.set_virtual_element(i, data_f64[i]);
-    //         data_u16[i] = (15.0 * data_f64[i]) as u16;
-    //     }
-    //     // manually convert each element into
-    //     // TODO:  not sure which order is correct here...
-    //     assert_eq!(
-    //         buffer.get_concrete_element(0),
-    //         data_u16[0] + (data_u16[1] << 4) + (data_u16[2] << 8) + (data_u16[3] << 12)
-    //     );
-    //     assert_eq!(
-    //         buffer.get_concrete_element(1),
-    //         data_u16[4] + (data_u16[5] << 4) + (data_u16[6] << 8) + (data_u16[7] << 12)
-    //     );
-    // }
-
-    // #[test]
-    // fn buffer_manager_2_bit_io() {
-    //     let count = 1;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Two, count);
-    //     let data_f64 = vec![0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2];
-    //     let mut data_u16 = vec![0; 8];
-    //     for i in 0..8 {
-    //         buffer.set_virtual_element(i, data_f64[i]);
-    //         data_u16[i] = ((3.0 * data_f64[i]) as u16) << (2 * i);
-    //     }
-    //     // manually convert each element into
-    //     // TODO:  not sure which order is correct here...
-    //     assert_eq!(buffer.get_concrete_element(0), data_u16.iter().sum());
-    // }
-
-    // #[test]
-    // fn buffer_manager_1_bit_io() {
-    //     let count = 1;
-    //     let mut buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::One, count);
-    //     let data_f64 = vec![
-    //         0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2, 0.8, 0.5, 0.3, 0.6, 1.0, 0.0, 0.0, 0.2,
-    //     ];
-    //     let mut data_u16 = vec![0; 16];
-    //     for i in 0..16 {
-    //         buffer.set_virtual_element(i, data_f64[i]);
-    //         data_u16[i] = (data_f64[i] as u16) << i;
-    //     }
-    //     // manually convert each element into
-    //     // TODO:  not sure which order is correct here...
-    //     assert_eq!(buffer.get_concrete_element(0), data_u16.iter().sum());
-    // }
-
     #[test]
     fn hello_world_file_io() -> std::io::Result<()> {
         {
@@ -405,12 +275,22 @@ mod tests {
     }
 
     #[test]
+    fn write_png_u1_demo() -> std::io::Result<()> {
+        crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::One)
+    }
+
+    #[test]
+    fn write_png_u2_demo() -> std::io::Result<()> {
+        crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Two)
+    }
+
+    #[test]
     fn write_png_u4_demo() -> std::io::Result<()> {
         crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Four)
     }
 
-        #[test]
-      fn write_png_u8_demo() -> std::io::Result<()> {
+    #[test]
+    fn write_png_u8_demo() -> std::io::Result<()> {
         crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Eight)
     }
 
