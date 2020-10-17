@@ -102,31 +102,30 @@ pub mod mandelbrot_set {
     pub struct BufferManager {
         bit_depth: png::BitDepth,
         buffer: Vec<u8>,
+        size: usize,
     }
 
     impl BufferManager {
-        /// Note that size of the buffer is (16 bits * size) = size * two bytes
-        pub fn new(bit_depth: png::BitDepth, size: usize) -> BufferManager {
+        pub fn new(bit_depth: png::BitDepth, n_virtual_elements: usize) -> BufferManager {
+            // TODO:  input validation on element size!
+            let size =       match bit_depth {
+                png::BitDepth::One => n_virtual_elements / 8,
+                png::BitDepth::Two => n_virtual_elements / 4,
+                png::BitDepth::Four => n_virtual_elements / 2,
+                png::BitDepth::Eight => n_virtual_elements ,
+                png::BitDepth::Sixteen => n_virtual_elements *2,
+            };
             BufferManager {
                 bit_depth,
                 buffer: vec![0 as u8; size],
+                size
             }
         }
+
+        pub fn size(&self) -> usize { self.size }
 
         pub fn data(&self) -> &[u8] {
             &self.buffer[0..]
-        }
-
-        /// Compute the effective size for the selected bit depth
-        /// This is used when writing data at a specific sub-index
-        pub fn get_size_at_bit_depth(&self) -> usize {
-            match self.bit_depth {
-                png::BitDepth::One => 8 * self.buffer.len(),
-                png::BitDepth::Two => 4 * self.buffer.len(),
-                png::BitDepth::Four => 2 * self.buffer.len(),
-                png::BitDepth::Eight => self.buffer.len(),
-                png::BitDepth::Sixteen => self.buffer.len() / 2,
-            }
         }
 
         pub fn set_buffer_to_zero(&mut self) {
@@ -240,19 +239,18 @@ pub mod mandelbrot_set {
 
     pub fn make_grayscale_test_image(bit_depth: png::BitDepth) -> std::io::Result<()>{
         // Parameters
-        let buffer_size: usize = 512;
-        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, buffer_size);
-        let n_cols = buffer.get_size_at_bit_depth() as u32;
-        let n_rows = 128;
+        let n_cols: usize = 512;
+        let n_rows: usize = 128;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
         let file = File::create("grayscale_demo_u8.png")?;
         let ref mut w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        let mut encoder = png::Encoder::new(w, n_cols as u32 /*width*/, n_rows as u32 /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
         encoder.set_depth(bit_depth);
         let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
+        let mut stream_writer = writer.stream_writer_with_size(buffer.size());
 
         // Populate the data for a single row
         let scale = 1.0 / (n_cols as f64);
@@ -286,31 +284,6 @@ mod tests {
     fn pixel_iter_test() {
         for pixel in crate::mandelbrot_set::PixelIter::new(5, 10) {
             println!("pixel: {:?}", pixel);
-        }
-    }
-
-    #[test]
-    fn buffer_manager_size() {
-        let count = 8;
-        {
-            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::One, count);
-            assert_eq!(buffer.get_size_at_bit_depth(), count * 8);
-        }
-        {
-            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Two, count);
-            assert_eq!(buffer.get_size_at_bit_depth(), count * 4);
-        }
-        {
-            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Four, count);
-            assert_eq!(buffer.get_size_at_bit_depth(), count * 2);
-        }
-        {
-            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Eight, count);
-            assert_eq!(buffer.get_size_at_bit_depth(), count);
-        }
-        {
-            let buffer = crate::mandelbrot_set::BufferManager::new(png::BitDepth::Sixteen, count);
-            assert_eq!(buffer.get_size_at_bit_depth(), count /2);
         }
     }
 
