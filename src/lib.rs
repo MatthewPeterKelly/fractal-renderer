@@ -105,6 +105,12 @@ pub mod mandelbrot_set {
         size: usize,
     }
 
+    /// A class for managing a data buffer and writing image elements. It allows the image depth
+    /// to be abstracted away: the user provides a floating point value on [0,1) and that will
+    /// be converted to the correct underlying inter representation. 
+    /// Note: using a smaller bit-depth is not always useful for reducing the file size of the
+    /// image, although it does make the size of the buffer smaller. For example, in some of
+    /// the test images the 8 bit image was actually smaller than the 4 bit image file.
     impl BufferManager {
         pub fn new(bit_depth: png::BitDepth, n_virtual_elements: usize) -> BufferManager {
             // TODO:  input validation on element size!
@@ -115,7 +121,7 @@ pub mod mandelbrot_set {
                 png::BitDepth::Eight => n_virtual_elements,
                 png::BitDepth::Sixteen => n_virtual_elements * 2,
             };
-            println!("Buffer Depth: {:?}, u8 element size: {}", bit_depth, size);
+            // println!("Buffer Depth: {:?}, u8 element size: {}", bit_depth, size);
             BufferManager {
                 bit_depth,
                 buffer: vec![0 as u8; size],
@@ -137,9 +143,9 @@ pub mod mandelbrot_set {
             }
         }
 
-        /// Sets a single "virtual" element, which may be at a fractional index in the underlying buffer
-        /// due to the relative bit lengths.
-        /// index: virtual index, on [0, get_size_at_bit_depth)
+        /// Sets a single "virtual" element, which may be a different size from a single 
+        /// element in the underlying buffer
+        /// index: virtual index, on [0, n_virtual_elements)
         /// value: normalized value on [0, 1)   
         ///    -- Note: upper edge of the set is open!  1.0 will wrap onto 0.0
         pub fn set_virtual_element(&mut self, index: usize, value: f64) {
