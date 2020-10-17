@@ -233,6 +233,42 @@ pub mod mandelbrot_set {
             panic!("This method is not yet implemented!");
         }
     }
+    
+    use std::fs::File;
+    use std::io::prelude::*; // write_all
+    use std::io::BufWriter;
+
+    pub fn make_grayscale_test_image(bit_depth: png::BitDepth) -> std::io::Result<()>{
+        // Parameters
+        let buffer_size: usize = 512;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, buffer_size);
+        let n_cols = buffer.get_size_at_bit_depth() as u32;
+        let n_rows = 128;
+
+        // Setup for the PNG writer object
+        let file = File::create("grayscale_demo_u8.png")?;
+        let ref mut w = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(bit_depth);
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
+
+        // Populate the data for a single row
+        let scale = 1.0 / (n_cols as f64);
+        for i_col in 0..n_cols {
+            let value = (i_col as f64) * scale;
+            buffer.set_virtual_element(i_col as usize, value);
+        }
+
+        // Copy that data into every row
+        for _ in 0..n_rows {
+            stream_writer.write(buffer.data())?;
+        }
+
+        Ok(())
+    
+    }
 
     //////////////////////////////////////////////////////////////////////////////////////////
 }
@@ -397,68 +433,12 @@ mod tests {
 
     #[test]
     fn write_png_u4_demo() -> std::io::Result<()> {
-        // Parameters
-        let buffer_size: usize = 512;
-        let bit_depth = png::BitDepth::Four;
-        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, buffer_size);
-        let n_cols = buffer.get_size_at_bit_depth() as u32;
-        let n_rows = 128;
-
-        // Setup for the PNG writer object
-        let file = File::create("grayscale_demo_u4.png")?;
-        let ref mut w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
-        encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(bit_depth);
-        let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
-
-        // Populate the data for a single row
-        let scale = 1.0 / (n_cols as f64);
-        for i_col in 0..n_cols {
-            let value = (i_col as f64) * scale;
-            buffer.set_virtual_element(i_col as usize, value);
-        }
-
-        // Copy that data into every row
-        for _ in 0..n_rows {
-            stream_writer.write(buffer.data())?;
-        }
-
-        Ok(())
+        crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Four)
     }
 
         #[test]
-    fn write_png_u8_demo() -> std::io::Result<()> {
-        // Parameters
-        let buffer_size: usize = 512;
-        let bit_depth = png::BitDepth::Eight;
-        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, buffer_size);
-        let n_cols = buffer.get_size_at_bit_depth() as u32;
-        let n_rows = 128;
-
-        // Setup for the PNG writer object
-        let file = File::create("grayscale_demo_u8.png")?;
-        let ref mut w = BufWriter::new(file);
-        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
-        encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(bit_depth);
-        let mut writer = encoder.write_header().unwrap();
-        let mut stream_writer = writer.stream_writer_with_size(buffer_size);
-
-        // Populate the data for a single row
-        let scale = 1.0 / (n_cols as f64);
-        for i_col in 0..n_cols {
-            let value = (i_col as f64) * scale;
-            buffer.set_virtual_element(i_col as usize, value);
-        }
-
-        // Copy that data into every row
-        for _ in 0..n_rows {
-            stream_writer.write(buffer.data())?;
-        }
-
-        Ok(())
+      fn write_png_u8_demo() -> std::io::Result<()> {
+        crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Eight)
     }
 
     #[test]
