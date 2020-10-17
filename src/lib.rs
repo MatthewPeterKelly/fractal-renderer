@@ -115,6 +115,7 @@ pub mod mandelbrot_set {
                 png::BitDepth::Eight => n_virtual_elements,
                 png::BitDepth::Sixteen => n_virtual_elements * 2,
             };
+            println!("Buffer Depth: {:?}, u8 element size: {}", bit_depth, size);
             BufferManager {
                 bit_depth,
                 buffer: vec![0 as u8; size],
@@ -152,14 +153,17 @@ pub mod mandelbrot_set {
             }
         }
 
-        fn set_16_bit_virtual_element(&mut self, _value: f64, _index: usize) {
-            // const BIT_SCALE: f64 = 65535.0; // 2^16 - 1
-            // let scaled_value = value * BIT_SCALE;
-            // self.buffer[index] = scaled_value as u16;
-            panic!("This method is not yet implemented!");
+        fn set_16_bit_virtual_element(&mut self, value: f64, index: usize) {
+            const BIT_SCALE: f64 = 65536.0; // 2^16 
+            let scaled_value = value * BIT_SCALE;
+            let base_index = 2 * index;
+            let int_value = scaled_value as u16;
+            let big_part = (int_value >> 8) as u8;
+            let tiny_part = (int_value & 0x00FF) as u8;
+            self.buffer[base_index] = big_part;
+            self.buffer[base_index+1] = tiny_part;
         }
 
-        /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_8_bit_virtual_element(&mut self, value: f64, index: usize) {
             const BIT_SCALE: f64 = 256.0; // 2^8 
             let scaled_value = value * BIT_SCALE;
@@ -206,15 +210,15 @@ pub mod mandelbrot_set {
 
     pub fn make_grayscale_test_image(bit_depth: png::BitDepth) -> std::io::Result<()> {
         // Parameters
-        let n_cols: usize = 512;
-        let n_rows: usize = 128;
+        let n_cols: usize = 1024;
+        let n_rows: usize = 256;
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
         let file = File::create(format!("grayscale_demo_{:?}Bit.png", bit_depth))?;
-        let ref mut w = BufWriter::new(file);
+        let ref mut buf_writer = BufWriter::new(file);
         let mut encoder = png::Encoder::new(
-            w,
+            buf_writer,
             n_cols as u32, /*width*/
             n_rows as u32, /*height*/
         ); //
@@ -292,6 +296,11 @@ mod tests {
     #[test]
     fn write_png_u8_demo() -> std::io::Result<()> {
         crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Eight)
+    }
+
+    #[test]
+    fn write_png_u16_demo() -> std::io::Result<()> {
+        crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Sixteen)
     }
 
     #[test]
