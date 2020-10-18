@@ -137,7 +137,7 @@ pub mod mandelbrot_set {
             &self.buffer[0..]
         }
 
-        pub fn set_buffer_to_zero(&mut self) {
+        pub fn clear(&mut self) {
             for element in self.buffer.iter_mut() {
                 *element = 0;
             }
@@ -259,12 +259,47 @@ mod tests {
 
     // For reading and opening files
     use std::io::BufWriter;
+    use std::convert::TryInto;
 
     #[test]
     fn pixel_iter_test() {
         for pixel in crate::mandelbrot_set::PixelIter::new(5, 10) {
             println!("pixel: {:?}", pixel);
         }
+    }
+
+    #[test]
+    fn pixel_iter_write_image_test() -> std::io::Result<()> {
+
+        // Parameters
+        let n_cols: usize = 512;
+        let n_rows: usize = 512;
+        let bit_depth = png::BitDepth::Eight;
+        let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
+
+        // Setup for the PNG writer object
+        let file = File::create("grayscale_demo_diagonal.png")?;
+        let ref mut buf_writer = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(
+            buf_writer,
+            n_cols as u32, /*width*/
+            n_rows as u32, /*height*/
+        ); //
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(bit_depth);
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(buffer.size());
+
+        let scale = 1.0 / ((n_cols+n_rows-1) as f64);
+        for pixel in crate::mandelbrot_set::PixelIter::new((n_rows as usize).try_into().unwrap() ,(n_cols as usize).try_into().unwrap()) {
+            let value = scale * ((pixel.col + pixel.row )as f64);
+            buffer.set_virtual_element(pixel.col as usize, value);
+            if pixel.col ==((n_cols-1)).try_into().unwrap() {
+                stream_writer.write(buffer.data())?;
+                buffer.clear();
+            }
+        }
+        Ok(())
     }
 
     #[test]
