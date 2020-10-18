@@ -42,7 +42,7 @@ pub mod mandelbrot_set {
             self.real = temp;
         }
     }
-  
+
     //////////////////////////////////////////////////////////////////////////////////////////
 
     /// Manage a buffer of a specific bit depth
@@ -54,7 +54,7 @@ pub mod mandelbrot_set {
 
     /// A class for managing a data buffer and writing image elements. It allows the image depth
     /// to be abstracted away: the user provides a floating point value on [0,1) and that will
-    /// be converted to the correct underlying inter representation. 
+    /// be converted to the correct underlying inter representation.
     /// Note: using a smaller bit-depth is not always useful for reducing the file size of the
     /// image, although it does make the size of the buffer smaller. For example, in some of
     /// the test images the 8 bit image was actually smaller than the 4 bit image file.
@@ -90,7 +90,7 @@ pub mod mandelbrot_set {
             }
         }
 
-        /// Sets a single "virtual" element, which may be a different size from a single 
+        /// Sets a single "virtual" element, which may be a different size from a single
         /// element in the underlying buffer
         /// index: virtual index, on [0, n_virtual_elements)
         /// value: normalized value on [0, 1)   
@@ -107,25 +107,25 @@ pub mod mandelbrot_set {
         }
 
         fn set_16_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 65536.0; // 2^16 
+            const BIT_SCALE: f64 = 65536.0; // 2^16
             let scaled_value = value * BIT_SCALE;
             let base_index = 2 * index;
             let int_value = scaled_value as u16;
             let big_part = (int_value >> 8) as u8;
             let tiny_part = (int_value & 0x00FF) as u8;
             self.buffer[base_index] = big_part;
-            self.buffer[base_index+1] = tiny_part;
+            self.buffer[base_index + 1] = tiny_part;
         }
 
         fn set_8_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 256.0; // 2^8 
+            const BIT_SCALE: f64 = 256.0; // 2^8
             let scaled_value = value * BIT_SCALE;
             self.buffer[index] = scaled_value as u8;
         }
 
         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_4_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 16.0; // 2^4 
+            const BIT_SCALE: f64 = 16.0; // 2^4
             let scaled_value = value * BIT_SCALE;
             let major_index = index / 2; // integer division!
             let minor_index = index % 2;
@@ -136,7 +136,7 @@ pub mod mandelbrot_set {
 
         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_2_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 4.0; // 2^2 
+            const BIT_SCALE: f64 = 4.0; // 2^2
             let scaled_value = value * BIT_SCALE;
             let major_index = index / 4; // integer division!
             let minor_index = index % 4;
@@ -145,9 +145,9 @@ pub mod mandelbrot_set {
             self.buffer[major_index] += int_value << (minor_index * 2);
         }
 
-         /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
+        /// NOTE: this method is somewhat unsafe, as it requires that the buffer has a zero value in this index
         fn set_1_bit_virtual_element(&mut self, value: f64, index: usize) {
-            const BIT_SCALE: f64 = 2.0; // 2^1 
+            const BIT_SCALE: f64 = 2.0; // 2^1
             let scaled_value = value * BIT_SCALE;
             let major_index = index / 8; // integer division!
             let minor_index = index % 8;
@@ -168,7 +168,7 @@ pub mod mandelbrot_set {
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
-        let file = File::create(format!("grayscale_demo_{:?}Bit.png", bit_depth))?;
+        let file = File::create(format!("out/grayscale_demo_{:?}Bit.png", bit_depth))?;
         let ref mut buf_writer = BufWriter::new(file);
         let mut encoder = png::Encoder::new(
             buf_writer,
@@ -205,12 +205,11 @@ mod tests {
     use std::io::prelude::*; // write_all
 
     // For reading and opening files
-    use std::io::BufWriter;
     use std::convert::TryInto;
+    use std::io::BufWriter;
 
     #[test]
     fn pixel_iter_write_image_test() -> std::io::Result<()> {
-
         // Parameters
         let n_cols: usize = 512;
         let n_rows: usize = 512;
@@ -218,7 +217,7 @@ mod tests {
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
-        let file = File::create("grayscale_demo_diagonal.png")?;
+        let file = File::create("out/grayscale_demo_diagonal.png")?;
         let ref mut buf_writer = BufWriter::new(file);
         let mut encoder = png::Encoder::new(
             buf_writer,
@@ -230,11 +229,14 @@ mod tests {
         let mut writer = encoder.write_header().unwrap();
         let mut stream_writer = writer.stream_writer_with_size(buffer.size());
 
-        let scale = 1.0 / ((n_cols+n_rows-1) as f64);
-        for pixel in crate::pixel_iter::pixel_iter::PixelIter::new((n_rows as usize).try_into().unwrap() ,(n_cols as usize).try_into().unwrap()) {
-            let value = scale * ((pixel.col + pixel.row )as f64);
+        let scale = 1.0 / ((n_cols + n_rows - 1) as f64);
+        for pixel in crate::pixel_iter::PixelIter::new(
+            (n_rows as usize).try_into().unwrap(),
+            (n_cols as usize).try_into().unwrap(),
+        ) {
+            let value = scale * ((pixel.col + pixel.row) as f64);
             buffer.set_virtual_element(pixel.col as usize, value);
-            if pixel.col ==((n_cols-1)).try_into().unwrap() {
+            if pixel.col == (n_cols - 1).try_into().unwrap() {
                 stream_writer.write(buffer.data())?;
                 buffer.clear();
             }
@@ -246,12 +248,12 @@ mod tests {
     fn hello_world_file_io() -> std::io::Result<()> {
         {
             // Write a file
-            let mut file = File::create("foo.txt")?;
+            let mut file = File::create("out/foo.txt")?;
             file.write_all(b"Hello, world!")?;
         }
         {
             // Read the file:
-            let mut file = File::open("foo.txt")?;
+            let mut file = File::open("out/foo.txt")?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             assert_eq!(contents, "Hello, world!");
@@ -295,7 +297,7 @@ mod tests {
 
         // Setup for the PNG writer object
         let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-        let file = File::create("grayscale_demo.png")?;
+        let file = File::create("out/grayscale_demo.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
         encoder.set_color(png::ColorType::Grayscale);
