@@ -1,5 +1,5 @@
 
-pub mod mandelbrot_set {
+pub mod pixel_iter {
 
       /// A specific pixel in the image
     #[derive(Debug, Copy, Clone)]
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn pixel_iter_test() {
-        for pixel in crate::pixel_iter::mandelbrot_set::PixelIter::new(5, 10) {
+        for pixel in crate::pixel_iter::pixel_iter::PixelIter::new(5, 10) {
             println!("pixel: {:?}", pixel);
         }
     }

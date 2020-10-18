@@ -231,7 +231,7 @@ mod tests {
         let mut stream_writer = writer.stream_writer_with_size(buffer.size());
 
         let scale = 1.0 / ((n_cols+n_rows-1) as f64);
-        for pixel in crate::pixel_iter::mandelbrot_set::PixelIter::new((n_rows as usize).try_into().unwrap() ,(n_cols as usize).try_into().unwrap()) {
+        for pixel in crate::pixel_iter::pixel_iter::PixelIter::new((n_rows as usize).try_into().unwrap() ,(n_cols as usize).try_into().unwrap()) {
             let value = scale * ((pixel.col + pixel.row )as f64);
             buffer.set_virtual_element(pixel.col as usize, value);
             if pixel.col ==((n_cols-1)).try_into().unwrap() {
