@@ -1,4 +1,3 @@
-
 /// A specific pixel in the image
 #[derive(Debug, Copy, Clone)]
 pub struct Pixel {
