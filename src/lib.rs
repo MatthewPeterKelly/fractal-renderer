@@ -129,6 +129,7 @@ pub mod mandelbrot_set { // TODO:  rename this and move to a different file...
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
+        std::fs::create_dir_all("out")?;  // TODO: bundle these two lines together into a single function
         let file = File::create(format!("out/grayscale_demo_{:?}Bit.png", bit_depth))?;
         let ref mut buf_writer = BufWriter::new(file);
         let mut encoder = png::Encoder::new(
@@ -163,6 +164,7 @@ pub mod mandelbrot_set { // TODO:  rename this and move to a different file...
 mod tests {
 
     use std::fs::File;
+    
     use std::io::prelude::*; // write_all
 
     // For reading and opening files
@@ -178,6 +180,7 @@ mod tests {
         let mut buffer = crate::mandelbrot_set::BufferManager::new(bit_depth, n_cols);
 
         // Setup for the PNG writer object
+        std::fs::create_dir_all("out")?;  // TODO: bundle these two lines together into a single function
         let file = File::create("out/grayscale_demo_diagonal.png")?;
         let ref mut buf_writer = BufWriter::new(file);
         let mut encoder = png::Encoder::new(
@@ -209,6 +212,7 @@ mod tests {
     fn hello_world_file_io() -> std::io::Result<()> {
         {
             // Write a file
+            std::fs::create_dir_all("out")?;  // TODO: bundle these two lines together into a single function
             let mut file = File::create("out/foo.txt")?;
             file.write_all(b"Hello, world!")?;
         }
@@ -247,6 +251,7 @@ mod tests {
         crate::mandelbrot_set::make_grayscale_test_image(png::BitDepth::Sixteen)
     }
 
+
     #[test]
     fn write_png_gradient_demo() -> std::io::Result<()> {
         // Parameters
@@ -258,6 +263,7 @@ mod tests {
 
         // Setup for the PNG writer object
         let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        std::fs::create_dir_all("out")?;  // TODO: bundle these two lines together into a single function
         let file = File::create("out/grayscale_demo.png")?;
         let ref mut w = BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
