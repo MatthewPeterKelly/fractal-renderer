@@ -50,6 +50,29 @@ impl Iterator for PixelIter {
     }
 }
 
+
+
+/// Used to map from pixel space into some real-valued space
+#[derive(Debug, Copy, Clone)]
+pub struct PixelMap {
+    pub x_zero: f64,
+    pub y_zero: f64,
+    pub x_scale: f64,
+    pub y_scale: f64,
+}
+
+impl PixelMap {
+    pub fn new(n_rows: u32, n_cols: u32, center_x: f64, center_y: f64, width_x: f64) -> PixelMap {
+        let height_y = width_x * (n_rows as f64) / (n_cols as f64);
+        PixelMap { x_zero: center_x - 0.5 * width_x,
+            y_zero: center_y - 0.5 * height_y, 
+            x_scale: width_x / (n_rows as f64),
+            y_scale: height_y / (n_cols as f64) }
+    }
+}
+
+
+
 #[cfg(test)]
 mod tests {
 
