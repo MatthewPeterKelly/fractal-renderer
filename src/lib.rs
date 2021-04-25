@@ -161,6 +161,12 @@ pub mod mandelbrot_set {
     //////////////////////////////////////////////////////////////////////////////////////////
 }
 
+pub fn himmelblau(x: f64, y:f64) -> f64 {
+    let a = x*x + y - 11.0;
+    let b = x + y*y - 7.0;
+    return a*a + b*b;
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -318,13 +324,13 @@ mod tests {
         );
 
         // Max value above which we saturate the function value
-        let scale_factor = U8_BIN_COUNT / 50.0;
+        let scale_factor = U8_BIN_COUNT / 890.0;
 
         // Populate the data for a single row
         for i_row in 0..n_rows {
             for i_col in 0..n_cols {
                 let point = pixel_map.map(i_row, i_col);
-                let value = point.x * point.x + point.y*point.y;
+                let value = crate::himmelblau(point.x, point.y);
                 data_buffer[i_col as usize] = (value * scale_factor) as u8;
             }
             // Copy that data into every row
