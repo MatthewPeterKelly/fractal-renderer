@@ -51,16 +51,10 @@ impl Iterator for PixelIter {
 }
 
 /// Represents a point in 2D space
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Point2d {
     pub x: f64,
     pub y: f64,
-}
-
-impl Point2d {
-    pub fn new(x: f64, y: f64) -> Point2d {
-        Point2d { x, y }
-    }
 }
 
 /// Used to map from pixel space into some real-valued space
@@ -72,18 +66,14 @@ pub struct PixelMap {
     pub y_scale: f64,
 }
 
+// Note:  [0,0] in pixel space is [-x_max, y_max], following image conventions...
 impl PixelMap {
-    pub fn new(
-        n_rows: u32,
-        n_cols: u32,
-        center: Point2d,
-        dims: Point2d,
-    ) -> PixelMap {
+    pub fn new(counts: Point2d, center: Point2d, dims: Point2d) -> PixelMap {
         PixelMap {
             x_zero: center.x - 0.5 * dims.x,
-            y_zero: center.y - 0.5 * dims.y,
-            x_scale: dims.x / (n_cols as f64),
-            y_scale: dims.y / (n_rows as f64),
+            y_zero: center.y + 0.5 * dims.y,
+            x_scale: dims.x / (counts.x-1.0),
+            y_scale: -dims.y / (counts.y-1.0),
         }
     }
 
@@ -103,5 +93,30 @@ mod tests {
         for pixel in crate::pixel_iter::PixelIter::new(5, 10) {
             println!("pixel: {:?}", pixel);
         }
+    }
+
+    #[test]
+    fn pixel_map_test() {
+        let n_rows = 5;
+        let n_cols = 7;
+        let pixel_map = crate::pixel_iter::PixelMap::new(
+            crate::pixel_iter::Point2d { x: n_cols as f64, y: n_rows as f64 },
+            crate::pixel_iter::Point2d { x: 0.0, y: 0.0 },
+            crate::pixel_iter::Point2d { x: 2.0, y: 1.0 },
+        );
+        println!("pixel_map: {:?}", pixel_map);
+
+        assert_eq!(
+            pixel_map.map(0, 0),
+            crate::pixel_iter::Point2d { x: -1.0, y: 0.5 }
+        );
+        assert_eq!(
+            pixel_map.map(4,6),
+            crate::pixel_iter::Point2d { x: 1.0, y: -0.5 }
+        );
+        assert_eq!(
+            pixel_map.map(2,3),
+            crate::pixel_iter::Point2d { x: 0.0, y: 0.0 }
+        );
     }
 }

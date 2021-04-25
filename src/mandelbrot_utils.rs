@@ -1,4 +1,3 @@
-
 #[derive(Debug, Copy, Clone)]
 pub struct Complex {
     pub real: f64,

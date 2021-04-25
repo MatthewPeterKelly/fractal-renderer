@@ -1,4 +1,3 @@
-
 fn compute_newton_step(x: f64, c: f64) -> f64 {
     // x = current guess
     // c = number to compute the square root of
