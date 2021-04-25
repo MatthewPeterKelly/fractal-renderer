@@ -72,8 +72,8 @@ impl PixelMap {
         PixelMap {
             x_zero: center.x - 0.5 * dims.x,
             y_zero: center.y + 0.5 * dims.y,
-            x_scale: dims.x / (counts.x-1.0),
-            y_scale: -dims.y / (counts.y-1.0),
+            x_scale: dims.x / (counts.x - 1.0),
+            y_scale: -dims.y / (counts.y - 1.0),
         }
     }
 
@@ -100,7 +100,10 @@ mod tests {
         let n_rows = 5;
         let n_cols = 7;
         let pixel_map = crate::pixel_iter::PixelMap::new(
-            crate::pixel_iter::Point2d { x: n_cols as f64, y: n_rows as f64 },
+            crate::pixel_iter::Point2d {
+                x: n_cols as f64,
+                y: n_rows as f64,
+            },
             crate::pixel_iter::Point2d { x: 0.0, y: 0.0 },
             crate::pixel_iter::Point2d { x: 2.0, y: 1.0 },
         );
@@ -111,11 +114,11 @@ mod tests {
             crate::pixel_iter::Point2d { x: -1.0, y: 0.5 }
         );
         assert_eq!(
-            pixel_map.map(4,6),
+            pixel_map.map(4, 6),
             crate::pixel_iter::Point2d { x: 1.0, y: -0.5 }
         );
         assert_eq!(
-            pixel_map.map(2,3),
+            pixel_map.map(2, 3),
             crate::pixel_iter::Point2d { x: 0.0, y: 0.0 }
         );
     }
