@@ -1,19 +1,17 @@
 
-    #[derive(Debug, Copy, Clone)]
-    pub struct Complex {
-        pub real: f64,
-        pub imag: f64,
-    }
+#[derive(Debug, Copy, Clone)]
+pub struct Complex {
+    pub real: f64,
+    pub imag: f64,
+}
 
-    impl Complex {
-        pub fn mandelbrot_update(&mut self, c: &Complex) -> () {
-            let temp = self.real * self.real - self.imag * self.imag + c.real;
-            self.imag = 2.0 * self.real * self.imag + c.imag;
-            self.real = temp;
-        }
+impl Complex {
+    pub fn mandelbrot_update(&mut self, c: &Complex) -> () {
+        let temp = self.real * self.real - self.imag * self.imag + c.real;
+        self.imag = 2.0 * self.real * self.imag + c.imag;
+        self.real = temp;
     }
-
-   
+}
 
 #[cfg(test)]
 mod tests {
@@ -45,5 +43,4 @@ mod tests {
         assert_eq!(z.real, 0.75);
         assert_eq!(z.imag, 0.0);
     }
-
 }

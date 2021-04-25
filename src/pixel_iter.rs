@@ -50,7 +50,18 @@ impl Iterator for PixelIter {
     }
 }
 
+/// Represents a point in 2D space
+#[derive(Debug, Copy, Clone)]
+pub struct Point2d {
+    pub x: f64,
+    pub y: f64,
+}
 
+impl Point2d {
+    pub fn new(x: f64, y: f64) -> Point2d {
+        Point2d { x, y }
+    }
+}
 
 /// Used to map from pixel space into some real-valued space
 #[derive(Debug, Copy, Clone)]
@@ -62,16 +73,27 @@ pub struct PixelMap {
 }
 
 impl PixelMap {
-    pub fn new(n_rows: u32, n_cols: u32, center_x: f64, center_y: f64, width_x: f64) -> PixelMap {
-        let height_y = width_x * (n_rows as f64) / (n_cols as f64);
-        PixelMap { x_zero: center_x - 0.5 * width_x,
-            y_zero: center_y - 0.5 * height_y, 
-            x_scale: width_x / (n_rows as f64),
-            y_scale: height_y / (n_cols as f64) }
+    pub fn new(
+        n_rows: u32,
+        n_cols: u32,
+        center: Point2d,
+        dims: Point2d,
+    ) -> PixelMap {
+        PixelMap {
+            x_zero: center.x - 0.5 * dims.x,
+            y_zero: center.y - 0.5 * dims.y,
+            x_scale: dims.x / (n_cols as f64),
+            y_scale: dims.y / (n_rows as f64),
+        }
+    }
+
+    pub fn map(self, row: u32, col: u32) -> Point2d {
+        return Point2d {
+            x: self.x_zero + (col as f64) * self.x_scale,
+            y: self.y_zero + (row as f64) * self.y_scale,
+        };
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
