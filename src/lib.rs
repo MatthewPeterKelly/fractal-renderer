@@ -338,4 +338,50 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn zoomed_out_mandelbrot() -> std::io::Result<()> {
+        // Parameters
+        const BUFFER_SIZE: usize = 1024;
+        const U8_BIN_COUNT: f64 = 256.0;
+        let n_rows = BUFFER_SIZE as u32;
+        let n_cols = BUFFER_SIZE as u32;
+
+        // Setup for the PNG writer object
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
+        let file = File::create("out/mandelbrot.png")?;
+        let ref mut w = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
+
+        // Mapping between pixels and real values
+        let pixel_map = crate::pixel_iter::PixelMap::new(
+            crate::pixel_iter::Point2d {
+                x: n_cols as f64,
+                y: n_rows as f64,
+            },
+            crate::pixel_iter::Point2d { x: 0.0, y: 0.0 },
+            crate::pixel_iter::Point2d { x: 4.0, y: 4.0 },
+        );
+
+        // Max value above which we saturate the function value
+        let scale_factor = U8_BIN_COUNT;
+        let max_iter = 500;
+
+        // Populate the data for a single row
+        for i_row in 0..n_rows {
+            for i_col in 0..n_cols {
+                let point = pixel_map.map(i_row, i_col);
+                let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
+                data_buffer[i_col as usize] = (result.value * scale_factor) as u8;
+            }
+            // Copy that data into every row
+            stream_writer.write(&data_buffer[0..])?;
+        }
+        Ok(())
+    }
 }

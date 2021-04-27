@@ -6,7 +6,10 @@ pub struct MandelbrotResult {
     pub count: u32, // integer number of iterations, saturated
 }
 
-fn compute_mandelbrot(c: &Point2d, max_iter: u32) -> MandelbrotResult {
+
+// Inefficient but very simple method for computing the mandelbrot set. 
+// Used for unit testing and benchmarking
+pub fn compute_mandelbrot(c: &Point2d, max_iter: u32) -> MandelbrotResult {
     let mut z = Point2d { x: 0.0, y: 0.0 };
     for i in 0..max_iter {
         let temp = z.x * z.x - z.y * z.y + c.x;
