@@ -161,10 +161,10 @@ pub mod mandelbrot_set {
     //////////////////////////////////////////////////////////////////////////////////////////
 }
 
-pub fn himmelblau(x: f64, y:f64) -> f64 {
-    let a = x*x + y - 11.0;
-    let b = x + y*y - 7.0;
-    return a*a + b*b;
+pub fn himmelblau(x: f64, y: f64) -> f64 {
+    let a = x * x + y - 11.0;
+    let b = x + y * y - 7.0;
+    return a * a + b * b;
 }
 
 #[cfg(test)]
