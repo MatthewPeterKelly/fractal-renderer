@@ -11,13 +11,14 @@ pub struct MandelbrotResult {
 // Used for unit testing and benchmarking
 pub fn compute_mandelbrot(c: &Point2d, max_iter: u32) -> MandelbrotResult {
     let mut z = Point2d { x: 0.0, y: 0.0 };
+    let scale = 1.0 / ((max_iter as f64) -1.0);
     for i in 0..max_iter {
         let temp = z.x * z.x - z.y * z.y + c.x;
         z.y = 2.0 * z.x * z.y + c.y;
         z.x = temp;
         if z.x * z.x + z.y * z.y > 4.0 {
             return MandelbrotResult {
-                value: (i as f64) / (max_iter as f64),
+                value: scale * (i as f64),
                 count: i,
             };
         }

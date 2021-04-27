@@ -342,7 +342,8 @@ mod tests {
     #[test]
     fn zoomed_out_mandelbrot() -> std::io::Result<()> {
         // Parameters
-        const BUFFER_SIZE: usize = 1024;
+        // const BUFFER_SIZE: usize = 1024;
+        const BUFFER_SIZE: usize = 2048;
         const U8_BIN_COUNT: f64 = 256.0;
         let n_rows = BUFFER_SIZE as u32;
         let n_cols = BUFFER_SIZE as u32;
@@ -364,13 +365,13 @@ mod tests {
                 x: n_cols as f64,
                 y: n_rows as f64,
             },
-            crate::pixel_iter::Point2d { x: 0.0, y: 0.0 },
-            crate::pixel_iter::Point2d { x: 4.0, y: 4.0 },
+            crate::pixel_iter::Point2d { x: -1.0, y: 0.5 },
+            crate::pixel_iter::Point2d { x: 2.0, y: 2.0 },
         );
 
         // Max value above which we saturate the function value
         let scale_factor = U8_BIN_COUNT;
-        let max_iter = 500;
+        let max_iter = 800;
 
         // Populate the data for a single row
         for i_row in 0..n_rows {
