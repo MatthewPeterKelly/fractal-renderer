@@ -1,6 +1,7 @@
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
 mod pixel_iter; // unused, but included so that tests are run
+mod image_buffer;
 
 pub mod mandelbrot_set {
     // TODO:  rename this and move to a different file...
@@ -394,10 +395,9 @@ mod tests {
         const N_ROWS: u32 = 512;
         const N_COLS: u32 = 512;
         const N_PIXEL: u32 = 3;  // RGB
-        const BUFFER_SIZE: usize = (N_ROWS * N_COLS * N_PIXEL) as usize;
 
         // Setup for the PNG writer object
-        let mut data_buffer: Vec<u8> = vec![0; BUFFER_SIZE];
+        let mut data_buffer = crate::image_buffer::ImageBuffer::new(N_ROWS, N_COLS);
 
         std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
         let file = File::create("out/draw_limple_line.png")?;
@@ -428,12 +428,12 @@ mod tests {
                 let point = pixel_map.map(i_row, i_col);
                 let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
                 let i_pixel = (i_row * N_COLS*N_PIXEL + N_PIXEL*i_col) as usize;
-                data_buffer[i_pixel+0] = (result.value * scale_factor) as u8;
-                data_buffer[i_pixel+1] = 0;
-                data_buffer[i_pixel+2] = 0;
+                data_buffer.data_buffer[i_pixel+0] = (result.value * scale_factor) as u8;
+                data_buffer.data_buffer[i_pixel+1] = 0;
+                data_buffer.data_buffer[i_pixel+2] = 0;
             }
         }
-        stream_writer.write_all(&data_buffer[0..])?;
+        stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
     }
 }
