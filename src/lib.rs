@@ -385,4 +385,56 @@ mod tests {
         }
         Ok(())
     }
+
+
+
+    #[test]
+    fn draw_simple_line() -> std::io::Result<()> {
+        // Parameters
+        const BUFFER_SIZE: usize = 1024;
+        // const BUFFER_SIZE: usize = 2048;
+        const U8_BIN_COUNT: f64 = 256.0;
+        let n_rows = BUFFER_SIZE as u32;
+        let n_cols = BUFFER_SIZE as u32;
+
+        // Setup for the PNG writer object
+        let mut data_buffer: [u8; 3*BUFFER_SIZE] = [0; 3*BUFFER_SIZE];  // RGBA = 3 per pixel
+        std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
+        let file = File::create("out/draw_limple_line.png")?;
+        let ref mut w = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        encoder.set_color(png::ColorType::RGB);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
+
+        // Mapping between pixels and real values
+        let pixel_map = crate::pixel_iter::PixelMap::new(
+            crate::pixel_iter::Point2d {
+                x: n_cols as f64,
+                y: n_rows as f64,
+            },
+            crate::pixel_iter::Point2d { x: -1.0, y: 0.5 },
+            crate::pixel_iter::Point2d { x: 2.0, y: 2.0 },
+        );
+
+        // Max value above which we saturate the function value
+        let scale_factor = U8_BIN_COUNT;
+        let max_iter = 800;
+
+        // Populate the data for a single row
+        for i_row in 0..n_rows {
+            for i_col in 0..n_cols {
+                let point = pixel_map.map(i_row, i_col);
+                let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
+                let i_pixel = 3*i_col as usize;
+                data_buffer[i_pixel+0] = (result.value * scale_factor) as u8;
+                data_buffer[i_pixel+1] = 0;
+                data_buffer[i_pixel+2] = 0;
+            }
+            // Copy that data into every row
+            stream_writer.write(&data_buffer[0..])?;
+        }
+        Ok(())
+    }
 }
