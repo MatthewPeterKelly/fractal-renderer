@@ -1,7 +1,7 @@
+mod image_buffer;
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
 mod pixel_iter; // unused, but included so that tests are run
-mod image_buffer;
 
 pub mod mandelbrot_set {
     // TODO:  rename this and move to a different file...
@@ -387,8 +387,6 @@ mod tests {
         Ok(())
     }
 
-
-
     #[test]
     fn draw_simple_line() -> std::io::Result<()> {
         // Parameters
@@ -427,11 +425,18 @@ mod tests {
                 let point = pixel_map.map(i_row, i_col);
                 let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
                 let green: u8 = (result.value * scale_factor) as u8;
-                data_buffer.draw_pixel(i_row, i_col, crate::image_buffer::ColoredPixel{r:0,g:green,b:0});
+                data_buffer.draw_pixel(
+                    i_row,
+                    i_col,
+                    crate::image_buffer::ColoredPixel {
+                        r: 0,
+                        g: green,
+                        b: 0,
+                    },
+                );
             }
         }
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
     }
 }
-    
