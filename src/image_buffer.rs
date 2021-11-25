@@ -6,6 +6,12 @@ pub struct ColoredPixel {
     pub b: u8,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct PixelIndex {
+    pub row: u32,
+    pub col: u32,
+}
+
 /// Store the raw buffer in memory for an image
 #[derive(Debug, Clone)]
 pub struct ImageBuffer {
@@ -25,10 +31,12 @@ impl ImageBuffer {
         }
     }
 
-    pub fn draw_pixel(&mut self, row: u32, col: u32, color: ColoredPixel) {
-        let i_pixel = (self.n_pixel * (row * self.n_cols + col)) as usize;
+    pub fn draw_pixel(&mut self, index: PixelIndex, color: ColoredPixel) {
+        let i_pixel = (self.n_pixel * (index.row * self.n_cols + index.col)) as usize;
         self.data_buffer[i_pixel + 0] = color.r;
         self.data_buffer[i_pixel + 1] = color.g;
         self.data_buffer[i_pixel + 2] = color.b;
     }
+
+    // pub fn draw_rectangle
 }

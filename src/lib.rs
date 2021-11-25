@@ -426,8 +426,10 @@ mod tests {
                 let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
                 let green: u8 = (result.value * scale_factor) as u8;
                 data_buffer.draw_pixel(
-                    i_row,
-                    i_col,
+                    crate::image_buffer::PixelIndex {
+                        row: i_row,
+                        col: i_col,
+                    },
                     crate::image_buffer::ColoredPixel {
                         r: 0,
                         g: green,
