@@ -397,7 +397,8 @@ mod tests {
         const BUFFER_SIZE: usize = (N_ROWS * N_COLS * N_PIXEL) as usize;
 
         // Setup for the PNG writer object
-        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];  
+        let mut data_buffer: Vec<u8> = vec![0; BUFFER_SIZE];
+
         std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
         let file = File::create("out/draw_limple_line.png")?;
         let ref mut w = BufWriter::new(file);
