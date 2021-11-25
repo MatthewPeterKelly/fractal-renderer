@@ -394,7 +394,6 @@ mod tests {
         // Parameters
         const N_ROWS: u32 = 512;
         const N_COLS: u32 = 512;
-        const N_PIXEL: u32 = 3;  // RGB
 
         // Setup for the PNG writer object
         let mut data_buffer = crate::image_buffer::ImageBuffer::new(N_ROWS, N_COLS);
@@ -427,10 +426,8 @@ mod tests {
             for i_col in 0..N_COLS {
                 let point = pixel_map.map(i_row, i_col);
                 let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
-                let i_pixel = (i_row * N_COLS*N_PIXEL + N_PIXEL*i_col) as usize;
-                data_buffer.data_buffer[i_pixel+0] = (result.value * scale_factor) as u8;
-                data_buffer.data_buffer[i_pixel+1] = 0;
-                data_buffer.data_buffer[i_pixel+2] = 0;
+                let green: u8 = (result.value * scale_factor) as u8;
+                data_buffer.draw_pixel(i_row, i_col, crate::image_buffer::ColoredPixel{r:0,g:green,b:0});
             }
         }
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
