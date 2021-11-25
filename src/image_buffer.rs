@@ -38,5 +38,15 @@ impl ImageBuffer {
         self.data_buffer[i_pixel + 2] = color.b;
     }
 
-    // pub fn draw_rectangle
+    pub fn draw_horizontal_line(&mut self, start: PixelIndex, length: u32, color: ColoredPixel) {
+        for i in 0..length {
+            self.draw_pixel(
+                PixelIndex {
+                    row: (start.row + i),
+                    col: start.col,
+                },
+                color,
+            )
+        }
+    }
 }

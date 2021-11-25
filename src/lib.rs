@@ -438,6 +438,16 @@ mod tests {
                 );
             }
         }
+        data_buffer.draw_horizontal_line(
+            crate::image_buffer::PixelIndex { row: 40, col: 50 },
+            100,
+            crate::image_buffer::ColoredPixel {
+                r: 5,
+                g: 20,
+                b: 200,
+            },
+        );
+
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
     }
