@@ -405,14 +405,28 @@ mod tests {
         let mut writer = encoder.write_header().unwrap();
         let mut stream_writer = writer.stream_writer();
 
+        let blue = crate::image_buffer::ColoredPixel {
+            r: 5,
+            g: 20,
+            b: 200,
+        };
+
+        let green = crate::image_buffer::ColoredPixel {
+            r: 20,
+            g: 190,
+            b: 40,
+        };
+
         data_buffer.draw_horizontal_line(
             crate::image_buffer::PixelIndex { row: 40, col: 50 },
             100,
-            crate::image_buffer::ColoredPixel {
-                r: 5,
-                g: 20,
-                b: 200,
-            },
+            blue,
+        );
+
+        data_buffer.draw_vertical_line(
+            crate::image_buffer::PixelIndex { row: 5, col: 10 },
+            10,
+            green,
         );
 
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;

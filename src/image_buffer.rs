@@ -32,18 +32,30 @@ impl ImageBuffer {
     }
 
     pub fn draw_pixel(&mut self, index: PixelIndex, color: ColoredPixel) {
-        let i_pixel = (self.n_pixel * (index.col * self.n_rows + index.row)) as usize;
+        let i_pixel = (self.n_pixel * (index.row * self.n_cols + index.col)) as usize;
         self.data_buffer[i_pixel + 0] = color.r;
         self.data_buffer[i_pixel + 1] = color.g;
         self.data_buffer[i_pixel + 2] = color.b;
+    }
+
+    pub fn draw_vertical_line(&mut self, start: PixelIndex, length: u32, color: ColoredPixel) {
+        for i in 0..length {
+            self.draw_pixel(
+                PixelIndex {
+                    row: (start.row + i),
+                    col: start.col,
+                },
+                color,
+            )
+        }
     }
 
     pub fn draw_horizontal_line(&mut self, start: PixelIndex, length: u32, color: ColoredPixel) {
         for i in 0..length {
             self.draw_pixel(
                 PixelIndex {
-                    row: (start.row + i),
-                    col: start.col,
+                    row: start.row,
+                    col: (start.col + i),
                 },
                 color,
             )
