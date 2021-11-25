@@ -390,7 +390,7 @@ mod tests {
     #[test]
     fn draw_simple_line() -> std::io::Result<()> {
         // Parameters
-        const N_ROWS: u32 = 512;
+        const N_ROWS: u32 = 1024;
         const N_COLS: u32 = 512;
 
         // Setup for the PNG writer object
@@ -405,39 +405,6 @@ mod tests {
         let mut writer = encoder.write_header().unwrap();
         let mut stream_writer = writer.stream_writer();
 
-        // Mapping between pixels and real values
-        let pixel_map = crate::pixel_iter::PixelMap::new(
-            crate::pixel_iter::Point2d {
-                x: N_COLS as f64,
-                y: N_ROWS as f64,
-            },
-            crate::pixel_iter::Point2d { x: -1.0, y: 0.5 },
-            crate::pixel_iter::Point2d { x: 2.0, y: 2.0 },
-        );
-
-        // Max value above which we saturate the function value
-        let scale_factor: f64 = 256.0;
-        let max_iter = 800;
-
-        // Populate the data for a single row
-        for i_row in 0..N_ROWS {
-            for i_col in 0..N_COLS {
-                let point = pixel_map.map(i_row, i_col);
-                let result = crate::mandelbrot_utils::compute_mandelbrot(&point, max_iter);
-                let green: u8 = (result.value * scale_factor) as u8;
-                data_buffer.draw_pixel(
-                    crate::image_buffer::PixelIndex {
-                        row: i_row,
-                        col: i_col,
-                    },
-                    crate::image_buffer::ColoredPixel {
-                        r: 0,
-                        g: green,
-                        b: 0,
-                    },
-                );
-            }
-        }
         data_buffer.draw_horizontal_line(
             crate::image_buffer::PixelIndex { row: 40, col: 50 },
             100,
