@@ -441,6 +441,10 @@ mod tests {
         data_buffer.draw_pixel(p1, blue);
         data_buffer.draw_pixel(p2, blue);
 
+        let p3 = crate::image_buffer::PixelIndex { row: 250, col: 350 };
+        let p4 = crate::image_buffer::PixelIndex { row: 150, col: 150 };
+        data_buffer.draw_line(p3, p4, green);
+
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
     }
