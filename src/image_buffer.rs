@@ -61,4 +61,22 @@ impl ImageBuffer {
             )
         }
     }
+
+    pub fn draw_line(&mut self, point_one: PixelIndex, point_two: PixelIndex, color: ColoredPixel) {
+        //Bresenham's Line Algorithm
+        let a = 2 * (point_two.row as i32 - point_one.row as i32);
+        let col_delta = point_two.col as i32 - point_one.col as i32;
+        let b = a - 2 * col_delta;
+        let mut p = a - col_delta;
+        let mut y = point_one.row;
+        for x in point_one.col..=point_two.col {
+            self.draw_pixel(PixelIndex { row: y, col: x }, color);
+            if p < 0 {
+                p = p + a;
+            } else {
+                y = y + 1;
+                p = p + b;
+            }
+        }
+    }
 }

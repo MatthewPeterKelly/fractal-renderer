@@ -417,9 +417,15 @@ mod tests {
             b: 40,
         };
 
+        let red = crate::image_buffer::ColoredPixel {
+            r: 220,
+            g: 20,
+            b: 30,
+        };
+
         data_buffer.draw_horizontal_line(
             crate::image_buffer::PixelIndex { row: 40, col: 50 },
-            100,
+            5,
             blue,
         );
 
@@ -428,6 +434,12 @@ mod tests {
             10,
             green,
         );
+
+        let p1 = crate::image_buffer::PixelIndex { row: 180, col: 5 };
+        let p2 = crate::image_buffer::PixelIndex { row: 30, col: 250 };
+        data_buffer.draw_line(p1, p2, red);
+        data_buffer.draw_pixel(p1, blue);
+        data_buffer.draw_pixel(p2, blue);
 
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
