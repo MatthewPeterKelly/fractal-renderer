@@ -394,7 +394,7 @@ mod tests {
         const N_COLS: u32 = 512;
 
         // Setup for the PNG writer object
-        let mut data_buffer = crate::image_buffer::ImageBuffer::new(N_ROWS, N_COLS);
+        let mut data_buffer = crate::image_buffer::ImageBuffer::new(N_ROWS as i32, N_COLS as i32);
 
         std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
         let file = File::create("out/draw_limple_line.png")?;
@@ -444,6 +444,9 @@ mod tests {
         let p3 = crate::image_buffer::PixelIndex { row: 250, col: 350 };
         let p4 = crate::image_buffer::PixelIndex { row: 150, col: 150 };
         data_buffer.draw_line(p3, p4, green);
+
+        let p5 = crate::image_buffer::PixelIndex { row: 200, col: 450 };
+        data_buffer.draw_line(p3, p5, blue);
 
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
