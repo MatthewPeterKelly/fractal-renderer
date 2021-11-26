@@ -69,20 +69,38 @@ impl ImageBuffer {
         if x_del < 0 {
             return self.draw_line(point_two, point_one, color);
         }
-        let a = 2 * y_del.abs();
-        let step: i32 = if y_del < 0 { -1 } else { 1 };
-        let b = a - 2 * x_del;
-        let mut p = a - x_del;
-        assert!(y_del.abs() < x_del.abs());
-        let mut y = point_one.row;
 
-        for x in point_one.col..=point_two.col {
-            self.draw_pixel(PixelIndex { row: y, col: x }, color);
-            if p < 0 {
-                p = p + a;
-            } else {
-                y = y + step;
-                p = p + b;
+        if y_del.abs() < x_del.abs() {
+            let a = 2 * y_del.abs();
+            let step: i32 = if y_del < 0 { -1 } else { 1 };
+            let b = a - 2 * x_del;
+            let mut p = a - x_del;
+            let mut y = point_one.row;
+
+            for x in point_one.col..=point_two.col {
+                self.draw_pixel(PixelIndex { row: y, col: x }, color);
+                if p < 0 {
+                    p = p + a;
+                } else {
+                    y = y + step;
+                    p = p + b;
+                }
+            }
+        } else {
+            let a = 2 * x_del.abs();
+            let step: i32 = if x_del < 0 { -1 } else { 1 };
+            let b = a - 2 * y_del;
+            let mut p = a - y_del;
+            let mut x = point_one.row;
+
+            for y in point_one.row..=point_two.row {
+                self.draw_pixel(PixelIndex { row: y, col: x }, color);
+                if p < 0 {
+                    p = p + a;
+                } else {
+                    x = x + step;
+                    p = p + b;
+                }
             }
         }
     }
