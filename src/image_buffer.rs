@@ -69,6 +69,7 @@ impl ImageBuffer {
         let b = a - 2 * col_delta;
         let mut p = a - col_delta;
         let mut y = point_one.row;
+        println!("a: {}, b: {}, p: {}", a, b, p);
         for x in point_one.col..=point_two.col {
             self.draw_pixel(PixelIndex { row: y, col: x }, color);
             if p < 0 {
@@ -77,6 +78,7 @@ impl ImageBuffer {
                 y = y + 1;
                 p = p + b;
             }
+            println!("x: {}, y: {}, p: {}", x, y, p);
         }
     }
 }

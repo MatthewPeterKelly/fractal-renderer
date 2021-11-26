@@ -435,8 +435,8 @@ mod tests {
             green,
         );
 
-        let p1 = crate::image_buffer::PixelIndex { row: 180, col: 5 };
-        let p2 = crate::image_buffer::PixelIndex { row: 30, col: 250 };
+        let p1 = crate::image_buffer::PixelIndex { row: 100, col: 100 };
+        let p2 = crate::image_buffer::PixelIndex { row: 200, col: 300 };
         data_buffer.draw_line(p1, p2, red);
         data_buffer.draw_pixel(p1, blue);
         data_buffer.draw_pixel(p2, blue);
