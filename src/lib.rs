@@ -423,6 +423,12 @@ mod tests {
             b: 30,
         };
 
+        let purple = crate::image_buffer::ColoredPixel {
+            r: 220,
+            g: 40,
+            b: 190,
+        };
+
         data_buffer.draw_horizontal_line(
             crate::image_buffer::PixelIndex { row: 40, col: 50 },
             5,
@@ -450,6 +456,8 @@ mod tests {
 
         let p6 = crate::image_buffer::PixelIndex { row: 800, col: 400 };
         data_buffer.draw_line(p4, p6, red);
+
+        data_buffer.draw_regular_polygon(p3, 60.0, 12, purple);
 
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())

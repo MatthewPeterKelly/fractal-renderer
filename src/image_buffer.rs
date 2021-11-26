@@ -32,6 +32,9 @@ impl ImageBuffer {
     }
 
     pub fn draw_pixel(&mut self, index: PixelIndex, color: ColoredPixel) {
+        if index.row >= self.n_rows || index.col >= self.n_cols || index.row < 0 || index.col < 0 {
+            return;
+        }
         let i_pixel = (self.n_pixel * (index.row * self.n_cols + index.col)) as usize;
         self.data_buffer[i_pixel + 0] = color.r;
         self.data_buffer[i_pixel + 1] = color.g;
@@ -102,6 +105,30 @@ impl ImageBuffer {
                     p = p + b;
                 }
             }
+        }
+    }
+
+    pub fn draw_regular_polygon(
+        &mut self,
+        center: PixelIndex,
+        radius: f64,
+        n_sides: i32,
+        color: ColoredPixel,
+    ) {
+        let mut prev_pixel = PixelIndex {
+            row: center.row,
+            col: center.col + (radius as i32),
+        };
+        for index in 1..n_sides {
+            let angle = (index as f64) * (1.0 / std::f64::consts::PI);
+            let x_del = radius * angle.cos();
+            let y_del = radius * angle.sin();
+            let pixel = PixelIndex {
+                row: center.row + (y_del as i32),
+                col: center.col + (x_del as i32),
+            };
+            self.draw_line(prev_pixel, pixel, color);
+            prev_pixel = pixel;
         }
     }
 }
