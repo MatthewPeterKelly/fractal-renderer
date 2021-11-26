@@ -69,11 +69,14 @@ impl ImageBuffer {
         //Bresenham's Line Algorithm
         let x_del = point_two.col - point_one.col;
         let y_del = point_two.row - point_one.row;
-        if x_del < 0 {
-            return self.draw_line(point_two, point_one, color);
-        }
 
+        // TODO:  reduce code duplication here?
         if y_del.abs() < x_del.abs() {
+            if x_del < 0 {
+                return self.draw_line(point_two, point_one, color);
+            }
+            assert!(x_del >= 0);
+
             let a = 2 * y_del.abs();
             let step: i32 = if y_del < 0 { -1 } else { 1 };
             let b = a - 2 * x_del;
@@ -90,11 +93,16 @@ impl ImageBuffer {
                 }
             }
         } else {
+            if y_del < 0 {
+                return self.draw_line(point_two, point_one, color);
+            }
+            assert!(y_del >= 0);
+
             let a = 2 * x_del.abs();
             let step: i32 = if x_del < 0 { -1 } else { 1 };
             let b = a - 2 * y_del;
             let mut p = a - y_del;
-            let mut x = point_one.row;
+            let mut x = point_one.col;
 
             for y in point_one.row..=point_two.row {
                 self.draw_pixel(PixelIndex { row: y, col: x }, color);
@@ -119,8 +127,9 @@ impl ImageBuffer {
             row: center.row,
             col: center.col + (radius as i32),
         };
-        for index in 1..n_sides {
-            let angle = (index as f64) * (1.0 / std::f64::consts::PI);
+        let scale = 2.0 * std::f64::consts::PI / (n_sides as f64);
+        for index in 1..=n_sides {
+            let angle = (index as f64) * scale;
             let x_del = radius * angle.cos();
             let y_del = radius * angle.sin();
             let pixel = PixelIndex {

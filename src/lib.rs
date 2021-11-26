@@ -390,8 +390,8 @@ mod tests {
     #[test]
     fn draw_simple_line() -> std::io::Result<()> {
         // Parameters
-        const N_ROWS: u32 = 1024;
-        const N_COLS: u32 = 512;
+        const N_ROWS: u32 = 800;
+        const N_COLS: u32 = 600;
 
         // Setup for the PNG writer object
         let mut data_buffer = crate::image_buffer::ImageBuffer::new(N_ROWS as i32, N_COLS as i32);
@@ -454,10 +454,10 @@ mod tests {
         let p5 = crate::image_buffer::PixelIndex { row: 200, col: 450 };
         data_buffer.draw_line(p3, p5, blue);
 
-        let p6 = crate::image_buffer::PixelIndex { row: 800, col: 400 };
+        let p6 = crate::image_buffer::PixelIndex { row: 400, col: 300 };
         data_buffer.draw_line(p4, p6, red);
 
-        data_buffer.draw_regular_polygon(p3, 60.0, 12, purple);
+        data_buffer.draw_regular_polygon(p3, 150.0, 24, purple);
 
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
