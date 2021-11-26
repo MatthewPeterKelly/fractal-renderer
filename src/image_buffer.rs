@@ -64,17 +64,18 @@ impl ImageBuffer {
 
     pub fn draw_line(&mut self, point_one: PixelIndex, point_two: PixelIndex, color: ColoredPixel) {
         //Bresenham's Line Algorithm
-        let row_delta = point_two.row - point_one.row;
-        if row_delta < 0 {
+        let x_del = point_two.col - point_one.col;
+        let y_del = point_two.row - point_one.row;
+        if x_del < 0 {
             return self.draw_line(point_two, point_one, color);
         }
-        let a = 2 * row_delta;
-        let col_delta = point_two.col - point_one.col;
-        let step: i32 = if col_delta < 0 { -1 } else { 1 };
-        let b = a - 2 * col_delta;
-        let mut p = a - col_delta;
-        assert!(row_delta.abs() < col_delta.abs());
+        let a = 2 * y_del.abs();
+        let step: i32 = if y_del < 0 { -1 } else { 1 };
+        let b = a - 2 * x_del;
+        let mut p = a - x_del;
+        assert!(y_del.abs() < x_del.abs());
         let mut y = point_one.row;
+
         for x in point_one.col..=point_two.col {
             self.draw_pixel(PixelIndex { row: y, col: x }, color);
             if p < 0 {
