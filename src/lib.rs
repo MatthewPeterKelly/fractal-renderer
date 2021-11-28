@@ -340,7 +340,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[test] #[ignore]
     fn zoomed_out_mandelbrot() -> std::io::Result<()> {
         // Parameters
         // const BUFFER_SIZE: usize = 1024;
@@ -462,4 +462,35 @@ mod tests {
         stream_writer.write_all(&data_buffer.data_buffer[0..])?;
         Ok(())
     }
+
+
+    /*
+     * 
+     * Next steps!
+     * 
+     * - Depend on the 'https://docs.rs/ode_solvers/0.3.4/ode_solvers/' crate. 
+     * 
+     * - Simulate a simple pendulum using the RK4 solver.
+     * 
+     * - Note: their RK4 solver appears to allocate memory (a lot?) in the inner loop. See if there 
+     * is a trivial fix and benchmark it using the 'benchmark' utility built into rust.
+     * 
+     * - Create a system for the DDP. Simulate it.
+     * 
+     * - Create a mapping utility to map from the pendulum state space into image space.
+     * 
+     * - Plot the trajectory of the pendulum as a .png image.
+     * 
+     * - Plot multiple trajectories on the .png image.
+     * 
+     * - test for convergence of the trajectory and implement abort-if-converged.
+     * 
+     * - plot the trajectory color based on basin of attraction.
+     * 
+     * 
+     * 
+     * 
+     * 
+     * 
+     */
 }
