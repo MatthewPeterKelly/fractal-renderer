@@ -7,4 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-png = "0.16.7"
+png = "0.16.7"  # TODO:  update this
+nalgebra = "0.29.0"
+approx = "0.5.0"

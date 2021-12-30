@@ -1,7 +1,11 @@
 mod image_buffer;
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
+mod ode_solvers;
 mod pixel_iter; // unused, but included so that tests are run
+
+#[macro_use]
+extern crate approx; // For the macro relative_eq!
 
 pub mod mandelbrot_set {
     // TODO:  rename this and move to a different file...
@@ -340,7 +344,8 @@ mod tests {
         Ok(())
     }
 
-    #[test] #[ignore]
+    #[test]
+    #[ignore]
     fn zoomed_out_mandelbrot() -> std::io::Result<()> {
         // Parameters
         // const BUFFER_SIZE: usize = 1024;
@@ -463,34 +468,85 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    #[ignore]
+    fn low_res_ddp_fractal() -> std::io::Result<()> {
+        use nalgebra::Vector2;
+        // Parameters
+        const BUFFER_SIZE: usize = 1024;
+        let n_rows = BUFFER_SIZE as u32;
+        let n_cols = BUFFER_SIZE as u32;
+
+        // Setup for the PNG writer object
+        let mut data_buffer: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        std::fs::create_dir_all("out")?; // TODO: bundle these two lines together into a single function
+        let file = File::create("out/low_res_ddp.png")?;
+        let ref mut w = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(w, n_cols /*width*/, n_rows /*height*/); //
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        let mut stream_writer = writer.stream_writer_with_size(BUFFER_SIZE);
+
+        // Mapping between pixels and real values
+        let pixel_map = crate::pixel_iter::PixelMap::new(
+            crate::pixel_iter::Point2d {
+                x: n_cols as f64,
+                y: n_rows as f64,
+            },
+            crate::pixel_iter::Point2d { x: 0.0, y: 0.0 },
+            crate::pixel_iter::Point2d {
+                x: 4.0 * std::f64::consts::PI,
+                y: 8.0,
+            },
+        );
+
+        // Populate the data for a single row
+        for i_row in 0..n_rows {
+            println!("row {} of {}", i_row + 1, n_rows);
+            for i_col in 0..n_cols {
+                let point = pixel_map.map(i_row, i_col);
+                let x = Vector2::new(point.x, point.y);
+                let x_idx = crate::ode_solvers::compute_basin_of_attraction(x);
+                if let Some(0) = x_idx {
+                    data_buffer[i_col as usize] = 255;
+                } else {
+                    data_buffer[i_col as usize] = 0;
+                }
+            }
+            // Copy that data into every row
+            stream_writer.write(&data_buffer[0..])?;
+        }
+        Ok(())
+    }
 
     /*
-     * 
+     *
      * Next steps!
-     * 
-     * - Depend on the 'https://docs.rs/ode_solvers/0.3.4/ode_solvers/' crate. 
-     * 
+     *
+     * - Depend on the 'https://docs.rs/ode_solvers/0.3.4/ode_solvers/' crate.
+     *
      * - Simulate a simple pendulum using the RK4 solver.
-     * 
-     * - Note: their RK4 solver appears to allocate memory (a lot?) in the inner loop. See if there 
+     *
+     * - Note: their RK4 solver appears to allocate memory (a lot?) in the inner loop. See if there
      * is a trivial fix and benchmark it using the 'benchmark' utility built into rust.
-     * 
+     *
      * - Create a system for the DDP. Simulate it.
-     * 
+     *
      * - Create a mapping utility to map from the pendulum state space into image space.
-     * 
+     *
      * - Plot the trajectory of the pendulum as a .png image.
-     * 
+     *
      * - Plot multiple trajectories on the .png image.
-     * 
+     *
      * - test for convergence of the trajectory and implement abort-if-converged.
-     * 
+     *
      * - plot the trajectory color based on basin of attraction.
-     * 
-     * 
-     * 
-     * 
-     * 
-     * 
+     *
+     *
+     *
+     *
+     *
+     *
      */
 }
