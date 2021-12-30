@@ -1,10 +1,11 @@
+mod ddp_utils;
 mod image_buffer;
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
 mod ode_solvers;
-mod pixel_iter; // unused, but included so that tests are run
+mod pixel_iter; // unused, but included so that tests are run // unused, but included so that tests are run
 
-#[macro_use]
+#[macro_use] // Note:  used in ode_solvers... but compiler doesn't find this
 extern crate approx; // For the macro relative_eq!
 
 pub mod mandelbrot_set {
@@ -213,7 +214,7 @@ mod tests {
         ) {
             let value = scale * ((pixel.col + pixel.row) as f64);
             buffer.set_virtual_element(pixel.col as usize, value);
-            if pixel.col == (n_cols - 1).try_into().unwrap() {
+            if (pixel.col + 1) == (n_cols as u32) {
                 stream_writer.write(buffer.data())?;
                 buffer.clear();
             }
@@ -507,7 +508,7 @@ mod tests {
             for i_col in 0..n_cols {
                 let point = pixel_map.map(i_row, i_col);
                 let x = Vector2::new(point.x, point.y);
-                let x_idx = crate::ode_solvers::compute_basin_of_attraction(x);
+                let x_idx = crate::ddp_utils::compute_basin_of_attraction(x);
                 if let Some(0) = x_idx {
                     data_buffer[i_col as usize] = 255;
                 } else {
