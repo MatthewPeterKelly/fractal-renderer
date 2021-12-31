@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct FractalRawData {
-    angle_count: u32,
-    rate_count: u32,
-    data: na::Vector2<f64>,
+    angle_count: u32, // note: duplicates matrix dimensions...
+    rate_count: u32,  // note: duplicates matrix dimensions...
+    data: na::DMatrix<i32>,
 }
 
 // TODO:  move to DDP class
@@ -138,26 +138,78 @@ mod tests {
         }
     }
 
+    // TODO:  use binary encoding:  https://crates.io/crates/bincode
+
     #[test]
-    fn basic_serialization_to_json() {
+    fn basic_serialization_demo() {
         use crate::ddp_utils::FractalRawData;
-        use nalgebra::Vector2;
-        let point = FractalRawData {
-            angle_count: 100,
-            rate_count: 200,
-            data: Vector2::new(-2.0, 9.0),
+        use nalgebra::DMatrix;
+        let mut fractal_raw_data = FractalRawData {
+            angle_count: 10,
+            rate_count: 20,
+            data: DMatrix::from_element(10, 20, 0),
         };
 
-        // Convert the FractalRawData to a JSON string.
-        let serialized = serde_json::to_string(&point).unwrap();
+        fractal_raw_data.data[(0, 5)] = -2;
+        fractal_raw_data.data[(2, 3)] = -5;
+        fractal_raw_data.data[(1, 2)] = 3;
 
-        // Prints serialized = {"angle_count":1,"rate_count":2}
-        println!("serialized = {}", serialized);
+        {
+            println!("\n\n ----  JSON  ----  \n\n");
+            // JSON
+            // Convert the FractalRawData to a JSON string.
+            let serialized = serde_json::to_string(&fractal_raw_data).unwrap();
 
-        // Convert the JSON string back to a FractalRawData.
-        let deserialized: FractalRawData = serde_json::from_str(&serialized).unwrap();
+            // Prints serialized = {"angle_count":1,"rate_count":2}
+            println!("serialized = {:?}", serialized);
 
-        // Prints deserialized = FractalRawData { angle_count: 1, rate_count: 2 }
-        println!("deserialized = {:?}", deserialized);
+            // Convert the JSON string back to a FractalRawData.
+            let deserialized: FractalRawData = serde_json::from_str(&serialized).unwrap();
+
+            // Prints deserialized = FractalRawData { angle_count: 1, rate_count: 2 }
+            println!("deserialized = {:?}", deserialized);
+        }
+
+        {
+            println!("\n\n ----  BINARY  ----  \n\n");
+            // binary encoding
+            let serialized: Vec<u8> = bincode::serialize(&fractal_raw_data).unwrap();
+            print!("serialized: ");
+            for num in serialized.iter() {
+                print!("{},", num);
+            }
+            println!("Done!");
+            let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
+            println!("deserialized = {:?}", deserialized);
+
+            let filename = "out/binary_test_data";
+            use std::io::prelude::*;
+
+            // now write to disk
+            {
+                let mut file = std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(true)
+                    .open(filename)
+                    .unwrap();
+
+                file.write_all(&serialized[..]).unwrap();
+            }
+            // and read it back:
+            {
+                let mut file = std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .open(filename)
+                    .unwrap();
+                let mut deserialized_buffer = Vec::<u8>::new();
+                file.read_to_end(&mut deserialized_buffer).unwrap();
+                let deserialized_from_file: FractalRawData =
+                    bincode::deserialize(&deserialized_buffer[..]).unwrap();
+                println!("\ndeserialized_from_file = {:?}", deserialized_from_file);
+            }
+        }
     }
 }
