@@ -1,4 +1,4 @@
-mod ddp_utils;
+pub mod ddp_utils;
 mod image_buffer;
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
