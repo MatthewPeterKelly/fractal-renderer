@@ -4,11 +4,12 @@ extern crate nalgebra as na;
 use crate::ode_solvers::midpoint_simulate; // HACK
 use serde::{Deserialize, Serialize};
 
+// TODO:  add constructor for this!!!
 #[derive(Serialize, Deserialize, Debug)]
-struct FractalRawData {
-    angle_count: u32, // note: duplicates matrix dimensions...
-    rate_count: u32,  // note: duplicates matrix dimensions...
-    data: na::DMatrix<i32>,
+pub struct FractalRawData {
+    pub angle_count: u32, // note: duplicates matrix dimensions...
+    pub rate_count: u32,  // note: duplicates matrix dimensions...
+    pub data: na::DMatrix<i32>,
 }
 
 // TODO:  move to DDP class
