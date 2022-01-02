@@ -3,7 +3,7 @@ mod image_buffer;
 mod mandelbrot_utils;
 mod numerical_methods; // unused, but included so that tests are run
 mod ode_solvers;
-mod pixel_iter; // unused, but included so that tests are run // unused, but included so that tests are run
+pub mod pixel_iter; // unused, but included so that tests are run // unused, but included so that tests are run
 
 #[macro_use] // Note:  used in ode_solvers... but compiler doesn't find this
 extern crate approx; // For the macro relative_eq!
