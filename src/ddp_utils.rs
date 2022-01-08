@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct FractalRawData {
     pub angle_count: u32, // note: duplicates matrix dimensions...
     pub rate_count: u32,  // note: duplicates matrix dimensions...
+    pub max_rate: f64,    // for data file only
     pub data: na::DMatrix<i32>,
 }
 
@@ -46,9 +47,14 @@ pub fn driven_damped_pendulum_attractor(x: na::Vector2<f64>) -> Option<i32> {
     }
 }
 
+// TODO:  this should return a custom data structure that includes a variety of
+// information, all of which gets saved to the data set.
+// - iteration count
+// - basin at termination
+// - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(x_begin: na::Vector2<f64>) -> Option<i32> {
-    let n_max_period = 100;
-    let n_steps_per_period = 100;
+    let n_max_period = 250;
+    let n_steps_per_period = 60;
     let t_period = 2.0 * std::f64::consts::PI;
     let mut x = x_begin;
     for _ in 0..n_max_period {
@@ -148,6 +154,7 @@ mod tests {
         let mut fractal_raw_data = FractalRawData {
             angle_count: 10,
             rate_count: 20,
+            max_rate: 2.0,
             data: DMatrix::from_element(10, 20, 0),
         };
 

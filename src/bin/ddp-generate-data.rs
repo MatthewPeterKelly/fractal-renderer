@@ -9,11 +9,12 @@ fn main() {
     use numerical_methods::pixel_iter::PixelMap;
     use numerical_methods::pixel_iter::Point2d;
 
-    let n_angle = 20; // TODO:  use `usize`?
-    let n_rate = 20;
-    let max_rate = 3.0;
+    // For sub-pixel anti-aliasing, pick a multiple of 120 = 2*3*4*5
+    let n_angle = 2400; // TODO:  use `usize`?
+    let n_rate = 3000;
+    let max_rate = 8.0;
 
-    let verbose = true;
+    let verbose = false;
 
     // Mapping between pixels and real values
     let pixel_map = PixelMap::new(
@@ -33,8 +34,15 @@ fn main() {
     let mut fractal_raw_data = FractalRawData {
         angle_count: n_angle,
         rate_count: n_rate,
+        max_rate: max_rate,
         data: DMatrix::from_element(n_angle.try_into().unwrap(), n_rate.try_into().unwrap(), 0),
     };
+
+    // TODO:  print start time    (9:40am)
+    // Done:  13:02
+    // ----> 13.0 - 9.7 = 3.3 hours
+    // 2400 * 3000 pixels --> 7.2 megapixels
+    // 2.18 megapixel per hour
 
     // Populate the data for a single row
     for angle in 0..n_angle {
@@ -48,9 +56,29 @@ fn main() {
                 println!("Point: {:?} --> ERROR", point);
             }
         }
+        println!("Angle: {} / {}", angle + 1, n_angle);
     }
+
+    // TODO:  print stop time
 
     if verbose {
         println!("Fractal raw data:\n{:?}", fractal_raw_data);
+    }
+
+    // binary encoding
+    let serialized: Vec<u8> = bincode::serialize(&fractal_raw_data).unwrap();
+
+    let filename = "out/ddp_raw_data_high_res";
+    use std::io::prelude::*;
+    // now write to disk
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(filename)
+            .unwrap();
+
+        file.write_all(&serialized[..]).unwrap();
     }
 }
