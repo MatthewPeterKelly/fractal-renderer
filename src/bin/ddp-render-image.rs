@@ -12,10 +12,21 @@ fn main() {
     use numerical_methods::image_buffer::ColoredPixel;
     use numerical_methods::image_buffer::ImageBuffer;
     use numerical_methods::image_buffer::PixelIndex;
+    use std::collections::HashSet;
+    let mut intensity_set = HashSet::new();
 
     let fractal_raw_data_filename = "out/ddp_raw_data_high_res";
+    // let fractal_raw_data_filename = "out/ddp_raw_data";
 
     let generated_image_filename = fractal_raw_data_filename.to_owned() + "_image.png";
+
+    /*
+     * Note: set this to 1 to disable aliasing. This is the number of pixels in each
+     * dimension that are collected into a single pixel in the image. For example, a
+     * value of 2 --> a 2x2 block of pixels in the raw data is used to compute a single
+     * pixel in the output image.
+     */
+    let subsample_alias: u32 = 2;
 
     let mut file = std::fs::OpenOptions::new()
         .read(true)
@@ -28,8 +39,8 @@ fn main() {
     let fractal_raw_data: FractalRawData = bincode::deserialize(&deserialized_buffer[..]).unwrap();
 
     // Parameters
-    let n_rows = fractal_raw_data.rate_count;
-    let n_cols = fractal_raw_data.angle_count;
+    let n_rows = fractal_raw_data.rate_count / subsample_alias;
+    let n_cols = fractal_raw_data.angle_count / subsample_alias;
 
     // Set up the image buffer
     let mut data_buffer = ImageBuffer::new(n_rows as i32, n_cols as i32);
@@ -41,32 +52,36 @@ fn main() {
     let mut writer = encoder.write_header().unwrap();
     let mut stream_writer = writer.stream_writer();
 
-    // Pretty colors!
-    let purple = ColoredPixel {
-        r: 240,
-        g: 240,
-        b: 255,
-    };
-    let black = ColoredPixel {
-        r: 10,
-        g: 10,
-        b: 20,
-    };
-
     // Populate the data for a single row
+    let scale = 255 / (subsample_alias * subsample_alias);
     for i_row in 0..n_rows {
         for i_col in 0..n_cols {
+            let mut count = 0;
+            for row_sub in 0..subsample_alias {
+                for col_sub in 0..subsample_alias {
+                    let basin = fractal_raw_data.data[(
+                        (subsample_alias * i_col + col_sub) as usize,
+                        (subsample_alias * i_row + row_sub) as usize,
+                    )];
+                    if basin == 0 {
+                        count = count + 1;
+                    }
+                }
+            }
+            let intensity: u8 = (scale * count) as u8;
+            intensity_set.insert(intensity); // debug
+            let color = ColoredPixel {
+                r: intensity,
+                g: intensity,
+                b: intensity,
+            };
             // TODO: transpose here is confusing...
             let pixel_index = PixelIndex {
                 row: i_col as i32,
                 col: i_row as i32,
             };
-            let basin = fractal_raw_data.data[(i_col as usize, i_row as usize)];
-            if basin == 0 {
-                data_buffer.draw_pixel(pixel_index, purple);
-            } else {
-                data_buffer.draw_pixel(pixel_index, black);
-            }
+
+            data_buffer.draw_pixel(pixel_index, color);
         }
     }
 
@@ -74,4 +89,7 @@ fn main() {
     stream_writer
         .write_all(&data_buffer.data_buffer[0..])
         .unwrap();
+
+    // Debug:
+    println!("IntensitySet: {:?}", intensity_set);
 }
