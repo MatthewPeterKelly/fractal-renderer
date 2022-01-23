@@ -1,7 +1,7 @@
 //! Explicit ODE solvers
 
 extern crate nalgebra as na;
-use crate::ode_solvers::midpoint_simulate; // HACK
+use crate::ode_solvers::rk4_simulate;
 use serde::{Deserialize, Serialize};
 
 // TODO:  add constructor for this!!!
@@ -35,11 +35,13 @@ pub fn driven_damped_pendulum_attractor(
     if err_n2 > tol {
         return None; // outside the basin of attraction
     } else {
-        let scale = 0.5 / std::f64::consts::PI; // TODO:  constexpr?
-        let basin_index_flt = x[0] * scale;
-        let basin_index = basin_index_flt as i32;
-        return Some(basin_index);
+        return Some(compute_basin_index(x[0]));
     }
+}
+
+pub fn compute_basin_index(angle: f64) -> i32 {
+    const SCALE_TO_UNITY: f64 = 0.5 / std::f64::consts::PI;
+    (angle * SCALE_TO_UNITY).round() as i32
 }
 
 // TODO:  this should return a custom data structure that includes a variety of
@@ -49,13 +51,13 @@ pub fn driven_damped_pendulum_attractor(
 // - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(x_begin: na::Vector2<f64>) -> Option<i32> {
     let n_max_period = 500;
-    let n_steps_per_period = 60;
+    let n_steps_per_period = 50;
     const T_PERIOD: f64 = 2.0 * std::f64::consts::PI;
     let tol = 0.005;
     let mut x = x_begin;
     for _ in 0..n_max_period {
         let x_prev = x;
-        x = midpoint_simulate(0.0, T_PERIOD, n_steps_per_period, x_prev);
+        x = rk4_simulate(0.0, T_PERIOD, n_steps_per_period, x_prev);
         let x_idx = driven_damped_pendulum_attractor(x, x_prev, tol);
         if let Some(i) = x_idx {
             return Some(i);

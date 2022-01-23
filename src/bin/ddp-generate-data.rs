@@ -22,9 +22,13 @@ fn main() {
     let filename = "out/ddp_raw_data__".to_owned() + &datetime;
 
     // For sub-pixel anti-aliasing, pick a multiple of 120 = 2*3*4*5
-    let n_angle = 960; // TODO:  use `usize`?
-    let n_rate = 960;
-    let max_rate = 8.0;
+    //////////////////////
+    ////// BUG HERE //////
+    //////////////////////
+    // -->  it seems like image gets cut off if angle < rate count
+    let n_angle = 120; // TODO:  use `usize`?
+    let n_rate = 480;
+    let max_rate = 10.0;
 
     let verbose = false;
 

@@ -15,9 +15,7 @@ fn main() {
     use std::collections::HashSet;
     let mut intensity_set = HashSet::new();
 
-    // let fractal_raw_data_filename = "out/ddp_raw_data_high_res";
-    let fractal_raw_data_filename = "out/ddp_raw_data__2022123_1650";
-    // let fractal_raw_data_filename = "out/ddp_raw_data";
+    let fractal_raw_data_filename = "out/ddp_raw_data__2022123_2110";
 
     let generated_image_filename = fractal_raw_data_filename.to_owned() + "_image.png";
 
