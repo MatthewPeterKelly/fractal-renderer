@@ -15,7 +15,8 @@ fn main() {
     use std::collections::HashSet;
     let mut intensity_set = HashSet::new();
 
-    let fractal_raw_data_filename = "out/ddp_raw_data_high_res";
+    // let fractal_raw_data_filename = "out/ddp_raw_data_high_res";
+    let fractal_raw_data_filename = "out/ddp_raw_data__2022123_1650";
     // let fractal_raw_data_filename = "out/ddp_raw_data";
 
     let generated_image_filename = fractal_raw_data_filename.to_owned() + "_image.png";
@@ -26,7 +27,7 @@ fn main() {
      * value of 2 --> a 2x2 block of pixels in the raw data is used to compute a single
      * pixel in the output image.
      */
-    let subsample_alias: u32 = 2;
+    let subsample_alias: u32 = 1;
 
     let mut file = std::fs::OpenOptions::new()
         .read(true)

@@ -23,26 +23,21 @@ pub fn driven_damped_pendulum_dynamics(t: f64, x: na::Vector2<f64>) -> na::Vecto
 }
 
 // TODO:  move to DDP class
-// Converged if within 0.1 distance of the origin.
-// https://www.dropbox.com/home/mpk/Documents/Random_Projects/Driven_Damped_Pendulum/Version%202?preview=Check_Attractor_Status.m
-// https://www.dropbox.com/home/mpk/Documents/Random_Projects/Driven_Damped_Pendulum/Version%202?preview=Remove_Attracted_Points.m
-// It must be called at the correct phase, ie. cos(t)=1.
-pub fn driven_damped_pendulum_attractor(x: na::Vector2<f64>) -> Option<i32> {
-    // TODO: how does this correlate to time?
-    let basin = na::Vector2::new(-2.0463, 0.3927);
-    let delta = x - basin;
-    let q = delta[0] % (2.0 * std::f64::consts::PI);
-    let v = delta[1];
-    let dist = q * q + v * v; // distance of point from attractor
-    let r2 = 0.1 * 0.1; // radius-squared around basin
-    if dist > r2 {
-        // println!("delta: {}, q: {}, v: {}, dist: {}", delta, q, v, dist);
+// This function should be called in-phase with the driving function.
+// The exact phase is not important, only that it is consistent.
+pub fn driven_damped_pendulum_attractor(
+    x: na::Vector2<f64>,
+    x_prev: na::Vector2<f64>,
+    tol: f64,
+) -> Option<i32> {
+    let delta = x - x_prev;
+    let err_n2 = delta.dot(&delta);
+    if err_n2 > tol {
         return None; // outside the basin of attraction
     } else {
-        let scale = 0.5 / std::f64::consts::PI;
-        let basin_index_flt = delta[0] * scale;
+        let scale = 0.5 / std::f64::consts::PI; // TODO:  constexpr?
+        let basin_index_flt = x[0] * scale;
         let basin_index = basin_index_flt as i32;
-        // println!("basin_index_flt: {}, basin_index: {}", basin_index_flt, basin_index);
         return Some(basin_index);
     }
 }
@@ -53,13 +48,15 @@ pub fn driven_damped_pendulum_attractor(x: na::Vector2<f64>) -> Option<i32> {
 // - basin at termination
 // - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(x_begin: na::Vector2<f64>) -> Option<i32> {
-    let n_max_period = 250;
+    let n_max_period = 500;
     let n_steps_per_period = 60;
-    let t_period = 2.0 * std::f64::consts::PI;
+    const T_PERIOD: f64 = 2.0 * std::f64::consts::PI;
+    let tol = 0.005;
     let mut x = x_begin;
     for _ in 0..n_max_period {
-        x = midpoint_simulate(0.0, t_period, n_steps_per_period, x);
-        let x_idx = driven_damped_pendulum_attractor(x);
+        let x_prev = x;
+        x = midpoint_simulate(0.0, T_PERIOD, n_steps_per_period, x_prev);
+        let x_idx = driven_damped_pendulum_attractor(x, x_prev, tol);
         if let Some(i) = x_idx {
             return Some(i);
         }
@@ -79,25 +76,6 @@ mod tests {
     }
 
     #[test]
-    fn basin_attraction_test() {
-        use crate::ddp_utils::driven_damped_pendulum_attractor;
-        use nalgebra::Vector2;
-
-        let basin_center = Vector2::new(-2.0463, 0.3927);
-        let basin_offset = Vector2::new(2.0 * std::f64::consts::PI, 0.0);
-        let very_fast = Vector2::new(0.0, 9.0);
-
-        let basin_index = driven_damped_pendulum_attractor(basin_center);
-        assert_eq!(basin_index, Some(0));
-        let basin_index = driven_damped_pendulum_attractor(basin_center + very_fast);
-        assert_eq!(basin_index, None);
-        let basin_index = driven_damped_pendulum_attractor(basin_center + basin_offset);
-        assert_eq!(basin_index, Some(1));
-        let basin_index = driven_damped_pendulum_attractor(basin_center - 2.0 * basin_offset);
-        assert_eq!(basin_index, Some(-2));
-    }
-
-    #[test]
     fn simulate_one_cycle() {
         use crate::ddp_utils::driven_damped_pendulum_attractor;
         use crate::ddp_utils::midpoint_simulate;
@@ -106,23 +84,24 @@ mod tests {
             // start in the basin
             let basin_center = Vector2::new(-2.0463, 0.3927);
             let x_next = midpoint_simulate(0.0, 2.0 * std::f64::consts::PI, 100, basin_center);
-            let basin_index = driven_damped_pendulum_attractor(x_next);
+            let basin_index = driven_damped_pendulum_attractor(x_next, basin_center, 0.5);
             assert_eq!(basin_index, Some(0));
         }
         {
             // start far from the basin and slowly converge
             let mut x = Vector2::new(-5.0, 6.0);
             let t_period = 2.0 * std::f64::consts::PI;
-            for _ in 0..18 {
+            for _i in 0..23 {
+                let x_prev = x;
                 x = midpoint_simulate(0.0, t_period, 100, x);
-                // println!("i: {}, x: {}", i, x);
-                let x_idx = driven_damped_pendulum_attractor(x);
-                assert_eq!(x_idx, None);
+                let x_idx = driven_damped_pendulum_attractor(x, x_prev, 0.01);
+                // println!("i: {}, x: {}, x_idx: {:?}", _i, x, x_idx);
+                if let Some(core) = x_idx {
+                    assert_eq!(core, 3);
+                } else {
+                    assert_eq!(x_idx, None);
+                }
             }
-            // regression check: here is where we expect to converge
-            x = midpoint_simulate(0.0, t_period, 100, x);
-            let x_idx = driven_damped_pendulum_attractor(x);
-            assert_eq!(x_idx, Some(4));
         }
     }
 
@@ -137,11 +116,11 @@ mod tests {
         }
         {
             let x_idx = compute_basin_of_attraction(Vector2::new(-5.0, 6.0));
-            assert_eq!(x_idx, Some(4));
+            assert_eq!(x_idx, Some(5));
         }
         {
             let x_idx = compute_basin_of_attraction(Vector2::new(-2.0, 9.0));
-            assert_eq!(x_idx, Some(11));
+            assert_eq!(x_idx, Some(10));
         }
     }
 

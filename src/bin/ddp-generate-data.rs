@@ -1,3 +1,4 @@
+use chrono::{Datelike, Timelike, Utc};
 use numerical_methods;
 use std::convert::TryInto;
 
@@ -9,9 +10,20 @@ fn main() {
     use numerical_methods::pixel_iter::PixelMap;
     use numerical_methods::pixel_iter::Point2d;
 
+    let now = Utc::now();
+    let datetime = format!(
+        "{}{}{}_{}{}",
+        now.year(),
+        now.month(),
+        now.day(),
+        now.hour(),
+        now.minute()
+    );
+    let filename = "out/ddp_raw_data__".to_owned() + &datetime;
+
     // For sub-pixel anti-aliasing, pick a multiple of 120 = 2*3*4*5
-    let n_angle = 2400; // TODO:  use `usize`?
-    let n_rate = 3000;
+    let n_angle = 960; // TODO:  use `usize`?
+    let n_rate = 960;
     let max_rate = 8.0;
 
     let verbose = false;
@@ -38,12 +50,6 @@ fn main() {
         data: DMatrix::from_element(n_angle.try_into().unwrap(), n_rate.try_into().unwrap(), 0),
     };
 
-    // TODO:  print start time    (9:40am)
-    // Done:  13:02
-    // ----> 13.0 - 9.7 = 3.3 hours
-    // 2400 * 3000 pixels --> 7.2 megapixels
-    // 2.18 megapixel per hour
-
     // Populate the data for a single row
     for angle in 0..n_angle {
         for rate in 0..n_rate {
@@ -68,7 +74,6 @@ fn main() {
     // binary encoding
     let serialized: Vec<u8> = bincode::serialize(&fractal_raw_data).unwrap();
 
-    let filename = "out/ddp_raw_data_high_res";
     use std::io::prelude::*;
     // now write to disk
     {
