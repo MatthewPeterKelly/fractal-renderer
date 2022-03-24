@@ -26,9 +26,9 @@ fn main() {
     ////// BUG HERE //////
     //////////////////////
     // -->  it seems like image gets cut off if angle < rate count
-    let n_angle = 120; // TODO:  use `usize`?
-    let n_rate = 480;
-    let max_rate = 10.0;
+    let n_angle = 10 * 480; // TODO:  use `usize`?
+    let n_rate = 10 * 480;
+    let max_rate = 12.0;
 
     let verbose = false;
 
