@@ -73,6 +73,6 @@ mod tests {
         let dt = 0.001;
         let x_next = crate::ode_solvers::euler_step(dt, t, x);
         let x_soln = na::Vector2::new(0.0, 0.001);
-        assert_relative_eq!(x_next, x_soln);
+        approx::assert_relative_eq!(x_next, x_soln);
     }
 }
