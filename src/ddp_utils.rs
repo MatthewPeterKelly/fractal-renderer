@@ -128,7 +128,6 @@ mod tests {
 
     // TODO:  use binary encoding:  https://crates.io/crates/bincode
 
-    // #[ignore] // GitHub actions don't seem to like writing to file
     #[test]
     fn basic_serialization_demo() {
         use crate::ddp_utils::FractalRawData;
@@ -172,8 +171,14 @@ mod tests {
             let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
             println!("deserialized = {:?}", deserialized);
 
+            //
+            // TODO:  eventually, use the `create_dir_all` to make the `out` directory properly.
+            //
             let filename = "out_binary_test_data"; // HACK
             use std::io::prelude::*;
+            //
+            //
+            //
 
             // now write to disk
             {
