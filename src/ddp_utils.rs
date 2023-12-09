@@ -33,9 +33,9 @@ pub fn driven_damped_pendulum_attractor(
     let delta = x - x_prev;
     let err_n2 = delta.dot(&delta);
     if err_n2 > tol {
-        return None; // outside the basin of attraction
+        None // outside the basin of attraction
     } else {
-        return Some(compute_basin_index(x[0]));
+        Some(compute_basin_index(x[0]))
     }
 }
 
@@ -63,7 +63,7 @@ pub fn compute_basin_of_attraction(x_begin: na::Vector2<f64>) -> Option<i32> {
             return Some(i);
         }
     }
-    return None;
+    None
 }
 
 #[cfg(test)]
@@ -171,8 +171,14 @@ mod tests {
             let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
             println!("deserialized = {:?}", deserialized);
 
-            let filename = "out/binary_test_data";
+            //
+            // TODO:  eventually, use the `create_dir_all` to make the `out` directory properly.
+            //
+            let filename = "out_binary_test_data"; // HACK
             use std::io::prelude::*;
+            //
+            //
+            //
 
             // now write to disk
             {
