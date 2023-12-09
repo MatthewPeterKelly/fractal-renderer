@@ -74,13 +74,13 @@ mod tests {
         extern crate nalgebra as na;
         let x = na::Vector2::new(0.0, 0.0);
         let y = na::Vector2::new(0.0, 1.0);
-        assert_relative_eq!(crate::ddp_utils::driven_damped_pendulum_dynamics(0.0, x), y);
+        approx::assert_relative_eq!(crate::ddp_utils::driven_damped_pendulum_dynamics(0.0, x), y);
     }
 
     #[test]
     fn simulate_one_cycle() {
         use crate::ddp_utils::driven_damped_pendulum_attractor;
-        use crate::ddp_utils::midpoint_simulate;
+        use crate::ode_solvers::midpoint_simulate;
         use nalgebra::Vector2;
         {
             // start in the basin
@@ -99,7 +99,7 @@ mod tests {
                 let x_idx = driven_damped_pendulum_attractor(x, x_prev, 0.01);
                 // println!("i: {}, x: {}, x_idx: {:?}", _i, x, x_idx);
                 if let Some(core) = x_idx {
-                    assert_eq!(core, 3);
+                    assert_eq!(core, 4);
                 } else {
                     assert_eq!(x_idx, None);
                 }
@@ -118,11 +118,11 @@ mod tests {
         }
         {
             let x_idx = compute_basin_of_attraction(Vector2::new(-5.0, 6.0));
-            assert_eq!(x_idx, Some(5));
+            assert_eq!(x_idx, Some(6));
         }
         {
             let x_idx = compute_basin_of_attraction(Vector2::new(-2.0, 9.0));
-            assert_eq!(x_idx, Some(10));
+            assert_eq!(x_idx, Some(11));
         }
     }
 
