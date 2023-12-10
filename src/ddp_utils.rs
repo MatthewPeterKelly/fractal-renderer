@@ -84,7 +84,7 @@ mod tests {
         use nalgebra::Vector2;
         {
             // start in the basin
-            let basin_center = Vector2::new(-2.0463, 0.3927);
+            let basin_center = Vector2::new(-2.05, 0.39);
             let x_next = midpoint_simulate(0.0, 2.0 * std::f64::consts::PI, 100, basin_center);
             let basin_index = driven_damped_pendulum_attractor(x_next, basin_center, 0.5);
             assert_eq!(basin_index, Some(0));
@@ -112,7 +112,7 @@ mod tests {
         use crate::ddp_utils::compute_basin_of_attraction;
         use nalgebra::Vector2;
         {
-            let basin_center = Vector2::new(-2.0463, 0.3927);
+            let basin_center = Vector2::new(-2.05, 0.39);
             let x_idx = compute_basin_of_attraction(basin_center);
             assert_eq!(x_idx, Some(0));
         }
@@ -171,14 +171,11 @@ mod tests {
             let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
             println!("deserialized = {:?}", deserialized);
 
-            //
-            // TODO:  eventually, use the `create_dir_all` to make the `out` directory properly.
-            //
-            let filename = "out_binary_test_data"; // HACK
+            let filename = crate::file_io::build_output_path("ddp_utils")
+                .join("binary_encoding_test.dat")
+                .to_owned();
+
             use std::io::prelude::*;
-            //
-            //
-            //
 
             // now write to disk
             {
@@ -186,7 +183,7 @@ mod tests {
                     .read(true)
                     .write(true)
                     .create(true)
-                    .open(filename)
+                    .open(&filename)
                     .unwrap();
 
                 file.write_all(&serialized[..]).unwrap();
@@ -197,7 +194,7 @@ mod tests {
                     .read(true)
                     .write(false)
                     .create(false)
-                    .open(filename)
+                    .open(&filename)
                     .unwrap();
                 let mut deserialized_buffer = Vec::<u8>::new();
                 file.read_to_end(&mut deserialized_buffer).unwrap();
