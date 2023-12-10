@@ -1,4 +1,12 @@
 
+# Generated files:
 /target
 /out
+**/*.png
+
+# Rust core:
 **/*.rs.bk
+Cargo.lock
+
+# Editor:
+.vscode\settings.json
