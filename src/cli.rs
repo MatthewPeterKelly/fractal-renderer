@@ -17,4 +17,3 @@ pub enum CommandsEnum {
 pub struct MandelbrotParamsOld {
     pub params_path: String,
 }
-
