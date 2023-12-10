@@ -92,7 +92,7 @@ pub fn render_mandelbrot_set(
 
     // write out the parameters too:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
-    std::fs::write(&params_path, serde_json::to_string(params)?).expect("Unable to write file");
+    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     root.fill(&BLACK)?;
 
