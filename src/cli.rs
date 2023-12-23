@@ -9,11 +9,11 @@ pub struct FractalRendererArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum CommandsEnum {
-    Mandelbrot(MandelbrotParamsOld),
+    MandelbrotRender(ParameterFilePath),
+    MandelbrotSearch(ParameterFilePath),
 }
 
-// Note:  `MandelbrotParamsOld` is for the CLI -- it is used to load `MandelbrotParams`
 #[derive(Debug, Args)]
-pub struct MandelbrotParamsOld {
+pub struct ParameterFilePath {
     pub params_path: String,
 }
