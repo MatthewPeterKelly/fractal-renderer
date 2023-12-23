@@ -108,7 +108,7 @@ pub fn mandelbrot_search_render(
             // HACK!!  report back errors correctly
             let _ = render_mandelbrot_set(
                 &render_params,
-                &directory_path,
+                directory_path,
                 &format!("render_{}", render_iter),
             );
         } else {
