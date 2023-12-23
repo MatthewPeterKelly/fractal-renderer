@@ -16,6 +16,7 @@ chrono = "0.4"
 clap = {version = "4.3.8", features = [ "derive" ]}
 num-traits =  "0.2"
 plotters = "0.3"
+rand = "0"
 more-asserts = "0.2"
 iter_num_tools = "0.7.1"
 splines = "4"

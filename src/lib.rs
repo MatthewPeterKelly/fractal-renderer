@@ -3,3 +3,4 @@ pub mod ddp_utils;
 pub mod file_io;
 pub mod mandelbrot_core;
 pub mod ode_solvers;
+pub mod mandelbrot_search;
