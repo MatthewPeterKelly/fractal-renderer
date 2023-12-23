@@ -9,7 +9,7 @@ Long-term goal:  add support for zoom sequences and other fractals, along with (
 ## Usage:
 
 ```
-cargo run -- mandelbrot .\examples\mandelbrot\default_params.json
+cargo run -- mandelbrot-render .\examples\mandelbrot_render\default_params.json
 ```
 
 ```
