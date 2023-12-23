@@ -55,7 +55,7 @@ pub fn mandelbrot_search_render(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // write out the parameters too:
     let params_path = directory_path.join("search_params.json");
-    std::fs::write(&params_path, serde_json::to_string(params)?).expect("Unable to write file");
+    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     let range = Complex::new(
         (params.center.re - 0.5 * params.domain.re)..(params.center.re + 0.5 * params.domain.re),
