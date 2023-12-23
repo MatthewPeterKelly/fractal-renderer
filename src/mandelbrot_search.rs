@@ -95,7 +95,6 @@ pub fn mandelbrot_search_render(
         }
 
         // Render the best point that we found:
-
         if let Some(ref inner_best_result) = best_result {
             let render_params = MandelbrotParams {
                 image_resolution: params.render_image_resolution,
@@ -105,17 +104,24 @@ pub fn mandelbrot_search_render(
                 max_iter_count: params.render_max_iter_count,
             };
 
-            // HACK!!  report back errors correctly
-            let _ = render_mandelbrot_set(
+            let render_result = render_mandelbrot_set(
                 &render_params,
                 directory_path,
                 &format!("render_{}", render_iter),
             );
+
+            match render_result {
+                Ok(()) => {}
+                Err(_) => {
+                    println!("Error:  Failed to render!");
+                    return render_result;
+                }
+            }
         } else {
             println!("Warning:  failed to find a valid point to render!");
         }
     }
-    Ok(()) // HACK
+    Ok(())
 }
 
 fn sample_complex_point<R>(rng: &mut R, range: &Complex<Range<f64>>) -> Complex<f64>
