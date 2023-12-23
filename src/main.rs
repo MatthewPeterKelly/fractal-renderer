@@ -11,14 +11,14 @@ fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
 
     match &args.command {
-        Some(CommandsEnum::Mandelbrot(params)) => {
+        Some(CommandsEnum::MandelbrotRender(params)) => {
             let params_json =
                 std::fs::read_to_string(&params.params_path).expect("Unable to read param file");
             let params: crate::mandelbrot_core::MandelbrotParams =
                 serde_json::from_str(&params_json).unwrap();
             crate::mandelbrot_core::render_mandelbrot_set(
                 &params,
-                &crate::file_io::build_output_path("mandelbrot"),
+                &crate::file_io::build_output_path("mandelbrot_render"),
                 "render",
             )
             .unwrap();

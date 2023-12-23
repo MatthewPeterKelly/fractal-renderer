@@ -9,7 +9,7 @@ pub struct FractalRendererArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum CommandsEnum {
-    Mandelbrot(ParameterFilePath),
+    MandelbrotRender(ParameterFilePath),
     MandelbrotSearch(ParameterFilePath),
 }
 
