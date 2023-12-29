@@ -8,6 +8,7 @@
         0.0
     ],
     "domain_real": 3.0,
-    "escape_radius_squared": 5.0,
-    "max_iter_count": 750
+    "escape_radius_squared": 100.0,
+    "max_iter_count": 500,
+    "refinement_count": 5
 }
