@@ -28,12 +28,16 @@ impl Default for MandelbrotParams {
     }
 }
 
-fn complex_range(
-    domain: nalgebra::Complex<f64>,
+/**
+ * @param dimensions: local "width" and "height" of the retangle in imaginary space
+ * @param center: location of the center of that rectangle
+ */
+pub fn complex_range(
+    dimensions: nalgebra::Complex<f64>,
     center: nalgebra::Complex<f64>,
 ) -> nalgebra::Complex<std::ops::Range<f64>> {
-    let real_range = (center.re - 0.5 * domain.re)..(center.re + 0.5 * domain.re);
-    let imag_range = (center.im - 0.5 * domain.im)..(center.im + 0.5 * domain.im);
+    let real_range = (center.re - 0.5 * dimensions.re)..(center.re + 0.5 * dimensions.re);
+    let imag_range = (center.im - 0.5 * dimensions.im)..(center.im + 0.5 * dimensions.im);
     nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
 }
 
