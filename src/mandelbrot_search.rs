@@ -12,6 +12,7 @@ pub struct MandelbrotSearchParams {
     pub render_escape_radius_squared: f64,
     pub render_max_iter_count: u32,
     pub render_refinement_count: u32,
+    pub render_domain_real: f64,
 
     // Search region:
     pub center: nalgebra::Complex<f64>,
@@ -37,6 +38,7 @@ impl Default for MandelbrotSearchParams {
             render_escape_radius_squared: (4.0),
             render_max_iter_count: (550),
             render_refinement_count: (5),
+            render_domain_real: (0.15),
 
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
             domain: nalgebra::Complex::<f64>::new(3.0, 2.0),
@@ -104,7 +106,7 @@ pub fn mandelbrot_search_render(
             let render_params = MandelbrotParams {
                 image_resolution: params.render_image_resolution,
                 center: query.point,
-                domain_real: 0.05 * params.domain.re, // TODO!  Make this a param.
+                domain_real: params.render_domain_real,
                 escape_radius_squared: params.render_escape_radius_squared,
                 max_iter_count: params.render_max_iter_count,
                 refinement_count: params.render_refinement_count,

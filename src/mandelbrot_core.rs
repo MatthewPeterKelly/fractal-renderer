@@ -28,6 +28,20 @@ impl Default for MandelbrotParams {
     }
 }
 
+impl MandelbrotParams {
+    /**
+     * @return: range of the image specified by the paramters, in complex space.
+     */
+    fn complex_range(&self) -> nalgebra::Complex<std::ops::Range<f64>> {
+        let domain_imag = self.domain_real * (self.image_resolution.im as f64)
+            / (self.image_resolution.re as f64);
+        let real_range =
+            (self.center.re - 0.5 * self.domain_real)..(self.center.re + 0.5 * self.domain_real);
+        let imag_range = (self.center.im - 0.5 * domain_imag)..(self.center.im + 0.5 * domain_imag);
+        nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
+    }
+}
+
 pub struct MandelbrotSequence {
     pub x0: f64,
     pub y0: f64,
@@ -156,23 +170,17 @@ pub fn render_mandelbrot_set(
 
     root.fill(&BLACK)?;
 
-    let domain_imag = params.domain_real * (params.image_resolution.im as f64)
-        / (params.image_resolution.re as f64);
-
-    let real_range = (params.center.re - 0.5 * params.domain_real)
-        ..(params.center.re + 0.5 * params.domain_real);
-
-    let imag_range = (params.center.im - 0.5 * domain_imag)..(params.center.im + 0.5 * domain_imag);
+    let range = params.complex_range();
 
     let grid_iterator = grid_space(
-        [real_range.start, imag_range.start]..=[real_range.end, imag_range.end],
+        [range.re.start, range.im.start]..=[range.re.end, range.im.end],
         [
             params.image_resolution.re as usize,
             params.image_resolution.im as usize,
         ],
     );
 
-    let chart = ChartBuilder::on(&root).build_cartesian_2d(real_range, imag_range)?;
+    let chart = ChartBuilder::on(&root).build_cartesian_2d(range.re, range.im)?;
     let plotting_area = chart.plotting_area();
     let color_map = create_grayscale_color_map(params.max_iter_count);
 
