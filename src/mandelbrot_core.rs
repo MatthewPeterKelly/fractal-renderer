@@ -28,17 +28,27 @@ impl Default for MandelbrotParams {
     }
 }
 
+fn complex_range(
+    domain_real: f64,
+    domain_imag: f64,
+    center: nalgebra::Complex<f64>,
+) -> nalgebra::Complex<std::ops::Range<f64>> {
+    let real_range = (center.re - 0.5 * domain_real)..(center.re + 0.5 * domain_real);
+    let imag_range = (center.im - 0.5 * domain_imag)..(center.im + 0.5 * domain_imag);
+    nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
+}
+
 impl MandelbrotParams {
     /**
      * @return: range of the image specified by the paramters, in complex space.
      */
     fn complex_range(&self) -> nalgebra::Complex<std::ops::Range<f64>> {
-        let domain_imag = self.domain_real * (self.image_resolution.im as f64)
-            / (self.image_resolution.re as f64);
-        let real_range =
-            (self.center.re - 0.5 * self.domain_real)..(self.center.re + 0.5 * self.domain_real);
-        let imag_range = (self.center.im - 0.5 * domain_imag)..(self.center.im + 0.5 * domain_imag);
-        nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
+        complex_range(
+            self.domain_real,
+            self.domain_real * (self.image_resolution.im as f64)
+                / (self.image_resolution.re as f64),
+            self.center,
+        )
     }
 }
 
