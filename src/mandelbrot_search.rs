@@ -3,9 +3,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-use crate::mandelbrot_core::{
-    mandelbrot_iteration_count, render_mandelbrot_set, MandelbrotEscapeResult, MandelbrotParams,
-};
+use crate::mandelbrot_core::{render_mandelbrot_set, MandelbrotParams, MandelbrotSequence};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotSearchParams {
@@ -13,6 +11,7 @@ pub struct MandelbrotSearchParams {
     pub render_image_resolution: nalgebra::Complex<u32>,
     pub render_escape_radius_squared: f64,
     pub render_max_iter_count: u32,
+    pub render_refinement_count: u32,
 
     // Search region:
     pub center: nalgebra::Complex<f64>,
@@ -37,6 +36,7 @@ impl Default for MandelbrotSearchParams {
             render_image_resolution: nalgebra::Complex::<u32>::new(1920, 1080),
             render_escape_radius_squared: (4.0),
             render_max_iter_count: (550),
+            render_refinement_count: (5),
 
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
             domain: nalgebra::Complex::<f64>::new(3.0, 2.0),
@@ -47,6 +47,11 @@ impl Default for MandelbrotSearchParams {
             max_search_count: (10_000),
         }
     }
+}
+
+pub struct QueryResult {
+    pub iter: f64,
+    pub point: nalgebra::Complex<f64>,
 }
 
 pub fn mandelbrot_search_render(
@@ -65,43 +70,44 @@ pub fn mandelbrot_search_render(
     let mut rng = rand::thread_rng();
 
     for render_iter in 0..params.max_num_renders {
-        let mut best_result = Option::<MandelbrotEscapeResult>::None;
+        let mut best_result = Option::<QueryResult>::None;
 
         for _ in 0..params.max_search_count {
-            let pt = sample_complex_point(&mut rng, &range);
+            let test_point = sample_complex_point(&mut rng, &range);
 
-            let result = mandelbrot_iteration_count(
-                &pt,
+            let sequence = MandelbrotSequence::normalized_escape_count(
+                &test_point,
                 params.search_escape_radius_squared,
                 params.search_max_iter_count,
+                0, // Don't need smooth interpolation for coarse search
             );
-
-            if result.iter_count < params.search_max_iter_count {
-                // Then we're outside the Mandelbrot set... Now find the closest point to the edge.
-                if let Some(ref inner_best_result) = best_result {
-                    if result.iter_count == params.search_max_iter_count - 1 {
-                        // already found the best possible iteration count, so exit early
-                        best_result = Some(result);
-                        break;
-                    } else if result.iter_count > inner_best_result.iter_count {
-                        // Slowly improving our point
-                        best_result = Some(result);
+            if let Some(iter) = sequence {
+                if let Some(ref mut best_query) = best_result {
+                    // we have a valid query, and a new point --> pick the best
+                    if iter > best_query.iter {
+                        best_query.iter = iter;
+                        best_query.point = test_point;
                     }
                 } else {
-                    // This is the first point we found outside the set --> it is the best so far!
-                    best_result = Some(result);
+                    best_result = Some(QueryResult {
+                        iter,
+                        point: test_point,
+                    });
                 }
+            } else {
+                // Nothing -- we are only searching over points outside of the set.
             }
         }
 
         // Render the best point that we found:
-        if let Some(ref inner_best_result) = best_result {
+        if let Some(ref query) = best_result {
             let render_params = MandelbrotParams {
                 image_resolution: params.render_image_resolution,
-                center: inner_best_result.point,
-                domain_real: 0.1 * params.domain.re,
+                center: query.point,
+                domain_real: 0.05 * params.domain.re, // TODO!  Make this a param.
                 escape_radius_squared: params.render_escape_radius_squared,
                 max_iter_count: params.render_max_iter_count,
+                refinement_count: params.render_refinement_count,
             };
 
             let render_result = render_mandelbrot_set(

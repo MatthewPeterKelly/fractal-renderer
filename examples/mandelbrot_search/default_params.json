@@ -5,6 +5,7 @@
     ],
     "render_escape_radius_squared": 4.0,
     "render_max_iter_count": 550,
+    "render_refinement_count": 5,
     "center": [
         -0.2,
         0.0
@@ -15,6 +16,6 @@
     ],
     "search_escape_radius_squared": 4.0,
     "search_max_iter_count": 550,
-    "max_num_renders": 16,
+    "max_num_renders": 8,
     "max_search_count": 10000
 }
