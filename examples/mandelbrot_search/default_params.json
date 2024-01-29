@@ -15,8 +15,8 @@
         3.0,
         2.0
     ],
-    "search_escape_radius_squared": 8.0,
-    "search_max_iter_count": 96,
+    "search_escape_radius_squared": 16.0,
+    "search_max_iter_count": 128,
     "max_num_renders": 16,
-    "max_search_count": 2056
+    "max_search_count": 50000
 }
