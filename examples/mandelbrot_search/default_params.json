@@ -3,20 +3,24 @@
         1920,
         1080
     ],
-    "render_escape_radius_squared": 5.0,
-    "render_max_iter_count": 720,
+    "render_escape_radius_squared": 4,
+    "render_max_iter_count": 550,
     "render_refinement_count": 5,
     "render_domain_real": 0.05,
     "center": [
         -0.2,
-        0.0
+        0
     ],
     "domain": [
-        3.0,
-        2.0
+        3,
+        2
     ],
-    "search_escape_radius_squared": 16.0,
+    "search_escape_radius_squared": 4,
     "search_max_iter_count": 128,
-    "max_num_renders": 16,
-    "max_search_count": 50000
+    "query_resolution": [
+        16,
+        9
+    ],
+    "max_num_renders": 8,
+    "max_search_count": 80000
 }

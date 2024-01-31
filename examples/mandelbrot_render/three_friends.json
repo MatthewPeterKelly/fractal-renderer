@@ -1,14 +1,14 @@
 {
     "image_resolution": [
-        1920,
-        1080
+        3000,
+        2000
     ],
     "center": [
         -0.5702287347999493,
         -0.6253491399029842
     ],
-    "domain_real": 0.05,
-    "escape_radius_squared": 5,
-    "max_iter_count": 720,
+    "domain_real": 0.07,
+    "escape_radius_squared": 8,
+    "max_iter_count": 1024,
     "refinement_count": 5
 }

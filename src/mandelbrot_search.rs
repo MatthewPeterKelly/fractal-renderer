@@ -28,6 +28,10 @@ pub struct MandelbrotSearchParams {
     pub search_escape_radius_squared: f64,
     pub search_max_iter_count: u32,
 
+    // The search metric averages the value over a grid of queries
+    // Here we specify how many points to sample in that grid.
+    pub query_resolution: nalgebra::Complex<u32>,
+
     // How long to keep searching?
     pub max_num_renders: i32,
     pub max_search_count: i32,
@@ -47,6 +51,7 @@ impl Default for MandelbrotSearchParams {
             domain: nalgebra::Complex::<f64>::new(3.0, 2.0),
             search_escape_radius_squared: (4.0),
             search_max_iter_count: (550),
+            query_resolution: nalgebra::Complex::<u32>::new(16, 9),
 
             max_num_renders: (16),
             max_search_count: (10_000),
@@ -80,8 +85,6 @@ pub fn mandelbrot_search_render(
             / (params.render_image_resolution.im as f64),
     );
 
-    let query_resolution = nalgebra::Complex::<u32>::new(16, 9);
-
     for render_iter in 0..params.max_num_renders {
         let mut best_result = Option::<QueryResult>::None;
 
@@ -92,7 +95,10 @@ pub fn mandelbrot_search_render(
 
             let grid_iterator = grid_space(
                 [test_range.re.start, test_range.im.start]..=[test_range.re.end, test_range.im.end],
-                [query_resolution.re as usize, query_resolution.im as usize],
+                [
+                    params.query_resolution.re as usize,
+                    params.query_resolution.im as usize,
+                ],
             );
 
             let mut total_value = 0.0;
