@@ -1,5 +1,5 @@
 use iter_num_tools::grid_space;
-use nalgebra::{iter, Complex};
+use nalgebra::Complex;
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -221,50 +221,21 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
-// fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
-//     use splines::{Interpolation, Key, Spline};
-
-//     let max_input = (max_iter_count as f64).sqrt();
-//     let max_output = 255.0;
-
-//     let key_0 = Key::new(0.0 * max_input, 0.0 * max_output, Interpolation::Cosine);
-//     let key_1 = Key::new(0.2 * max_input, 0.8 * max_output, Interpolation::Cosine);
-//     let key_2 = Key::new(0.5 * max_input, 0.2 * max_output, Interpolation::Cosine);
-//     let key_3 = Key::new(1.0 * max_input, 1.0 * max_output, Interpolation::Cosine);
-//     let spline = Spline::from_vec(vec![key_0, key_1, key_2, key_3]);
-
-//     move |iter_count: f64| {
-//         let input = iter_count.sqrt();
-//         let output = spline.sample(input).unwrap();
-//         let output_u8 = output as u8;
-//         RGBColor(output_u8, output_u8, output_u8)
-//     }
-// }
-
-// fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
-//     let scale = 1.0 / (max_iter_count as f64);
-
-//     move |iter_count: f64| {
-//         let output = 255.0 * f64::sin(0.1 * iter_count) * f64::sqrt(iter_count * scale);
-//         let output_u8 = output as u8;
-//         RGBColor(output_u8, output_u8, output_u8)
-//     }
-// }
-
-// fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
-//     let scale = 1.0 / (max_iter_count as f64);
-
-//     move |iter_count: f64| {
-//         let output_u8 = (255.0 * iter_count * scale) as u8;
-//         RGBColor(output_u8, output_u8, output_u8)
-//     }
-// }
-
 fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
-    let scale = 255.0 / f64::ln(max_iter_count as f64);
+    use splines::{Interpolation, Key, Spline};
+
+    let max_input = (max_iter_count as f64).sqrt();
+    let max_output = 255.0;
+
+    let low = Key::new(0.0, 0.0, Interpolation::Linear);
+    let mid = Key::new(0.2 * max_input, 0.05 * max_output, Interpolation::Linear);
+    let upp = Key::new(max_input, max_output, Interpolation::Linear);
+    let spline = Spline::from_vec(vec![low, mid, upp]);
 
     move |iter_count: f64| {
-        let output_u8 = ((iter_count).ln() * scale) as u8;
+        let input = iter_count.sqrt();
+        let output = spline.sample(input).unwrap();
+        let output_u8 = output as u8;
         RGBColor(output_u8, output_u8, output_u8)
     }
 }
