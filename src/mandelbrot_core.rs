@@ -8,7 +8,7 @@ pub struct MandelbrotParams {
     // Where to render?
     pub image_resolution: nalgebra::Complex<u32>,
     pub center: nalgebra::Complex<f64>,
-    pub domain_real: f64,
+    pub view_scale_real: f64,
     // Convergence criteria
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
@@ -20,11 +20,40 @@ impl Default for MandelbrotParams {
         MandelbrotParams {
             image_resolution: nalgebra::Complex::<u32>::new(1920, 1080),
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
-            domain_real: (3.0),
+            view_scale_real: (3.0),
             escape_radius_squared: (4.0),
             max_iter_count: (550),
             refinement_count: (5),
         }
+    }
+}
+
+/**
+ * @param dimensions: local "width" and "height" of the retangle in imaginary space
+ * @param center: location of the center of that rectangle
+ */
+pub fn complex_range(
+    dimensions: nalgebra::Complex<f64>,
+    center: nalgebra::Complex<f64>,
+) -> nalgebra::Complex<std::ops::Range<f64>> {
+    let real_range = (center.re - 0.5 * dimensions.re)..(center.re + 0.5 * dimensions.re);
+    let imag_range = (center.im - 0.5 * dimensions.im)..(center.im + 0.5 * dimensions.im);
+    nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
+}
+
+impl MandelbrotParams {
+    /**
+     * @return: range of the image specified by the paramters, in complex space.
+     */
+    fn complex_range(&self) -> nalgebra::Complex<std::ops::Range<f64>> {
+        complex_range(
+            nalgebra::Complex::<f64>::new(
+                self.view_scale_real,
+                self.view_scale_real * (self.image_resolution.im as f64)
+                    / (self.image_resolution.re as f64),
+            ),
+            self.center,
+        )
     }
 }
 
@@ -156,23 +185,17 @@ pub fn render_mandelbrot_set(
 
     root.fill(&BLACK)?;
 
-    let domain_imag = params.domain_real * (params.image_resolution.im as f64)
-        / (params.image_resolution.re as f64);
-
-    let real_range = (params.center.re - 0.5 * params.domain_real)
-        ..(params.center.re + 0.5 * params.domain_real);
-
-    let imag_range = (params.center.im - 0.5 * domain_imag)..(params.center.im + 0.5 * domain_imag);
+    let range = params.complex_range();
 
     let grid_iterator = grid_space(
-        [real_range.start, imag_range.start]..=[real_range.end, imag_range.end],
+        [range.re.start, range.im.start]..=[range.re.end, range.im.end],
         [
             params.image_resolution.re as usize,
             params.image_resolution.im as usize,
         ],
     );
 
-    let chart = ChartBuilder::on(&root).build_cartesian_2d(real_range, imag_range)?;
+    let chart = ChartBuilder::on(&root).build_cartesian_2d(range.re, range.im)?;
     let plotting_area = chart.plotting_area();
     let color_map = create_grayscale_color_map(params.max_iter_count);
 

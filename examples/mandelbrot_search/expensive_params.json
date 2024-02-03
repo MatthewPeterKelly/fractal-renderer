@@ -1,0 +1,26 @@
+{
+    "render_image_resolution": [
+        1920,
+        1080
+    ],
+    "render_escape_radius_squared": 12,
+    "render_max_iter_count": 1024,
+    "render_refinement_count": 5,
+    "render_view_scale_real": 0.04,
+    "center": [
+        -0.2,
+        0
+    ],
+    "view_scale": [
+        3.0,
+        2.0
+    ],
+    "search_escape_radius_squared": 5,
+    "search_max_iter_count": 512,
+    "query_resolution": [
+        64,
+        36
+    ],
+    "max_num_renders": 32,
+    "max_search_count": 2056
+}

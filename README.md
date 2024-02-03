@@ -14,4 +14,5 @@ cargo run -- mandelbrot-render .\examples\mandelbrot_render\default_params.json
 
 ```
 cargo run -- mandelbrot-search .\examples\mandelbrot_search\default_params.json
+cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\expensive_params.json
 ```
