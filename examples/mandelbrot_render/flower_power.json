@@ -7,7 +7,7 @@
         -0.5485796032904589,
         0.6095785745072848
     ],
-    "domain_real": 0.05,
+    "extent_real": 0.05,
     "escape_radius_squared": 5,
     "max_iter_count": 720,
     "refinement_count": 5

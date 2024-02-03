@@ -6,12 +6,12 @@
     "render_escape_radius_squared": 12,
     "render_max_iter_count": 1024,
     "render_refinement_count": 5,
-    "render_domain_real": 0.04,
+    "render_extent_real": 0.04,
     "center": [
         -0.2,
         0
     ],
-    "domain": [
+    "extent": [
         3,
         2
     ],
@@ -21,6 +21,6 @@
         64,
         36
     ],
-    "max_num_renders": 16,
-    "max_search_count": 20000
+    "max_num_renders": 32,
+    "max_search_count": 16384
 }
