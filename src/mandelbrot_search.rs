@@ -15,11 +15,11 @@ pub struct MandelbrotSearchParams {
     pub render_escape_radius_squared: f64,
     pub render_max_iter_count: u32,
     pub render_refinement_count: u32,
-    pub render_extent_real: f64,
+    pub render_view_scale_real: f64,
 
     // Search region:
     pub center: nalgebra::Complex<f64>,
-    pub extent: nalgebra::Complex<f64>,
+    pub view_scale: nalgebra::Complex<f64>,
 
     // Convergence for each search query
     // Query is rejected if:
@@ -45,10 +45,10 @@ impl Default for MandelbrotSearchParams {
             render_escape_radius_squared: (4.0),
             render_max_iter_count: (550),
             render_refinement_count: (5),
-            render_extent_real: (0.15),
+            render_view_scale_real: (0.15),
 
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
-            extent: nalgebra::Complex::<f64>::new(3.0, 2.0),
+            view_scale: nalgebra::Complex::<f64>::new(3.0, 2.0),
             search_escape_radius_squared: (4.0),
             search_max_iter_count: (550),
             query_resolution: nalgebra::Complex::<u32>::new(16, 9),
@@ -73,15 +73,17 @@ pub fn mandelbrot_search_render(
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     let range = Complex::new(
-        (params.center.re - 0.5 * params.extent.re)..(params.center.re + 0.5 * params.extent.re),
-        (params.center.im - 0.5 * params.extent.im)..(params.center.im + 0.5 * params.extent.im),
+        (params.center.re - 0.5 * params.view_scale.re)
+            ..(params.center.re + 0.5 * params.view_scale.re),
+        (params.center.im - 0.5 * params.view_scale.im)
+            ..(params.center.im + 0.5 * params.view_scale.im),
     );
 
     let mut rng = rand::thread_rng();
 
     let render_dimensions = Complex::new(
-        params.render_extent_real,
-        params.render_extent_real * (params.render_image_resolution.re as f64)
+        params.render_view_scale_real,
+        params.render_view_scale_real * (params.render_image_resolution.re as f64)
             / (params.render_image_resolution.im as f64),
     );
 
@@ -139,7 +141,7 @@ pub fn mandelbrot_search_render(
             let render_params = MandelbrotParams {
                 image_resolution: params.render_image_resolution,
                 center: query.point,
-                extent_real: params.render_extent_real,
+                view_scale_real: params.render_view_scale_real,
                 escape_radius_squared: params.render_escape_radius_squared,
                 max_iter_count: params.render_max_iter_count,
                 refinement_count: params.render_refinement_count,

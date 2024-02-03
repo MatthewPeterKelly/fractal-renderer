@@ -8,7 +8,7 @@ pub struct MandelbrotParams {
     // Where to render?
     pub image_resolution: nalgebra::Complex<u32>,
     pub center: nalgebra::Complex<f64>,
-    pub extent_real: f64,
+    pub view_scale_real: f64,
     // Convergence criteria
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
@@ -20,7 +20,7 @@ impl Default for MandelbrotParams {
         MandelbrotParams {
             image_resolution: nalgebra::Complex::<u32>::new(1920, 1080),
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
-            extent_real: (3.0),
+            view_scale_real: (3.0),
             escape_radius_squared: (4.0),
             max_iter_count: (550),
             refinement_count: (5),
@@ -48,8 +48,8 @@ impl MandelbrotParams {
     fn complex_range(&self) -> nalgebra::Complex<std::ops::Range<f64>> {
         complex_range(
             nalgebra::Complex::<f64>::new(
-                self.extent_real,
-                self.extent_real * (self.image_resolution.im as f64)
+                self.view_scale_real,
+                self.view_scale_real * (self.image_resolution.im as f64)
                     / (self.image_resolution.re as f64),
             ),
             self.center,
