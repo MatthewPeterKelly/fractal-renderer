@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use fractal_renderer::histogram::Histogram;
 
     #[test]
@@ -50,5 +52,27 @@ mod tests {
     fn test_insert_with_zero_max_val() {
         // This should panic due to the assertion in the constructor
         assert!(std::panic::catch_unwind(|| Histogram::new(5, 0.0)).is_err());
+    }
+
+    #[test]
+    fn test_text_display() {
+        let mut hist = Histogram::new(5, 10.0);
+        hist.insert(0.3);
+        hist.insert(2.3);
+        hist.insert(2.6);
+        hist.display(io::stdout())
+            .expect("Failed to display on screen");
+    }
+
+    #[test]
+    fn test_file_display() {
+        let mut hist = Histogram::new(3, 9.0);
+        hist.insert(0.3);
+        hist.insert(1.3);
+        hist.insert(2.6);
+        hist.insert(8.4);
+        let file = std::fs::File::create("output.txt").expect("Failed to create file");
+        let buf_writer = io::BufWriter::new(file);
+        hist.display(buf_writer).expect("Failed to write to file");
     }
 }

@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 pub struct Histogram {
     pub bin_count: Vec<u32>,
     pub value_to_index_scale: f64,
@@ -22,17 +24,33 @@ impl Histogram {
             return;
         }
         let index = (data * self.value_to_index_scale) as usize;
-        if (index >= self.bin_count.len()) {
+        if index >= self.bin_count.len() {
             *self.bin_count.last_mut().unwrap() += 1;
         } else {
             self.bin_count[index] += 1;
         }
     }
 
+    pub fn total_count(&self) -> u32 {
+        self.bin_count.iter().sum()
+    }
+
     // Print the histogram
-    pub fn display(&self) {
-        for (i, count) in self.bin_count.iter().enumerate() {
-            println!("Bin {}: [count: {:.2}]", i, count);
+    pub fn display<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        let total = self.total_count();
+        let percent_scale = 100.0 / (total as f64);
+        writeln!(writer, "total count: {}", total)?;
+        for i in 0..self.bin_count.len() {
+            let low_bnd = self.value_to_index_scale * (i as f64);
+            let upp_bnd = self.value_to_index_scale * ((i + 1) as f64);
+            let count = self.bin_count[i];
+            let percent = (count as f64) * percent_scale;
+            writeln!(
+                writer,
+                "bins[{}]:  [{:.2}, {:.2}) --> {}  ({:.2}%)",
+                i, low_bnd, upp_bnd, count, percent
+            )?;
         }
+        Ok(())
     }
 }
