@@ -1,7 +1,7 @@
 use chrono::{Datelike, Local, Timelike};
 use std::path::PathBuf;
 
-pub fn build_output_path(directory_name: &str) -> std::path::PathBuf {
+pub fn build_output_path_with_date_time(directory_name: &str) -> std::path::PathBuf {
     let directory_path: PathBuf = ["out", directory_name, &date_time_string()]
         .iter()
         .collect();

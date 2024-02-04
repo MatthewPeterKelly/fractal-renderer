@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::{fs, io};
 
     use fractal_renderer::histogram::Histogram;
 
@@ -60,6 +60,7 @@ mod tests {
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
+        println!("Histogram:");
         hist.display(io::stdout())
             .expect("Failed to display on screen");
     }
@@ -71,7 +72,9 @@ mod tests {
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(8.4);
-        let file = std::fs::File::create("output.txt").expect("Failed to create file");
+        fs::create_dir_all("out").expect("Unable to create 'out` directory");
+        let file = std::fs::File::create("out/histogram_test_file_display.txt")
+            .expect("failed to create `histogram_test_file_display.txt`");
         let buf_writer = io::BufWriter::new(file);
         hist.display(buf_writer).expect("Failed to write to file");
     }
