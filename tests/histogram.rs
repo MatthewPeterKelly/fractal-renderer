@@ -1,0 +1,81 @@
+#[cfg(test)]
+mod tests {
+    use std::{fs, io};
+
+    use fractal_renderer::histogram::Histogram;
+
+    #[test]
+    fn test_insert_positive_data() {
+        let mut hist = Histogram::new(5, 10.0);
+
+        hist.insert(2.5);
+        hist.insert(6.8);
+
+        assert_eq!(hist.bin_count, vec![0, 1, 0, 1, 0]);
+    }
+
+    #[test]
+    fn test_insert_negative_data() {
+        let mut hist = Histogram::new(5, 10.0);
+
+        hist.insert(-3.0);
+        hist.insert(-1.5);
+
+        assert_eq!(hist.bin_count, vec![2, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_insert_data_at_max_val() {
+        let mut hist = Histogram::new(5, 10.0);
+
+        hist.insert(10.0);
+
+        assert_eq!(hist.bin_count, vec![0, 0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn test_insert_data_greater_than_max_val() {
+        let mut hist = Histogram::new(5, 10.0);
+
+        hist.insert(12.5);
+
+        assert_eq!(hist.bin_count, vec![0, 0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn test_insert_with_zero_num_bins() {
+        // This should panic due to the assertion in the constructor
+        assert!(std::panic::catch_unwind(|| Histogram::new(0, 10.0)).is_err());
+    }
+
+    #[test]
+    fn test_insert_with_zero_max_val() {
+        // This should panic due to the assertion in the constructor
+        assert!(std::panic::catch_unwind(|| Histogram::new(5, 0.0)).is_err());
+    }
+
+    #[test]
+    fn test_text_display() {
+        let mut hist = Histogram::new(3, 4.0);
+        hist.insert(0.3);
+        hist.insert(2.3);
+        hist.insert(2.6);
+        println!("Histogram:");
+        hist.display(io::stdout())
+            .expect("Failed to display on screen");
+    }
+
+    #[test]
+    fn test_file_display() {
+        let mut hist = Histogram::new(3, 9.0);
+        hist.insert(0.3);
+        hist.insert(1.3);
+        hist.insert(2.6);
+        hist.insert(8.4);
+        fs::create_dir_all("out").expect("Unable to create 'out` directory");
+        let file = std::fs::File::create("out/histogram_test_file_display.txt")
+            .expect("failed to create `histogram_test_file_display.txt`");
+        let buf_writer = io::BufWriter::new(file);
+        hist.display(buf_writer).expect("Failed to write to file");
+    }
+}
