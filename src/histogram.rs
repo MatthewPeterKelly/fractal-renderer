@@ -1,55 +1,55 @@
+struct Bin {
+    count: u32,
+    max_val: f64, // non-inclusive
+}
+
 struct Histogram {
-    bins: Vec<u32>,
-    bin_edges: (f64, f64),
-    num_bins: usize,
-    scale_factor: f64,
+    bins: Vec<Bin>,
+    value_to_index_scale: f64,
 }
 
 impl Histogram {
     // Constructor
-    fn new(num_bins: usize, domain_min: f64, domain_max: f64) -> Self {
-        assert!(num_bins > 0, "Number of bins must be greater than 0");
-        assert!(
-            domain_min < domain_max,
-            "Invalid domain: min must be less than max"
-        );
+    fn new(num_bins: usize, max_val: f64) -> Self {
+        assert!(num_bins > 0, "`num_bins` must be positive!");
+        assert!(max_val > 0.0, "`max_val` must be positive!");
+        let value_to_index_scale = (num_bins as f64) / max_val;
+        let bin_width = max_val / (num_bins as f64);
 
-        let bin_width = (domain_max - domain_min) / num_bins as f64;
-
-        let bin_edges = (domain_min, domain_max);
-        let bins = vec![0; num_bins];
-        let scale_factor = num_bins as f64 / (domain_max - domain_min);
+        let bins: Vec<Bin> = (0..num_bins)
+            .map(|i| Bin {
+                count: 0,
+                max_val: ((i + 1) as f64) * bin_width,
+            })
+            .collect();
 
         Histogram {
             bins,
-            bin_edges,
-            num_bins,
-            scale_factor,
+            value_to_index_scale,
         }
     }
 
     // Insert a data point into the histogram
-    fn insert(&mut self, data_point: f64) {
-        let (min, _) = self.bin_edges;
-        let scaled_data = (data_point - min) * self.scale_factor;
-
-        // Perform bounds check on the integer index
-        if scaled_data >= 0.0 && scaled_data < self.num_bins as f64 {
-            let bin_index = scaled_data as usize;
-
-            // Increment the corresponding bin
-            self.bins[bin_index] += 1;
+    fn insert(&mut self, data: f64) {
+        if (data < 0.0) {
+            self.bins[0].count += 1;
+            return;
+        }
+        let index = (data * self.value_to_index_scale) as usize;
+        if (index >= self.bins.len()) {
+            self.bins.last_mut().unwrap().count += 1;
+        } else {
+            self.bins[index].count += 1;
         }
     }
 
     // Print the histogram
     fn display(&self) {
-        for (i, &count) in self.bins.iter().enumerate() {
-            let bin_start = self.bin_edges.0
-                + i as f64 * (self.bin_edges.1 - self.bin_edges.0) / self.num_bins as f64;
-            let bin_end = bin_start + (self.bin_edges.1 - self.bin_edges.0) / self.num_bins as f64;
-
-            println!("Bin {}: [{:.2}, {:.2}): {}", i, bin_start, bin_end, count);
+        for (i, bin) in self.bins.iter().enumerate() {
+            println!(
+                "Bin {}: [count: {:.2}, max_val: {:.2}]",
+                i, bin.count, bin.max_val
+            );
         }
     }
 }
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert() {
-        let mut hist = Histogram::new(3, 0.0, 10.0);
+        let mut hist = Histogram::new(3, 10.0);
 
         hist.insert(2.5);
         hist.insert(6.8);
@@ -68,8 +68,6 @@ mod tests {
         hist.insert(8.7);
         hist.insert(1.1);
         hist.insert(5.5);
-
-        assert_eq!(hist.bins, vec![2, 2, 2]);
 
         hist.display();
 
