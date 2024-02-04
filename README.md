@@ -21,5 +21,5 @@ cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\expensive_
 
 Example, run the histogram test with outputs:
 ```
-cargo test test_histogram_insert  -- --nocapture
+cargo test --test histogram
 ```

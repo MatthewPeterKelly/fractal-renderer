@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn test_text_display() {
-        let mut hist = Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
