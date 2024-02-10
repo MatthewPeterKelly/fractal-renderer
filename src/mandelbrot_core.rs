@@ -173,6 +173,10 @@ pub fn render_mandelbrot_set(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
+    // Create a new ImgBuf with width: imgx and height: imgy
+    let mut imgbuf =
+        image::ImageBuffer::new(params.image_resolution.re, params.image_resolution.im);
+
     let root = BitMapBackend::new(
         &render_path,
         (params.image_resolution.re, params.image_resolution.im),
@@ -199,6 +203,13 @@ pub fn render_mandelbrot_set(
     let plotting_area = chart.plotting_area();
     let color_map = create_grayscale_color_map(params.max_iter_count);
 
+    // Iterate over the coordinates and pixels of the image
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        let r = (0.3 * x as f32) as u8;
+        let b = (0.3 * y as f32) as u8;
+        *pixel = image::Rgb([r, 0, b]);
+    }
+
     for [point_re, point_im] in grid_iterator {
         let test_point = Complex::<f64>::new(point_re, point_im);
         let result = MandelbrotSequence::normalized_escape_count(
@@ -217,6 +228,9 @@ pub fn render_mandelbrot_set(
     // To avoid the IO failure being ignored silently, we manually call the present function
     root.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
     println!("Result has been saved to {}", render_path.display());
+
+    // Save the image as “fractal.png”, the format is deduced from the path
+    imgbuf.save("fractal.png").unwrap();
 
     Ok(())
 }
