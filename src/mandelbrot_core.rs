@@ -75,6 +75,10 @@ impl LinearPixelMap {
         LinearPixelMap { offset, slope }
     }
 
+    pub fn new_from_center_and_width(n: u32, center: f64, width: f64) -> LinearPixelMap {
+        LinearPixelMap::new(n, center - 0.5 * width, center + 0.5 * width)
+    }
+
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
     }
@@ -196,7 +200,7 @@ pub fn render_mandelbrot_set(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
-    // Create a new ImgBuf with width: imgx and height: imgy
+    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution.re, params.image_resolution.im);
 
@@ -211,6 +215,19 @@ pub fn render_mandelbrot_set(
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     root.fill(&BLACK)?;
+
+    let view_scale_imag = params.view_scale_real * (params.image_resolution.im as f64)
+        / (params.image_resolution.re as f64);
+    let pixel_map_real = LinearPixelMap::new_from_center_and_width(
+        params.image_resolution.re,
+        params.center.re,
+        params.view_scale_real,
+    );
+    let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
+        params.image_resolution.im,
+        params.center.im,
+        view_scale_imag,
+    );
 
     let range = params.complex_range();
 
