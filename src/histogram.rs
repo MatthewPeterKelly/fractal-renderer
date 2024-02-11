@@ -43,13 +43,6 @@ impl Histogram {
     }
 
     /**
-     * @return: the fraction of the population within the speficied bin
-     */
-    pub fn bin_fraction(&self, bin_index: usize) -> f64 {
-        (self.bin_count[bin_index] as f64) / (self.total_count() as f64)
-    }
-
-    /**
      * @return: the upper edge of the specified bin (exclusive)
      */
     pub fn upper_edge(&self, bin_index: usize) -> f64 {
@@ -60,8 +53,12 @@ impl Histogram {
      * Print the histogram stats to the writer
      */
     pub fn display<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writeln!(writer, "total count: {}", self.total_count())?;
+        let total = self.total_count();
+        let percent_scale = 100.0 / (total as f64);
+        writeln!(writer, "total count: {}", total)?;
         for i in 0..self.bin_count.len() {
+            let count = self.bin_count[i];
+            let percent = (count as f64) * percent_scale;
             writeln!(
                 writer,
                 "bins[{}]:  [{:.2}, {:.2}) --> {}  ({:.2}%)",
@@ -69,7 +66,7 @@ impl Histogram {
                 self.lower_edge(i),
                 self.upper_edge(i),
                 self.bin_count[i],
-                100.0 * self.bin_fraction(i)
+                percent
             )?;
         }
         Ok(())
@@ -79,26 +76,26 @@ impl Histogram {
 pub struct PercentileMap {
     pub edge_values: Vec<f64>,
     pub value_to_index_scale: f64,
-    pub bin_width: f64,
 }
 
 impl PercentileMap {
     pub fn new(histogram: Histogram) -> PercentileMap {
-        let mut edge_values: Vec<f64> = Vec::with_capacity(histogram.bin_count.len());
-        edge_values.extend(
-            histogram
-                .bin_count
-                .iter()
-                .map(|&count| 0.1 * (count as f64)),
-        );
+        let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f64);
+
+        let mut edge_values: Vec<f64> = Vec::with_capacity(histogram.bin_count.len() + 1);
+
+        edge_values.push(0.0);
+        let mut accumulated_count = 0;
+
+        for i in 0..histogram.bin_count.len() {
+            accumulated_count += histogram.bin_count[i];
+            edge_values.push((accumulated_count as f64) * scale_bin_count_to_fraction);
+        }
 
         PercentileMap {
             edge_values,
             value_to_index_scale: histogram.value_to_index_scale,
-            bin_width,
         }
-        // HACK
-        // TODO
     }
 
     /**
