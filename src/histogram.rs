@@ -2,7 +2,8 @@ use std::io::{self, Write};
 
 pub struct Histogram {
     pub bin_count: Vec<u32>,
-    pub value_to_index_scale: f64,
+    pub data_to_index_scale: f64,
+    pub bin_width: f64,
 }
 
 /**
@@ -13,10 +14,11 @@ impl Histogram {
     pub fn new(num_bins: usize, max_val: f64) -> Self {
         assert!(num_bins > 0, "`num_bins` must be positive!");
         assert!(max_val > 0.0, "`max_val` must be positive!");
-        let value_to_index_scale = (num_bins as f64) / max_val;
+        let data_to_index_scale = (num_bins as f64) / max_val;
         Histogram {
             bin_count: vec![0; num_bins],
-            value_to_index_scale,
+            data_to_index_scale,
+            bin_width: 1.0 / data_to_index_scale,
         }
     }
 
@@ -26,7 +28,7 @@ impl Histogram {
             self.bin_count[0] += 1;
             return;
         }
-        let index = (data * self.value_to_index_scale) as usize;
+        let index = (data * self.data_to_index_scale) as usize;
         if index >= self.bin_count.len() {
             *self.bin_count.last_mut().unwrap() += 1;
         } else {
@@ -42,14 +44,14 @@ impl Histogram {
      * @return: the lower edge of the specified bin (inclusive)
      */
     pub fn lower_edge(&self, bin_index: usize) -> f64 {
-        self.value_to_index_scale * (bin_index as f64)
+        self.bin_width * (bin_index as f64)
     }
 
     /**
      * @return: the upper edge of the specified bin (exclusive)
      */
     pub fn upper_edge(&self, bin_index: usize) -> f64 {
-        self.value_to_index_scale * ((bin_index + 1) as f64)
+        self.bin_width * ((bin_index + 1) as f64)
     }
 
     /**
@@ -79,7 +81,7 @@ impl Histogram {
 pub struct PercentileMap {
     pub offset: Vec<f64>, // n_bins
     pub scale: Vec<f64>,  // n_bins
-    pub value_to_index_scale: f64,
+    pub data_to_index_scale: f64,
     pub min_data: f64, // --> maps to 0.0
     pub max_data: f64, // --> maps to 1.0
 }
@@ -88,19 +90,32 @@ impl PercentileMap {
     pub fn new(histogram: Histogram) -> PercentileMap {
         let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f64);
 
-        let mut edge_values: Vec<f64> = Vec::with_capacity(histogram.bin_count.len() + 1);
-
-        edge_values.push(0.0);
+        let n_bins = histogram.bin_count.len();
+        let mut offset: Vec<f64> = Vec::with_capacity(n_bins);
+        let mut scale: Vec<f64> = Vec::with_capacity(n_bins);
         let mut accumulated_count = 0;
 
+        // x = data (input)
+        // y = value (output, fraction within population)
+        let mut y_low = 0.0;
         for i in 0..histogram.bin_count.len() {
             accumulated_count += histogram.bin_count[i];
-            edge_values.push((accumulated_count as f64) * scale_bin_count_to_fraction);
+            let y_upp = (accumulated_count as f64) * scale_bin_count_to_fraction;
+            let x_low = histogram.lower_edge(i);
+            let dy_dx = (y_upp - y_low) * histogram.data_to_index_scale;
+
+            offset.push(y_low - x_low * dy_dx);
+            scale.push(dy_dx);
+
+            y_low = y_upp; // for the next iteration
         }
 
         PercentileMap {
-            edge_values,
-            value_to_index_scale: histogram.value_to_index_scale,
+            offset,
+            scale,
+            data_to_index_scale: histogram.data_to_index_scale,
+            min_data: histogram.lower_edge(0),
+            max_data: histogram.upper_edge(n_bins - 1),
         }
     }
 
@@ -117,7 +132,7 @@ impl PercentileMap {
         }
         // Interesting case: linearly interpolate between edges.
         // Interpolating coefficients are pre-computed in the constructor
-        let index = (data * self.value_to_index_scale) as usize;
+        let index = (data * self.data_to_index_scale) as usize;
         self.offset[index] + data * self.scale[index]
     }
 }
