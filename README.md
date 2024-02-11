@@ -13,8 +13,7 @@ cargo run -- mandelbrot-render .\examples\mandelbrot_render\default_params.json
 ```
 
 ```
-cargo run -- mandelbrot-search .\examples\mandelbrot_search\default_params.json
-cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\expensive_params.json
+cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default_params.json
 ```
 
 ## Testing notes:
@@ -22,4 +21,5 @@ cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\expensive_
 Example, run the histogram test with outputs:
 ```
 cargo test --test histogram
+cargo test --test mandelbrot_core
 ```

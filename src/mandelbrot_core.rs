@@ -1,6 +1,4 @@
-use iter_num_tools::grid_space;
 use nalgebra::Complex;
-use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -27,6 +25,11 @@ impl Default for MandelbrotParams {
         }
     }
 }
+impl MandelbrotParams {
+    pub fn view_scale_im(&self) -> f64 {
+        self.view_scale_real * (self.image_resolution.im as f64) / (self.image_resolution.re as f64)
+    }
+}
 
 /**
  * @param dimensions: local "width" and "height" of the retangle in imaginary space
@@ -41,22 +44,9 @@ pub fn complex_range(
     nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
 }
 
-impl MandelbrotParams {
-    /**
-     * @return: range of the image specified by the paramters, in complex space.
-     */
-    fn complex_range(&self) -> nalgebra::Complex<std::ops::Range<f64>> {
-        complex_range(
-            nalgebra::Complex::<f64>::new(
-                self.view_scale_real,
-                self.view_scale_real * (self.image_resolution.im as f64)
-                    / (self.image_resolution.re as f64),
-            ),
-            self.center,
-        )
-    }
-}
-
+/**
+ * Used to map from image space into the complex domain.
+ */
 pub struct LinearPixelMap {
     offset: f64,
     slope: f64,
@@ -204,20 +194,11 @@ pub fn render_mandelbrot_set(
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution.re, params.image_resolution.im);
 
-    let root = BitMapBackend::new(
-        &render_path,
-        (params.image_resolution.re, params.image_resolution.im),
-    )
-    .into_drawing_area();
-
     // write out the parameters too:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
-    root.fill(&BLACK)?;
-
-    let view_scale_imag = params.view_scale_real * (params.image_resolution.im as f64)
-        / (params.image_resolution.re as f64);
+    // Mapping from image space to copmlex space
     let pixel_map_real = LinearPixelMap::new_from_center_and_width(
         params.image_resolution.re,
         params.center.re,
@@ -226,56 +207,43 @@ pub fn render_mandelbrot_set(
     let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
         params.image_resolution.im,
         params.center.im,
-        view_scale_imag,
+        -params.view_scale_im(), // Image coordinates are upside down.
     );
 
-    let range = params.complex_range();
-
-    let grid_iterator = grid_space(
-        [range.re.start, range.im.start]..=[range.re.end, range.im.end],
-        [
-            params.image_resolution.re as usize,
-            params.image_resolution.im as usize,
-        ],
-    );
-
-    let chart = ChartBuilder::on(&root).build_cartesian_2d(range.re, range.im)?;
-    let plotting_area = chart.plotting_area();
-    let color_map = create_grayscale_color_map(params.max_iter_count);
+    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
+    for x in 0..params.image_resolution.re {
+        let re = pixel_map_real.map(x);
+        let mut row: Vec<f64> = Vec::with_capacity(params.image_resolution.im as usize);
+        for y in 0..params.image_resolution.im {
+            let im = pixel_map_imag.map(y);
+            let result = MandelbrotSequence::normalized_escape_count(
+                &nalgebra::Complex::<f64>::new(re, im),
+                params.escape_radius_squared,
+                params.max_iter_count,
+                params.refinement_count,
+            );
+            if let Some(iter) = result {
+                row.push(iter);
+            } else {
+                row.push(0.0);
+            }
+        }
+        raw_data.push(row);
+    }
 
     // Iterate over the coordinates and pixels of the image
+    let color_map = create_grayscale_color_map(params.max_iter_count);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let r = (0.3 * x as f32) as u8;
-        let b = (0.3 * y as f32) as u8;
-        *pixel = image::Rgb([r, 0, b]);
+        *pixel = color_map(raw_data[x as usize][y as usize]);
     }
 
-    for [point_re, point_im] in grid_iterator {
-        let test_point = Complex::<f64>::new(point_re, point_im);
-        let result = MandelbrotSequence::normalized_escape_count(
-            &test_point,
-            params.escape_radius_squared,
-            params.max_iter_count,
-            params.refinement_count,
-        );
-        if let Some(iter) = result {
-            plotting_area.draw_pixel((point_re, point_im), &color_map(iter))?;
-        } else {
-            // Nothing -- we already colored this one with the default color at startup.
-        }
-    }
-
-    // To avoid the IO failure being ignored silently, we manually call the present function
-    root.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
-    println!("Result has been saved to {}", render_path.display());
-
-    // Save the image as “fractal.png”, the format is deduced from the path
-    imgbuf.save("fractal.png").unwrap();
+    // Save the image to a file, deducing the type from the file name
+    imgbuf.save(&render_path).unwrap();
 
     Ok(())
 }
 
-fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
+fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> image::Rgb<u8> {
     use splines::{Interpolation, Key, Spline};
 
     let max_input = (max_iter_count as f64).sqrt();
@@ -290,6 +258,6 @@ fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> RGBColor {
         let input = iter_count.sqrt();
         let output = spline.sample(input).unwrap();
         let output_u8 = output as u8;
-        RGBColor(output_u8, output_u8, output_u8)
+        image::Rgb([output_u8, output_u8, output_u8])
     }
 }
