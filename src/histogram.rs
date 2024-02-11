@@ -5,6 +5,9 @@ pub struct Histogram {
     pub value_to_index_scale: f64,
 }
 
+/**
+ * Fast and simple histogram for non-negative data.
+ */
 impl Histogram {
     // Constructor
     pub fn new(num_bins: usize, max_val: f64) -> Self {
@@ -74,8 +77,11 @@ impl Histogram {
 }
 
 pub struct PercentileMap {
-    pub edge_values: Vec<f64>,
+    pub offset: Vec<f64>, // n_bins
+    pub scale: Vec<f64>,  // n_bins
     pub value_to_index_scale: f64,
+    pub min_data: f64, // --> maps to 0.0
+    pub max_data: f64, // --> maps to 1.0
 }
 
 impl PercentileMap {
@@ -102,7 +108,16 @@ impl PercentileMap {
      * @param value: data point, same units as would be used in the histogram
      * @return: fractional position within the population of the histogram
      */
-    pub fn percentile(value: f64) -> f64 {
-        0.0
+    pub fn percentile(&mut self, data: f64) -> f64 {
+        if data <= self.min_data {
+            return 0.0;
+        }
+        if data >= self.max_data {
+            return 1.0;
+        }
+        // Interesting case: linearly interpolate between edges.
+        // Interpolating coefficients are pre-computed in the constructor
+        let index = (data * self.value_to_index_scale) as usize;
+        self.offset[index] + data * self.scale[index]
     }
 }
