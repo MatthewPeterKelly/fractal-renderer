@@ -2,6 +2,7 @@
 mod tests {
     use std::{fs, io};
 
+    use approx::assert_relative_eq;
     use fractal_renderer::histogram::Histogram;
 
     #[test]
@@ -77,5 +78,25 @@ mod tests {
             .expect("failed to create `histogram_test_file_display.txt`");
         let buf_writer = io::BufWriter::new(file);
         hist.display(buf_writer).expect("Failed to write to file");
+    }
+
+    #[test]
+    fn test_histogram_utilities() {
+        let mut hist = Histogram::new(3, 6.0);
+        hist.insert(0.3);
+        hist.insert(1.3);
+        hist.insert(2.6);
+        hist.insert(0.2);
+
+        assert_eq!(hist.total_count(), 4);
+
+        let tol = 1e-6;
+
+        assert_relative_eq!(hist.lower_edge(0), 0.0, epsilon = tol);
+        assert_relative_eq!(hist.upper_edge(0), 2.0, epsilon = tol);
+        assert_relative_eq!(hist.lower_edge(1), 2.0, epsilon = tol);
+        assert_relative_eq!(hist.upper_edge(1), 4.0, epsilon = tol);
+        assert_relative_eq!(hist.lower_edge(2), 4.0, epsilon = tol);
+        assert_relative_eq!(hist.upper_edge(2), 6.0, epsilon = tol);
     }
 }
