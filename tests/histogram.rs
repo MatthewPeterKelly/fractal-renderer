@@ -3,10 +3,10 @@ mod tests {
     use std::{fs, io};
 
     use approx::assert_relative_eq;
-    use fractal_renderer::histogram::Histogram;
+    use fractal_renderer::histogram::{Histogram, PercentileMap};
 
     #[test]
-    fn test_insert_positive_data() {
+    fn test_histogram_insert_positive_data() {
         let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(2.5);
@@ -16,7 +16,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_negative_data() {
+    fn test_histogram_insert_negative_data() {
         let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(-3.0);
@@ -26,7 +26,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_data_at_max_val() {
+    fn test_histogram_insert_data_at_max_val() {
         let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(10.0);
@@ -35,7 +35,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_data_greater_than_max_val() {
+    fn test_histogram_insert_data_greater_than_max_val() {
         let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(12.5);
@@ -44,19 +44,19 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_with_zero_num_bins() {
+    fn test_histogram_insert_with_zero_num_bins() {
         // This should panic due to the assertion in the constructor
         assert!(std::panic::catch_unwind(|| Histogram::new(0, 10.0)).is_err());
     }
 
     #[test]
-    fn test_insert_with_zero_max_val() {
+    fn test_histogram_insert_with_zero_max_val() {
         // This should panic due to the assertion in the constructor
         assert!(std::panic::catch_unwind(|| Histogram::new(5, 0.0)).is_err());
     }
 
     #[test]
-    fn test_text_display() {
+    fn test_histogram_text_display() {
         let mut hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
@@ -67,7 +67,7 @@ mod tests {
     }
 
     #[test]
-    fn test_file_display() {
+    fn test_histogram_file_display() {
         let mut hist = Histogram::new(3, 9.0);
         hist.insert(0.3);
         hist.insert(1.3);
@@ -98,5 +98,16 @@ mod tests {
         assert_relative_eq!(hist.upper_edge(1), 4.0, epsilon = tol);
         assert_relative_eq!(hist.lower_edge(2), 4.0, epsilon = tol);
         assert_relative_eq!(hist.upper_edge(2), 6.0, epsilon = tol);
+    }
+
+    #[test]
+    fn test_percentile_uniform() {
+        let mut hist = Histogram::new(3, 6.0);
+        hist.insert(1.3);
+        hist.insert(2.6);
+        hist.insert(4.2);
+        let cdf = PercentileMap::new(hist);
+
+        // TODO:
     }
 }
