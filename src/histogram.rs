@@ -123,7 +123,7 @@ impl PercentileMap {
      * @param value: data point, same units as would be used in the histogram
      * @return: fractional position within the population of the histogram
      */
-    pub fn percentile(&mut self, data: f64) -> f64 {
+    pub fn percentile(&self, data: f64) -> f64 {
         if data <= self.min_data {
             return 0.0;
         }

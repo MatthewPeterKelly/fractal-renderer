@@ -108,6 +108,17 @@ mod tests {
         hist.insert(4.2);
         let cdf = PercentileMap::new(hist);
 
+        let tol = 1e-6;
+
+        // out-of-bounds checks:
+        assert_eq!(cdf.percentile(-0.2), 0.0);
+        assert_eq!(cdf.percentile(7.0), 1.0);
+
+        // linear CDF for uniform histogram:
+        for data in iter_num_tools::lin_space(0.0..=6.0, 17) {
+            assert_relative_eq!(cdf.percentile(data), data * 6.0, epsilon = tol);
+        }
+
         // TODO:
     }
 }
