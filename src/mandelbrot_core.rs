@@ -1,4 +1,3 @@
-use nalgebra::Complex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -198,7 +197,7 @@ pub fn render_mandelbrot_set(
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
-    // Mapping from image space to copmlex space
+    // Mapping from image space to complex space
     let pixel_map_real = LinearPixelMap::new_from_center_and_width(
         params.image_resolution.re,
         params.center.re,
