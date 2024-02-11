@@ -7,16 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
-approx = "0.5.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+approx = "0.5"
 bincode = "1.3"
 chrono = "0.4"
 clap = {version = "4.3.8", features = [ "derive" ]}
-num-traits =  "0.2"
-plotters = "0.3"
-rand = "0"
-more-asserts = "0.2"
+image = "0.24"
 iter_num_tools = "0.7.1"
+more-asserts = "0.2"
+nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
+num-traits =  "0.2"
+rand = "0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 splines = "4"
