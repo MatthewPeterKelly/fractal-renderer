@@ -78,7 +78,8 @@ impl Histogram {
     }
 }
 
-pub struct PercentileMap {
+#[derive(Debug)]
+pub struct CumulativeDistributionFunction {
     pub offset: Vec<f64>, // n_bins
     pub scale: Vec<f64>,  // n_bins
     pub data_to_index_scale: f64,
@@ -86,8 +87,8 @@ pub struct PercentileMap {
     pub max_data: f64, // --> maps to 1.0
 }
 
-impl PercentileMap {
-    pub fn new(histogram: Histogram) -> PercentileMap {
+impl CumulativeDistributionFunction {
+    pub fn new(histogram: Histogram) -> CumulativeDistributionFunction {
         let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f64);
 
         let n_bins = histogram.bin_count.len();
@@ -110,7 +111,7 @@ impl PercentileMap {
             y_low = y_upp; // for the next iteration
         }
 
-        PercentileMap {
+        CumulativeDistributionFunction {
             offset,
             scale,
             data_to_index_scale: histogram.data_to_index_scale,

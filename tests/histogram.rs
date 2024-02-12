@@ -3,7 +3,7 @@ mod tests {
     use std::{fs, io};
 
     use approx::assert_relative_eq;
-    use fractal_renderer::histogram::{Histogram, PercentileMap};
+    use fractal_renderer::histogram::{CumulativeDistributionFunction, Histogram};
 
     #[test]
     fn test_histogram_insert_positive_data() {
@@ -102,11 +102,12 @@ mod tests {
 
     #[test]
     fn test_percentile_uniform() {
-        let mut hist = Histogram::new(3, 6.0);
+        let max_value = 6.0;
+        let mut hist = Histogram::new(3, max_value);
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
-        let cdf = PercentileMap::new(hist);
+        let cdf = CumulativeDistributionFunction::new(hist);
 
         let tol = 1e-6;
 
@@ -114,11 +115,36 @@ mod tests {
         assert_eq!(cdf.percentile(-0.2), 0.0);
         assert_eq!(cdf.percentile(7.0), 1.0);
 
-        // linear CDF for uniform histogram:
-        for data in iter_num_tools::lin_space(0.0..=6.0, 17) {
-            assert_relative_eq!(cdf.percentile(data), data * 6.0, epsilon = tol);
+        // the CFG for a uniform histogram is linear
+        for data in iter_num_tools::lin_space(0.0..=max_value, 17) {
+            assert_relative_eq!(cdf.percentile(data), data / max_value, epsilon = tol);
         }
+    }
 
-        // TODO:
+    #[test]
+    fn test_percentile_skewed() {
+        let mut hist = Histogram::new(3, 6.0);
+        hist.insert(4.7);
+        hist.insert(5.2);
+        hist.insert(4.2);
+        hist.insert(4.2);
+        let cdf = CumulativeDistributionFunction::new(hist);
+
+        let tol = 1e-6;
+
+        // check emtpy bins --> 0
+        assert_eq!(cdf.percentile(1.0), 0.0);
+        assert_eq!(cdf.percentile(3.0), 0.0);
+
+        // edge of the first useful data point:
+        assert_eq!(cdf.percentile(4.0), 0.0);
+
+        // now its linear:
+        assert_relative_eq!(cdf.percentile(4.1), 0.05, epsilon = tol);
+        assert_relative_eq!(cdf.percentile(5.0), 0.5, epsilon = tol);
+        assert_relative_eq!(cdf.percentile(5.9), 0.95, epsilon = tol);
+
+        // upper bound
+        assert_relative_eq!(cdf.percentile(6.0), 1.0, epsilon = tol);
     }
 }
