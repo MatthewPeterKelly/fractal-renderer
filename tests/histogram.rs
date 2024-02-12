@@ -101,7 +101,7 @@ mod tests {
     }
 
     #[test]
-    fn test_percentile_uniform() {
+    fn test_cdf_uniform() {
         let max_value = 6.0;
         let mut hist = Histogram::new(3, max_value);
         hist.insert(1.3);
@@ -122,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn test_percentile_skewed() {
+    fn test_cdf_skewed() {
         let mut hist = Histogram::new(3, 6.0);
         hist.insert(4.7);
         hist.insert(5.2);
@@ -146,5 +146,34 @@ mod tests {
 
         // upper bound
         assert_relative_eq!(cdf.percentile(6.0), 1.0, epsilon = tol);
+    }
+
+    #[test]
+    fn test_cdf_interesting() {
+        let mut hist = Histogram::new(5, 25.0);
+        for _ in 0..3 {
+            hist.insert(3.0);
+        }
+        for _ in 0..9 {
+            hist.insert(12.0);
+        }
+        for _ in 0..12 {
+            hist.insert(24.0);
+        }
+        let cdf = CumulativeDistributionFunction::new(hist);
+
+        // edges
+        assert_eq!(cdf.percentile(0.0), 0.0);
+        assert_eq!(cdf.percentile(25.0), 1.0);
+
+        // constant region
+        assert_eq!(cdf.percentile(5.0), 0.125);
+        assert_eq!(cdf.percentile(7.0), 0.125);
+        assert_eq!(cdf.percentile(10.0), 0.125);
+
+        // constant region
+        assert_eq!(cdf.percentile(15.0), 0.5);
+        assert_eq!(cdf.percentile(17.0), 0.5);
+        assert_eq!(cdf.percentile(20.0), 0.5);
     }
 }
