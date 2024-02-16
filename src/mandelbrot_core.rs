@@ -234,7 +234,7 @@ pub fn render_mandelbrot_set(
     }
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(256, params.max_iter_count as f64);
+    let mut hist = Histogram::new(64, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
             hist.insert(val);
