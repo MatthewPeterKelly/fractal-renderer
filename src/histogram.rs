@@ -88,7 +88,7 @@ pub struct CumulativeDistributionFunction {
 }
 
 impl CumulativeDistributionFunction {
-    pub fn new(histogram: Histogram) -> CumulativeDistributionFunction {
+    pub fn new(histogram: &Histogram) -> CumulativeDistributionFunction {
         let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f64);
 
         let n_bins = histogram.bin_count.len();

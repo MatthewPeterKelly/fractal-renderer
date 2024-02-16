@@ -107,7 +107,7 @@ mod tests {
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
-        let cdf = CumulativeDistributionFunction::new(hist);
+        let cdf = CumulativeDistributionFunction::new(&hist);
 
         let tol = 1e-6;
 
@@ -128,7 +128,7 @@ mod tests {
         hist.insert(5.2);
         hist.insert(4.2);
         hist.insert(4.2);
-        let cdf = CumulativeDistributionFunction::new(hist);
+        let cdf = CumulativeDistributionFunction::new(&hist);
 
         let tol = 1e-6;
 
@@ -160,7 +160,7 @@ mod tests {
         for _ in 0..12 {
             hist.insert(24.0);
         }
-        let cdf = CumulativeDistributionFunction::new(hist);
+        let cdf = CumulativeDistributionFunction::new(&hist);
 
         // edges
         assert_eq!(cdf.percentile(0.0), 0.0);
