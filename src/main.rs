@@ -1,5 +1,6 @@
 mod cli;
 mod file_io;
+mod histogram;
 mod mandelbrot_core;
 mod mandelbrot_search;
 

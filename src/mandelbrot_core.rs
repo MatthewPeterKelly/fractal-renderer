@@ -1,3 +1,4 @@
+use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -209,6 +210,8 @@ pub fn render_mandelbrot_set(
         -params.view_scale_im(), // Image coordinates are upside down.
     );
 
+    // Generate the raw data for the fractal
+    // Eventually this will be parallelized for speed.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
     for x in 0..params.image_resolution.re {
         let re = pixel_map_real.map(x);
@@ -230,10 +233,27 @@ pub fn render_mandelbrot_set(
         raw_data.push(row);
     }
 
+    // Compute the histogram by iterating over the raw data.
+    let mut hist = Histogram::new(256, params.max_iter_count as f64);
+    raw_data.iter().for_each(|row| {
+        row.iter().for_each(|&val| {
+            hist.insert(val);
+        });
+    });
+
+    let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
+    let file = std::fs::File::create(hist_path)
+        .expect("failed to create `histogram_test_file_display.txt`");
+    let buf_writer = std::io::BufWriter::new(file);
+    hist.display(buf_writer).expect("Failed to write to file");
+
+    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    let cdf = CumulativeDistributionFunction::new(&hist);
+
     // Iterate over the coordinates and pixels of the image
-    let color_map = create_grayscale_color_map(params.max_iter_count);
+    let color_map = create_grayscale_color_map();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(raw_data[x as usize][y as usize]);
+        *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
     // Save the image to a file, deducing the type from the file name
@@ -242,19 +262,17 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
-fn create_grayscale_color_map(max_iter_count: u32) -> impl Fn(f64) -> image::Rgb<u8> {
+fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
     use splines::{Interpolation, Key, Spline};
 
-    let max_input = (max_iter_count as f64).sqrt();
     let max_output = 255.0;
 
     let low = Key::new(0.0, 0.0, Interpolation::Linear);
-    let mid = Key::new(0.2 * max_input, 0.05 * max_output, Interpolation::Linear);
-    let upp = Key::new(max_input, max_output, Interpolation::Linear);
+    let mid = Key::new(0.2, 0.05 * max_output, Interpolation::Linear);
+    let upp = Key::new(1.0, max_output, Interpolation::Linear);
     let spline = Spline::from_vec(vec![low, mid, upp]);
 
-    move |iter_count: f64| {
-        let input = iter_count.sqrt();
+    move |input: f64| {
         let output = spline.sample(input).unwrap();
         let output_u8 = output as u8;
         image::Rgb([output_u8, output_u8, output_u8])
