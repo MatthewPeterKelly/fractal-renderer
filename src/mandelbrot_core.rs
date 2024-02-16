@@ -263,17 +263,17 @@ pub fn render_mandelbrot_set(
 }
 
 fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-    use splines::{Interpolation, Key, Spline};
+    // use splines::{Interpolation, Key, Spline};
 
-    let max_output = 255.0;
+    // let max_output = 255.0;
 
-    let low = Key::new(0.0, 0.0, Interpolation::Linear);
-    let mid = Key::new(0.2, 0.05 * max_output, Interpolation::Linear);
-    let upp = Key::new(1.0, max_output, Interpolation::Linear);
-    let spline = Spline::from_vec(vec![low, mid, upp]);
+    // let low = Key::new(0.0, 0.0, Interpolation::Linear);
+    // let mid = Key::new(0.2, 0.05 * max_output, Interpolation::Linear);
+    // let upp = Key::new(1.0, max_output, Interpolation::Linear);
+    // let spline = Spline::from_vec(vec![low, mid, upp]);
 
     move |input: f64| {
-        let output = spline.sample(input).unwrap();
+        let output = 255.0 * input * input * input * input;
         let output_u8 = output as u8;
         image::Rgb([output_u8, output_u8, output_u8])
     }
