@@ -234,7 +234,7 @@ pub fn render_mandelbrot_set(
     }
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(256, params.max_iter_count as f64);
+    let mut hist = Histogram::new(64, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
             hist.insert(val);
@@ -263,18 +263,19 @@ pub fn render_mandelbrot_set(
 }
 
 fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-    use splines::{Interpolation, Key, Spline};
+    // use splines::{Interpolation, Key, Spline};
 
-    let spline = Spline::from_vec(vec![
-        Key::new(0.0, 0.0, Interpolation::Linear),
-        Key::new(0.5, 5.0, Interpolation::Linear),
-        Key::new(0.8, 30.0, Interpolation::Linear),
-        Key::new(0.96, 90.0, Interpolation::Linear),
-        Key::new(1.0, 255.0, Interpolation::Linear),
-    ]);
+    // let spline = Spline::from_vec(vec![
+    //     Key::new(0.0, 0.0, Interpolation::Linear),
+    //     // Key::new(0.5, 5.0, Interpolation::Linear),
+    //     // Key::new(0.8, 30.0, Interpolation::Linear),
+    //     Key::new(0.95, 50.0, Interpolation::Linear),
+    //     Key::new(1.0, 255.0, Interpolation::Linear),
+    // ]);
 
     move |input: f64| {
-        let output = spline.sample(input).unwrap();
+        // let output = spline.sample(input).unwrap();
+        let output = 255.0 * input.powi(3);
         let output_u8 = output as u8;
         image::Rgb([output_u8, output_u8, output_u8])
     }
