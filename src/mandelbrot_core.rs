@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
@@ -185,12 +185,41 @@ impl MandelbrotSequence {
     }
 }
 
+#[derive(Default)]
+pub struct MeasuredElapsedTime {
+    pub setup: Duration,
+    pub mandelbrot: Duration,
+    pub histogram: Duration,
+    pub cdf: Duration,
+    pub color_map: Duration,
+    pub write_png: Duration,
+}
+
+pub struct Stopwatch {
+    pub duration: MeasuredElapsedTime,
+    pub stopwatch: Instant,
+}
+
+impl Stopwatch {
+    pub fn new() -> Stopwatch {
+        Stopwatch {
+            duration: MeasuredElapsedTime::default(),
+            stopwatch: Instant::now(),
+        }
+    }
+
+    pub fn record_elapsed_time_for_setup(&mut self) {
+        self.duration.setup = self.stopwatch.elapsed();
+        self.stopwatch = Instant::now();
+    }
+}
+
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
     directory_path: &std::path::Path,
     file_prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let stopwatch = Instant::now();
+    let stopwatch: Instant = Instant::now();
 
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
@@ -214,7 +243,7 @@ pub fn render_mandelbrot_set(
         -params.view_scale_im(), // Image coordinates are upside down.
     );
 
-    let timer_setup = stopwatch.elapsed();
+    let timer_setup: std::time::Duration = stopwatch.elapsed();
     let stopwatch = Instant::now();
 
     // Generate the raw data for the fractal
@@ -274,17 +303,16 @@ pub fn render_mandelbrot_set(
 
     let timer_write_png = stopwatch.elapsed();
     let stopwatch = Instant::now();
-
-    // Diagnostics file:
+ file:
     let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
     let file = std::fs::File::create(hist_path)
         .expect("failed to create `histogram_test_file_display.txt`");
     let buf_writer = std::io::BufWriter::new(file);
     hist.display(buf_writer)
-        .expect("Failed to write hostogram to file");
-
     // Timing diagnostics:
-    writeln!(buf_writer, "timer_setup: {:#?}", timer_setup)?;
+
+
+pub struct     writeln!(buf_writer, "timer_setup: {:#?}", timer_setup)?;
 
     Ok(())
 }
