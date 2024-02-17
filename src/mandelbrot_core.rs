@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    io::{self, Write},
+    time::{Duration, Instant},
+};
 
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
@@ -195,23 +198,24 @@ pub struct MeasuredElapsedTime {
     pub write_png: Duration,
 }
 
-pub struct Stopwatch {
-    pub duration: MeasuredElapsedTime,
-    pub stopwatch: Instant,
+impl MeasuredElapsedTime {
+    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "MeasuredElapsedTime:")?;
+        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
+        writeln!(writer, " -- Mandelbrot: {:?}", self.mandelbrot)?;
+        writeln!(writer, " -- Histogram:  {:?}", self.histogram)?;
+        writeln!(writer, " -- CDF:        {:?}", self.cdf)?;
+        writeln!(writer, " -- Color Map:  {:?}", self.color_map)?;
+        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
+        writeln!(writer)?;
+        Ok(())
+    }
 }
 
-impl Stopwatch {
-    pub fn new() -> Stopwatch {
-        Stopwatch {
-            duration: MeasuredElapsedTime::default(),
-            stopwatch: Instant::now(),
-        }
-    }
-
-    pub fn record_elapsed_time_for_setup(&mut self) {
-        self.duration.setup = self.stopwatch.elapsed();
-        self.stopwatch = Instant::now();
-    }
+pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
+    let duration = stopwatch.elapsed();
+    *stopwatch = Instant::now();
+    duration
 }
 
 pub fn render_mandelbrot_set(
@@ -219,7 +223,8 @@ pub fn render_mandelbrot_set(
     directory_path: &std::path::Path,
     file_prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let stopwatch: Instant = Instant::now();
+    let mut stopwatch: Instant = Instant::now();
+    let mut timer = MeasuredElapsedTime::default();
 
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
@@ -243,8 +248,7 @@ pub fn render_mandelbrot_set(
         -params.view_scale_im(), // Image coordinates are upside down.
     );
 
-    let timer_setup: std::time::Duration = stopwatch.elapsed();
-    let stopwatch = Instant::now();
+    timer.setup = elapsed_and_reset(&mut stopwatch);
 
     // Generate the raw data for the fractal
     // Eventually this will be parallelized for speed.
@@ -269,8 +273,7 @@ pub fn render_mandelbrot_set(
         raw_data.push(row);
     }
 
-    let timer_mandelbrot = stopwatch.elapsed();
-    let stopwatch = Instant::now();
+    timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(64, params.max_iter_count as f64);
@@ -280,14 +283,12 @@ pub fn render_mandelbrot_set(
         });
     });
 
-    let timer_histogram = stopwatch.elapsed();
-    let stopwatch = Instant::now();
+    timer.histogram = elapsed_and_reset(&mut stopwatch);
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
 
-    let timer_cdf = stopwatch.elapsed();
-    let stopwatch = Instant::now();
+    timer.cdf = elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_grayscale_color_map();
@@ -295,24 +296,18 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    let timer_color_map = stopwatch.elapsed();
-    let stopwatch = Instant::now();
+    timer.color_map = elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
+    timer.write_png = elapsed_and_reset(&mut stopwatch);
 
-    let timer_write_png = stopwatch.elapsed();
-    let stopwatch = Instant::now();
- file:
-    let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
-    let file = std::fs::File::create(hist_path)
-        .expect("failed to create `histogram_test_file_display.txt`");
-    let buf_writer = std::io::BufWriter::new(file);
-    hist.display(buf_writer)
-    // Timing diagnostics:
-
-
-pub struct     writeln!(buf_writer, "timer_setup: {:#?}", timer_setup)?;
+    let file =
+        std::fs::File::create(directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"))
+            .expect("failed to create diagnostics file");
+    let mut diagnostics_file = std::io::BufWriter::new(file);
+    timer.display(&mut diagnostics_file)?;
+    hist.display(&mut diagnostics_file)?;
 
     Ok(())
 }
