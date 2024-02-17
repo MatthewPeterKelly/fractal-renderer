@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
@@ -188,6 +190,8 @@ pub fn render_mandelbrot_set(
     directory_path: &std::path::Path,
     file_prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let stopwatch = Instant::now();
+
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
@@ -209,6 +213,9 @@ pub fn render_mandelbrot_set(
         params.center.im,
         -params.view_scale_im(), // Image coordinates are upside down.
     );
+
+    let timer_setup = stopwatch.elapsed();
+    let stopwatch = Instant::now();
 
     // Generate the raw data for the fractal
     // Eventually this will be parallelized for speed.
@@ -233,6 +240,9 @@ pub fn render_mandelbrot_set(
         raw_data.push(row);
     }
 
+    let timer_mandelbrot = stopwatch.elapsed();
+    let stopwatch = Instant::now();
+
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(64, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
@@ -241,14 +251,14 @@ pub fn render_mandelbrot_set(
         });
     });
 
-    let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
-    let file = std::fs::File::create(hist_path)
-        .expect("failed to create `histogram_test_file_display.txt`");
-    let buf_writer = std::io::BufWriter::new(file);
-    hist.display(buf_writer).expect("Failed to write to file");
+    let timer_histogram = stopwatch.elapsed();
+    let stopwatch = Instant::now();
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
+
+    let timer_cdf = stopwatch.elapsed();
+    let stopwatch = Instant::now();
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_grayscale_color_map();
@@ -256,8 +266,25 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
+    let timer_color_map = stopwatch.elapsed();
+    let stopwatch = Instant::now();
+
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
+
+    let timer_write_png = stopwatch.elapsed();
+    let stopwatch = Instant::now();
+
+    // Diagnostics file:
+    let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
+    let file = std::fs::File::create(hist_path)
+        .expect("failed to create `histogram_test_file_display.txt`");
+    let buf_writer = std::io::BufWriter::new(file);
+    hist.display(buf_writer)
+        .expect("Failed to write hostogram to file");
+
+    // Timing diagnostics:
+    writeln!(buf_writer, "timer_setup: {:#?}", timer_setup)?;
 
     Ok(())
 }
