@@ -1,3 +1,8 @@
+use std::{
+    io::{self, Write},
+    time::{Duration, Instant},
+};
+
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
@@ -183,11 +188,44 @@ impl MandelbrotSequence {
     }
 }
 
+#[derive(Default)]
+pub struct MeasuredElapsedTime {
+    pub setup: Duration,
+    pub mandelbrot: Duration,
+    pub histogram: Duration,
+    pub cdf: Duration,
+    pub color_map: Duration,
+    pub write_png: Duration,
+}
+
+impl MeasuredElapsedTime {
+    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "MeasuredElapsedTime:")?;
+        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
+        writeln!(writer, " -- Mandelbrot: {:?}", self.mandelbrot)?;
+        writeln!(writer, " -- Histogram:  {:?}", self.histogram)?;
+        writeln!(writer, " -- CDF:        {:?}", self.cdf)?;
+        writeln!(writer, " -- Color Map:  {:?}", self.color_map)?;
+        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
+        writeln!(writer)?;
+        Ok(())
+    }
+}
+
+pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
+    let duration = stopwatch.elapsed();
+    *stopwatch = Instant::now();
+    duration
+}
+
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
     directory_path: &std::path::Path,
     file_prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stopwatch: Instant = Instant::now();
+    let mut timer = MeasuredElapsedTime::default();
+
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
@@ -209,6 +247,8 @@ pub fn render_mandelbrot_set(
         params.center.im,
         -params.view_scale_im(), // Image coordinates are upside down.
     );
+
+    timer.setup = elapsed_and_reset(&mut stopwatch);
 
     // Generate the raw data for the fractal
     // Eventually this will be parallelized for speed.
@@ -233,6 +273,8 @@ pub fn render_mandelbrot_set(
         raw_data.push(row);
     }
 
+    timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
+
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(64, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
@@ -241,14 +283,12 @@ pub fn render_mandelbrot_set(
         });
     });
 
-    let hist_path = directory_path.join(file_prefix.to_owned() + "_histogram.txt");
-    let file = std::fs::File::create(hist_path)
-        .expect("failed to create `histogram_test_file_display.txt`");
-    let buf_writer = std::io::BufWriter::new(file);
-    hist.display(buf_writer).expect("Failed to write to file");
+    timer.histogram = elapsed_and_reset(&mut stopwatch);
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
+
+    timer.cdf = elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_grayscale_color_map();
@@ -256,8 +296,18 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
+    timer.color_map = elapsed_and_reset(&mut stopwatch);
+
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
+    timer.write_png = elapsed_and_reset(&mut stopwatch);
+
+    let file =
+        std::fs::File::create(directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"))
+            .expect("failed to create diagnostics file");
+    let mut diagnostics_file = std::io::BufWriter::new(file);
+    timer.display(&mut diagnostics_file)?;
+    hist.display(&mut diagnostics_file)?;
 
     Ok(())
 }

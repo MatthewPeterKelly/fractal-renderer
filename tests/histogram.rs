@@ -62,7 +62,7 @@ mod tests {
         hist.insert(2.3);
         hist.insert(2.6);
         println!("Histogram:");
-        hist.display(io::stdout())
+        hist.display(&mut io::stdout())
             .expect("Failed to display on screen");
     }
 
@@ -76,8 +76,9 @@ mod tests {
         fs::create_dir_all("out").expect("Unable to create 'out` directory");
         let file = std::fs::File::create("out/histogram_test_file_display.txt")
             .expect("failed to create `histogram_test_file_display.txt`");
-        let buf_writer = io::BufWriter::new(file);
-        hist.display(buf_writer).expect("Failed to write to file");
+        let mut buf_writer = io::BufWriter::new(file);
+        hist.display(&mut buf_writer)
+            .expect("Failed to write to file");
     }
 
     #[test]

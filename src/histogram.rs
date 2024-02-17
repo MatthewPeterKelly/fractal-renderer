@@ -57,16 +57,17 @@ impl Histogram {
     /**
      * Print the histogram stats to the writer
      */
-    pub fn display<W: Write>(&self, mut writer: W) -> io::Result<()> {
+    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "Histogram:")?;
         let total = self.total_count();
         let percent_scale = 100.0 / (total as f64);
-        writeln!(writer, "total count: {}", total)?;
+        writeln!(writer, "  total count: {}", total)?;
         for i in 0..self.bin_count.len() {
             let count = self.bin_count[i];
             let percent = (count as f64) * percent_scale;
             writeln!(
                 writer,
-                "bins[{}]:  [{:.2}, {:.2}) --> {}  ({:.2}%)",
+                "  bins[{}]:  [{:.2}, {:.2}) --> {}  ({:.2}%)",
                 i,
                 self.lower_edge(i),
                 self.upper_edge(i),
@@ -74,6 +75,7 @@ impl Histogram {
                 percent
             )?;
         }
+        writeln!(writer)?;
         Ok(())
     }
 }
