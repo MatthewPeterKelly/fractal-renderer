@@ -11,6 +11,7 @@ approx = "0.5"
 bincode = "1.3"
 chrono = "0.4"
 clap = {version = "4.3.8", features = [ "derive" ]}
+hsv = "0.1.1"
 image = "0.24"
 iter_num_tools = "0.7.1"
 more-asserts = "0.2"

@@ -287,7 +287,7 @@ pub fn render_mandelbrot_set(
     timer.cdf = elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
-    let color_map = create_grayscale_color_map();
+    let color_map = create_color_map_black_blue_white();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
@@ -308,20 +308,48 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
-fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-    use splines::{Interpolation, Key, Spline};
+// fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+//     use splines::{Interpolation, Key, Spline};
 
-    let spline = Spline::from_vec(vec![
-        Key::new(0.0, 0.0, Interpolation::Linear),
-        Key::new(0.5, 5.0, Interpolation::Linear),
-        Key::new(0.8, 30.0, Interpolation::Linear),
-        Key::new(0.96, 90.0, Interpolation::Linear),
-        Key::new(1.0, 255.0, Interpolation::Linear),
-    ]);
+//     let spline = Spline::from_vec(vec![
+//         Key::new(0.0, 0.0, Interpolation::Linear),
+//         Key::new(0.5, 5.0, Interpolation::Linear),
+//         Key::new(0.8, 30.0, Interpolation::Linear),
+//         Key::new(0.96, 90.0, Interpolation::Linear),
+//         Key::new(1.0, 255.0, Interpolation::Linear),
+//     ]);
 
+//     move |input: f64| {
+//         let output = spline.sample(input).unwrap();
+//         let output_u8 = output as u8;
+//         image::Rgb([output_u8, output_u8, output_u8])
+//     }
+// }
+
+// fn create_double_hsv_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+//     move |input: f64| {
+//         let mut hue = 2.0 * input;
+//         if hue > 1.0 {
+//             hue -= 1.0;
+//         }
+//         hue *= 360.0;
+//         let sat = input;
+//         let value = input;
+//         let (r, g, b) = hsv::hsv_to_rgb(hue, sat, value);
+//         image::Rgb([r, g, b])
+//     }
+// }
+
+fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        let output = spline.sample(input).unwrap();
-        let output_u8 = output as u8;
-        image::Rgb([output_u8, output_u8, output_u8])
+        let mut alpha = 2.0 * input;
+        if alpha > 1.0 {
+            alpha -= 1.0;
+            let x = (255.0 * alpha) as u8;
+            image::Rgb([x, x, 255])
+        } else {
+            let x = (255.0 * alpha) as u8;
+            image::Rgb([0, 0, x])
+        }
     }
 }
