@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::{
     io::{self, Write},
     time::{Duration, Instant},
@@ -250,28 +251,23 @@ pub fn render_mandelbrot_set(
 
     timer.setup = elapsed_and_reset(&mut stopwatch);
 
-    // Generate the raw data for the fractal
-    // Eventually this will be parallelized for speed.
+    // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
-    for x in 0..params.image_resolution.re {
+    raw_data.par_extend((0..params.image_resolution.re).into_par_iter().map(|x| {
         let re = pixel_map_real.map(x);
-        let mut row: Vec<f64> = Vec::with_capacity(params.image_resolution.im as usize);
-        for y in 0..params.image_resolution.im {
-            let im = pixel_map_imag.map(y);
-            let result = MandelbrotSequence::normalized_escape_count(
-                &nalgebra::Complex::<f64>::new(re, im),
-                params.escape_radius_squared,
-                params.max_iter_count,
-                params.refinement_count,
-            );
-            if let Some(iter) = result {
-                row.push(iter);
-            } else {
-                row.push(0.0);
-            }
-        }
-        raw_data.push(row);
-    }
+        (0..params.image_resolution.im)
+            .map(|y| {
+                let im = pixel_map_imag.map(y);
+                let result = MandelbrotSequence::normalized_escape_count(
+                    &nalgebra::Complex::<f64>::new(re, im),
+                    params.escape_radius_squared,
+                    params.max_iter_count,
+                    params.refinement_count,
+                );
+                result.unwrap_or(0.0)
+            })
+            .collect()
+    }));
 
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
