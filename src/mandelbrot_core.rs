@@ -272,10 +272,12 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(64, params.max_iter_count as f64);
+    let mut hist = Histogram::new(128, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
-            hist.insert(val);
+            if val > 0.0 {
+                hist.insert(val);
+            }
         });
     });
 
