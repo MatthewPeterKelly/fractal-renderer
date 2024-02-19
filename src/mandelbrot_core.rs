@@ -1,4 +1,4 @@
-use rayon::prelude::*;
+use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use std::{
     io::{self, Write},
     time::{Duration, Instant},
