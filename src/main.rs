@@ -13,13 +13,17 @@ fn main() {
 
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
+            let base_name = std::path::Path::new(&params.params_path)
+                .file_stem() // Get the base name component of the path
+                .and_then(|name| name.to_str())
+                .expect("Unable to extract base name");
             crate::mandelbrot_core::render_mandelbrot_set(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time("mandelbrot_render"),
+                &crate::file_io::build_output_path_with_date_time(base_name),
                 "render",
             )
             .unwrap();
