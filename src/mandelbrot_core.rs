@@ -264,7 +264,8 @@ pub fn render_mandelbrot_set(
                     params.max_iter_count,
                     params.refinement_count,
                 );
-                result.unwrap_or(0.0)
+                // result.unwrap_or(0.0)
+                result.unwrap_or(params.max_iter_count as f64)
             })
             .collect()
     }));
