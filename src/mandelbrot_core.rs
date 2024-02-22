@@ -7,8 +7,6 @@ use std::{
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
-const NUM_HIST_BINS: usize = 4096;
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
     // Where to render?
@@ -19,6 +17,7 @@ pub struct MandelbrotParams {
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
     pub refinement_count: u32,
+    pub histogram_bin_count: usize,
 }
 
 impl Default for MandelbrotParams {
@@ -30,6 +29,7 @@ impl Default for MandelbrotParams {
             escape_radius_squared: (4.0),
             max_iter_count: (550),
             refinement_count: (5),
+            histogram_bin_count: (512),
         }
     }
 }
@@ -267,7 +267,6 @@ pub fn render_mandelbrot_set(
                     params.refinement_count,
                 );
                 result.unwrap_or(0.0)
-                // result.unwrap_or(params.max_iter_count as f64)
             })
             .collect()
     }));
@@ -275,12 +274,15 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(NUM_HIST_BINS, (params.max_iter_count + 1) as f64);
+    let mut hist = Histogram::new(
+        params.histogram_bin_count,
+        params.max_iter_count as f64,
+    );
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
             if val > 0.0 {
                 hist.insert(val);
-            } //  rm for debug hack
+            }
         });
     });
 
@@ -348,7 +350,7 @@ pub fn render_mandelbrot_set(
 
 fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        let blue = 0.8;
+        let blue = 0.7;
         if input > blue {
             let alpha = (input - blue) / (1.0 - blue);
             let x = (255.0 * alpha) as u8;

@@ -10,5 +10,6 @@
     "view_scale_real": 0.04,
     "escape_radius_squared": 10,
     "max_iter_count": 1024,
-    "refinement_count": 6
+    "refinement_count": 6,
+    "histogram_bin_count": 1024
 }

@@ -8,16 +8,18 @@ use clap::Parser;
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
+fn extract_base_name(path: &str) -> &str {
+    std::path::Path::new(path)
+        .file_stem() // Get the base name component of the path
+        .and_then(|name| name.to_str())
+        .expect("Unable to extract base name")
+}
+
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
 
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
-            let base_name = std::path::Path::new(&params.params_path)
-                .file_stem() // Get the base name component of the path
-                .and_then(|name| name.to_str())
-                .expect("Unable to extract base name");
-
             crate::mandelbrot_core::render_mandelbrot_set(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
@@ -27,8 +29,7 @@ fn main() {
                 &crate::file_io::build_output_path_with_date_time(vec![
                     "out",
                     "mandelbrot_render",
-                    base_name,
-                    "densehist",
+                    extract_base_name(&params.params_path),
                 ]),
                 "render",
             )
@@ -36,11 +37,6 @@ fn main() {
         }
 
         Some(CommandsEnum::MandelbrotSearch(params)) => {
-            let base_name = std::path::Path::new(&params.params_path)
-                .file_stem() // Get the base name component of the path
-                .and_then(|name| name.to_str())
-                .expect("Unable to extract base name");
-
             crate::mandelbrot_search::mandelbrot_search_render(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
@@ -50,7 +46,7 @@ fn main() {
                 &crate::file_io::build_output_path_with_date_time(vec![
                     "out",
                     "mandelbrot_search",
-                    base_name,
+                    extract_base_name(&params.params_path),
                 ]),
             )
             .unwrap();

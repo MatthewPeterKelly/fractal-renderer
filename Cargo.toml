@@ -11,7 +11,6 @@ approx = "0.5"
 bincode = "1.3"
 chrono = "0.4"
 clap = {version = "4.3.8", features = [ "derive" ]}
-hsv = "0.1.1"
 image = "0.24"
 iter_num_tools = "0.7.1"
 more-asserts = "0.2"
@@ -21,4 +20,4 @@ rand = "0"
 rayon = "1.8.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-splines = "4"
+# splines = "4"

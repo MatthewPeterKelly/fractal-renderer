@@ -13,7 +13,7 @@ cargo run --release --  mandelbrot-render .\examples\mandelbrot_render\complete.
 ```
 
 ```
-cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default_params.json
+cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default.json
 ```
 
 ## Testing notes:
