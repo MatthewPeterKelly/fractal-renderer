@@ -275,11 +275,11 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(NUM_HIST_BINS, params.max_iter_count as f64);
+    let mut hist = Histogram::new(NUM_HIST_BINS, ((params.max_iter_count + 1) as f64).ln());
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
             if val > 0.0 {
-                hist.insert(val);
+                hist.insert((val + 1.0).ln());
             } //  rm for debug hack
         });
     });
@@ -294,7 +294,7 @@ pub fn render_mandelbrot_set(
     // Iterate over the coordinates and pixels of the image
     let color_map = create_color_map_black_blue_white();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
+        *pixel = color_map(cdf.percentile((1.0 + raw_data[x as usize][y as usize]).ln()));
     }
 
     timer.color_map = elapsed_and_reset(&mut stopwatch);
