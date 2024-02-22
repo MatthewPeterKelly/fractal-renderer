@@ -7,7 +7,7 @@ use std::{
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
-const NUM_HIST_BINS: usize = 256;
+const NUM_HIST_BINS: usize = 4096;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
@@ -275,11 +275,11 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(NUM_HIST_BINS, ((params.max_iter_count + 1) as f64).ln());
+    let mut hist = Histogram::new(NUM_HIST_BINS, (params.max_iter_count + 1) as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
             if val > 0.0 {
-                hist.insert((val + 1.0).ln());
+                hist.insert(val);
             } //  rm for debug hack
         });
     });
@@ -294,7 +294,7 @@ pub fn render_mandelbrot_set(
     // Iterate over the coordinates and pixels of the image
     let color_map = create_color_map_black_blue_white();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(cdf.percentile((1.0 + raw_data[x as usize][y as usize]).ln()));
+        *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
     timer.color_map = elapsed_and_reset(&mut stopwatch);
@@ -348,12 +348,13 @@ pub fn render_mandelbrot_set(
 
 fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        let mut alpha = 2.0 * input;
-        if alpha > 1.0 {
-            alpha -= 1.0;
+        let blue = 0.8;
+        if input > blue {
+            let alpha = (input - blue) / (1.0 - blue);
             let x = (255.0 * alpha) as u8;
             image::Rgb([x, x, 255])
         } else {
+            let alpha = input / blue;
             let x = (255.0 * alpha) as u8;
             image::Rgb([0, 0, x])
         }

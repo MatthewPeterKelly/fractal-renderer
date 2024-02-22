@@ -28,6 +28,7 @@ fn main() {
                     "out",
                     "mandelbrot_render",
                     base_name,
+                    "densehist",
                 ]),
                 "render",
             )
