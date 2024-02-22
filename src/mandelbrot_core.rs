@@ -7,6 +7,8 @@ use std::{
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
+const NUM_HIST_BINS: usize = 128;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
     // Where to render?
@@ -273,12 +275,12 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(128, params.max_iter_count as f64);
+    let mut hist = Histogram::new(NUM_HIST_BINS, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
-            if val > 0.0 {
-                hist.insert(val);
-            }
+            // if val > 0.0 {
+            hist.insert(val);
+            // }
         });
     });
 
@@ -306,6 +308,7 @@ pub fn render_mandelbrot_set(
             .expect("failed to create diagnostics file");
     let mut diagnostics_file = std::io::BufWriter::new(file);
     timer.display(&mut diagnostics_file)?;
+    cdf.display(&mut diagnostics_file)?;
     hist.display(&mut diagnostics_file)?;
 
     Ok(())

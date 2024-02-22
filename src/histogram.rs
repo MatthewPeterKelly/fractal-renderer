@@ -138,4 +138,24 @@ impl CumulativeDistributionFunction {
         let index = (data * self.data_to_index_scale) as usize;
         self.offset[index] + data * self.scale[index]
     }
+
+    /**
+     * Print the CDF to the writer for debug
+     */
+    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "CDF:")?;
+        let n_bins = self.offset.len();
+        writeln!(
+            writer,
+            "  n_bins: {}, min_data: {}, max_data: {}",
+            n_bins, self.min_data, self.max_data
+        )?;
+        let scale = 1.0 / self.data_to_index_scale;
+        for i in 0..(n_bins + 1) {
+            let data = (i as f64) * scale;
+            writeln!(writer, "  {:.1}  -->  {:.4}", data, self.percentile(data))?;
+        }
+        writeln!(writer)?;
+        Ok(())
+    }
 }
