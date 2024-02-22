@@ -24,7 +24,11 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time("mandelbrot_render", base_name),
+                &crate::file_io::build_output_path_with_date_time(vec![
+                    "out",
+                    "mandelbrot_render",
+                    base_name,
+                ]),
                 "render",
             )
             .unwrap();
@@ -42,7 +46,11 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time("mandelbrot_search", base_name),
+                &crate::file_io::build_output_path_with_date_time(vec![
+                    "out",
+                    "mandelbrot_search",
+                    base_name,
+                ]),
             )
             .unwrap();
         }
