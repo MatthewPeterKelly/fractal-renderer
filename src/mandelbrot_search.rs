@@ -16,6 +16,7 @@ pub struct MandelbrotSearchParams {
     pub render_max_iter_count: u32,
     pub render_refinement_count: u32,
     pub render_view_scale_real: f64,
+    pub render_histogram_bin_count: usize,
 
     // Search region:
     pub center: nalgebra::Complex<f64>,
@@ -46,6 +47,7 @@ impl Default for MandelbrotSearchParams {
             render_max_iter_count: (550),
             render_refinement_count: (5),
             render_view_scale_real: (0.15),
+            render_histogram_bin_count: (512),
 
             center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
             view_scale: nalgebra::Complex::<f64>::new(3.0, 2.0),
@@ -145,6 +147,7 @@ pub fn mandelbrot_search_render(
                 escape_radius_squared: params.render_escape_radius_squared,
                 max_iter_count: params.render_max_iter_count,
                 refinement_count: params.render_refinement_count,
+                histogram_bin_count: params.render_histogram_bin_count,
             };
 
             let render_result = render_mandelbrot_set(

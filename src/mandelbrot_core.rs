@@ -17,6 +17,7 @@ pub struct MandelbrotParams {
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
     pub refinement_count: u32,
+    pub histogram_bin_count: usize,
 }
 
 impl Default for MandelbrotParams {
@@ -28,6 +29,7 @@ impl Default for MandelbrotParams {
             escape_radius_squared: (4.0),
             max_iter_count: (550),
             refinement_count: (5),
+            histogram_bin_count: (512),
         }
     }
 }
@@ -272,10 +274,12 @@ pub fn render_mandelbrot_set(
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(64, params.max_iter_count as f64);
+    let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
-            hist.insert(val);
+            if val > 0.0 {
+                hist.insert(val);
+            }
         });
     });
 
@@ -287,7 +291,7 @@ pub fn render_mandelbrot_set(
     timer.cdf = elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
-    let color_map = create_grayscale_color_map();
+    let color_map = create_color_map_black_blue_white();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
@@ -303,25 +307,55 @@ pub fn render_mandelbrot_set(
             .expect("failed to create diagnostics file");
     let mut diagnostics_file = std::io::BufWriter::new(file);
     timer.display(&mut diagnostics_file)?;
+    cdf.display(&mut diagnostics_file)?;
     hist.display(&mut diagnostics_file)?;
 
     Ok(())
 }
 
-fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-    use splines::{Interpolation, Key, Spline};
+// fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+//     use splines::{Interpolation, Key, Spline};
 
-    let spline = Spline::from_vec(vec![
-        Key::new(0.0, 0.0, Interpolation::Linear),
-        Key::new(0.5, 5.0, Interpolation::Linear),
-        Key::new(0.8, 30.0, Interpolation::Linear),
-        Key::new(0.96, 90.0, Interpolation::Linear),
-        Key::new(1.0, 255.0, Interpolation::Linear),
-    ]);
+//     let spline = Spline::from_vec(vec![
+//         Key::new(0.0, 0.0, Interpolation::Linear),
+//         Key::new(0.5, 5.0, Interpolation::Linear),
+//         Key::new(0.8, 30.0, Interpolation::Linear),
+//         Key::new(0.96, 90.0, Interpolation::Linear),
+//         Key::new(1.0, 255.0, Interpolation::Linear),
+//     ]);
 
+//     move |input: f64| {
+//         let output = spline.sample(input).unwrap();
+//         let output_u8 = output as u8;
+//         image::Rgb([output_u8, output_u8, output_u8])
+//     }
+// }
+
+// fn create_double_hsv_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+//     move |input: f64| {
+//         let mut hue = 2.0 * input;
+//         if hue > 1.0 {
+//             hue -= 1.0;
+//         }
+//         hue *= 360.0;
+//         let sat = input;
+//         let value = input;
+//         let (r, g, b) = hsv::hsv_to_rgb(hue, sat, value);
+//         image::Rgb([r, g, b])
+//     }
+// }
+
+fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        let output = spline.sample(input).unwrap();
-        let output_u8 = output as u8;
-        image::Rgb([output_u8, output_u8, output_u8])
+        let blue = 0.7;
+        if input > blue {
+            let alpha = (input - blue) / (1.0 - blue);
+            let x = (255.0 * alpha) as u8;
+            image::Rgb([x, x, 255])
+        } else {
+            let alpha = input / blue;
+            let x = (255.0 * alpha) as u8;
+            image::Rgb([0, 0, x])
+        }
     }
 }
