@@ -10,5 +10,5 @@
     "view_scale_real": 8.0,
     "escape_radius_squared": 4.0,
     "max_iter_count": 64,
-    "refinement_count": 5
+    "refinement_count": 0
 }

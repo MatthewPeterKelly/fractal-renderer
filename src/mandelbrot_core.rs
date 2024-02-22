@@ -7,7 +7,7 @@ use std::{
 use crate::histogram::{CumulativeDistributionFunction, Histogram};
 use serde::{Deserialize, Serialize};
 
-const NUM_HIST_BINS: usize = 128;
+const NUM_HIST_BINS: usize = 256;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
@@ -266,8 +266,8 @@ pub fn render_mandelbrot_set(
                     params.max_iter_count,
                     params.refinement_count,
                 );
-                // result.unwrap_or(0.0)
-                result.unwrap_or(params.max_iter_count as f64)
+                result.unwrap_or(0.0)
+                // result.unwrap_or(params.max_iter_count as f64)
             })
             .collect()
     }));
@@ -278,9 +278,9 @@ pub fn render_mandelbrot_set(
     let mut hist = Histogram::new(NUM_HIST_BINS, params.max_iter_count as f64);
     raw_data.iter().for_each(|row| {
         row.iter().for_each(|&val| {
-            // if val > 0.0 {
-            hist.insert(val);
-            // }
+            if val > 0.0 {
+                hist.insert(val);
+            } //  rm for debug hack
         });
     });
 
