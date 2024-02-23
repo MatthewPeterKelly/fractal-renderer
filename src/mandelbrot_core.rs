@@ -313,48 +313,18 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
-// fn create_grayscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-//     use splines::{Interpolation, Key, Spline};
-
-//     let spline = Spline::from_vec(vec![
-//         Key::new(0.0, 0.0, Interpolation::Linear),
-//         Key::new(0.5, 5.0, Interpolation::Linear),
-//         Key::new(0.8, 30.0, Interpolation::Linear),
-//         Key::new(0.96, 90.0, Interpolation::Linear),
-//         Key::new(1.0, 255.0, Interpolation::Linear),
-//     ]);
-
-//     move |input: f64| {
-//         let output = spline.sample(input).unwrap();
-//         let output_u8 = output as u8;
-//         image::Rgb([output_u8, output_u8, output_u8])
-//     }
-// }
-
-// fn create_double_hsv_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-//     move |input: f64| {
-//         let mut hue = 2.0 * input;
-//         if hue > 1.0 {
-//             hue -= 1.0;
-//         }
-//         hue *= 360.0;
-//         let sat = input;
-//         let value = input;
-//         let (r, g, b) = hsv::hsv_to_rgb(hue, sat, value);
-//         image::Rgb([r, g, b])
-//     }
-// }
-
 fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        let blue = 0.7;
-        if input > blue {
-            let alpha = (input - blue) / (1.0 - blue);
-            let x = (255.0 * alpha) as u8;
+        const THRESHOLD: f64 = 0.7;
+        if input > THRESHOLD {
+            let alpha = input - THRESHOLD;
+            const SCALE: f64 = 255.0 / (1.0 - THRESHOLD);
+            let x = (alpha * SCALE) as u8;
             image::Rgb([x, x, 255])
         } else {
-            let alpha = input / blue;
-            let x = (255.0 * alpha) as u8;
+            const SCALE: f64 = 255.0 / THRESHOLD;
+            let alpha = input * SCALE;
+            let x = alpha as u8;
             image::Rgb([0, 0, x])
         }
     }
