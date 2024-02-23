@@ -171,9 +171,10 @@ mod tests {
             let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
             println!("deserialized = {:?}", deserialized);
 
-            let filename = crate::file_io::build_output_path_with_date_time(vec!["ddp_utils"])
-                .join("binary_encoding_test.dat")
-                .to_owned();
+            let filename =
+                crate::file_io::build_output_path_with_date_time(vec!["out", "ddp_utils"])
+                    .join("binary_encoding_test.dat")
+                    .to_owned();
 
             use std::io::prelude::*;
 
