@@ -16,4 +16,5 @@ pub enum CommandsEnum {
 #[derive(Debug, Args)]
 pub struct ParameterFilePath {
     pub params_path: String,
+    pub date_time_out: bool,
 }
