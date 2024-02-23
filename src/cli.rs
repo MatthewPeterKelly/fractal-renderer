@@ -13,8 +13,9 @@ pub enum CommandsEnum {
     MandelbrotSearch(ParameterFilePath),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Default)]
 pub struct ParameterFilePath {
     pub params_path: String,
+    #[clap(long, short)]
     pub date_time_out: bool,
 }

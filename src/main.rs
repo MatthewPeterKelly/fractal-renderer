@@ -21,11 +21,14 @@ fn main() {
 
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
-            let maybe_date_time = if params.date_time_ou {
-                Some(date_time_string())
-            } else {
-                None
-            };
+            let mut dirs = vec![
+                "out",
+                "mandelbrot_render",
+                extract_base_name(&params.params_path),
+            ];
+            if params.date_time_out {
+                dirs.push(&datetime);
+            }
 
             crate::mandelbrot_core::render_mandelbrot_set(
                 &serde_json::from_str(
@@ -33,14 +36,7 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(
-                    vec![
-                        "out",
-                        "mandelbrot_render",
-                        extract_base_name(&params.params_path),
-                    ],
-                    maybe_date_time,
-                ),
+                &crate::file_io::build_output_path_with_date_time(dirs),
                 "render",
             )
             .unwrap();
@@ -53,14 +49,11 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(
-                    vec![
-                        "out",
-                        "mandelbrot_search",
-                        extract_base_name(&params.params_path),
-                    ],
-                    None(),
-                ),
+                &crate::file_io::build_output_path_with_date_time(vec![
+                    "out",
+                    "mandelbrot_search",
+                    extract_base_name(&params.params_path),
+                ]),
             )
             .unwrap();
         }
