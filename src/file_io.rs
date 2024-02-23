@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 pub fn build_output_path_with_date_time(
     mut names: Vec<&str>,
-    data_time_out: bool,
+    maybe_date_time: Option<&str>,
 ) -> std::path::PathBuf {
     let date_time = date_time_string();
-    if data_time_out {
-        names.push(&date_time);
+    if let Some(dt) = maybe_date_time {
+        names.push(dt);
     }
     let directory_path: PathBuf = names.iter().collect();
     std::fs::create_dir_all(&directory_path).unwrap();

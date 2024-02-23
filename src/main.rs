@@ -17,9 +17,16 @@ fn extract_base_name(path: &str) -> &str {
 
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
+    let datetime = file_io::date_time_string();
 
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
+            let maybe_date_time = if params.date_time_ou {
+                Some(date_time_string())
+            } else {
+                None
+            };
+
             crate::mandelbrot_core::render_mandelbrot_set(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
@@ -32,7 +39,7 @@ fn main() {
                         "mandelbrot_render",
                         extract_base_name(&params.params_path),
                     ],
-                    params.date_time_out,
+                    maybe_date_time,
                 ),
                 "render",
             )
@@ -52,7 +59,7 @@ fn main() {
                         "mandelbrot_search",
                         extract_base_name(&params.params_path),
                     ],
-                    params.date_time_out,
+                    None(),
                 ),
             )
             .unwrap();
