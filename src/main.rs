@@ -8,15 +8,9 @@ use clap::Parser;
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
-fn extract_base_name(path: &str) -> &str {
-    std::path::Path::new(path)
-        .file_stem() // Get the base name component of the path
-        .and_then(|name| name.to_str())
-        .expect("Unable to extract base name")
-}
-
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
+    let datetime = file_io::date_time_string();
 
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
@@ -26,11 +20,11 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(vec![
-                    "out",
+                &crate::file_io::build_output_path_with_date_time(
+                    params,
                     "mandelbrot_render",
-                    extract_base_name(&params.params_path),
-                ]),
+                    &datetime,
+                ),
                 "render",
             )
             .unwrap();
@@ -43,11 +37,11 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(vec![
-                    "out",
+                &crate::file_io::build_output_path_with_date_time(
+                    params,
                     "mandelbrot_search",
-                    extract_base_name(&params.params_path),
-                ]),
+                    &datetime,
+                ),
             )
             .unwrap();
         }
