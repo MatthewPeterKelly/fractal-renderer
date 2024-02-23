@@ -1,0 +1,15 @@
+{
+    "image_resolution": [
+        192,
+        108
+    ],
+    "center": [
+        -0.666259,
+        -0.442306
+    ],
+    "view_scale_real": 0.08,
+    "escape_radius_squared": 4,
+    "max_iter_count": 120,
+    "refinement_count": 2,
+    "histogram_bin_count": 250
+}
