@@ -170,11 +170,11 @@ mod tests {
             println!("Done!");
             let deserialized: FractalRawData = bincode::deserialize(&serialized[..]).unwrap();
             println!("deserialized = {:?}", deserialized);
-
-            let filename =
-                crate::file_io::build_output_path_with_date_time(vec!["out", "ddp_utils"])
-                    .join("binary_encoding_test.dat")
-                    .to_owned();
+            use std::path::PathBuf;
+            let out_dir = vec!["out", "ddp_utils"];
+            let directory_path: PathBuf = out_dir.iter().collect();
+            std::fs::create_dir_all(&directory_path).unwrap();
+            let filename = directory_path.join("binary_encoding_test.dat").to_owned();
 
             use std::io::prelude::*;
 
