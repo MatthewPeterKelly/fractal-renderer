@@ -8,6 +8,13 @@ use clap::Parser;
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
+fn build_params(params: &cli::ParameterFilePath) -> mandelbrot_core::MandelbrotParams {
+    serde_json::from_str(
+        &std::fs::read_to_string(&params.params_path).expect("Unable to read param file"),
+    )
+    .unwrap()
+}
+
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
     let datetime = file_io::date_time_string();
@@ -15,11 +22,7 @@ fn main() {
     match &args.command {
         Some(CommandsEnum::MandelbrotRender(params)) => {
             crate::mandelbrot_core::render_mandelbrot_set(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
+                &build_params(params),
                 &crate::file_io::build_output_path_with_date_time(
                     params,
                     "mandelbrot_render",
