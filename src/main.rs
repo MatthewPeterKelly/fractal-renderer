@@ -8,11 +8,15 @@ use clap::Parser;
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
-fn build_params(params: &cli::ParameterFilePath) -> mandelbrot_core::MandelbrotParams {
-    serde_json::from_str(
-        &std::fs::read_to_string(&params.params_path).expect("Unable to read param file"),
+fn build_params(cli_params: &cli::ParameterFilePath) -> mandelbrot_core::MandelbrotParams {
+    let mut mandel_params: mandelbrot_core::MandelbrotParams = serde_json::from_str(
+        &std::fs::read_to_string(&cli_params.params_path).expect("Unable to read param file"),
     )
-    .unwrap()
+    .unwrap();
+
+    mandel_params.view_scale_real *= cli_params.rescale;
+
+    mandel_params
 }
 
 fn main() {
