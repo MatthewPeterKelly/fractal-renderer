@@ -18,16 +18,6 @@ pub struct ParameterFilePath {
     pub params_path: String,
     #[clap(long, short)]
     pub date_time_out: bool,
-    #[clap(long, short)]
+    #[clap(long, short, default_value = "1.0")]
     pub rescale: f64,
-}
-
-impl Default for ParameterFilePath {
-    fn default() -> Self {
-        ParameterFilePath {
-            params_path: String::default(),
-            date_time_out: false,
-            rescale: 1.0,
-        }
-    }
 }
