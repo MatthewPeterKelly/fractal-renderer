@@ -39,7 +39,7 @@ fn main() {
                     "mandelbrot_render",
                     &datetime,
                 ),
-                "render",
+                file_io::extract_base_name(&params.params_path),
             )
             .unwrap();
         }

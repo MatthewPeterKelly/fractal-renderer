@@ -23,6 +23,12 @@ pub struct ParameterFilePath {
     #[clap(long, short)]
     pub rescale: Option<f64>,
 
-    #[clap(short, long, allow_hyphen_values, value_delimiter = ' ', num_args = 2)]
+    #[clap(
+        short,
+        long,
+        allow_negative_numbers = true,
+        value_delimiter = ' ',
+        num_args = 2
+    )]
     pub translate: Option<Vec<f64>>,
 }
