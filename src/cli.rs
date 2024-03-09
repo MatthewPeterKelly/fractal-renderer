@@ -16,8 +16,13 @@ pub enum CommandsEnum {
 #[derive(Debug, Args)]
 pub struct ParameterFilePath {
     pub params_path: String,
+
     #[clap(long, short)]
     pub date_time_out: bool,
-    #[clap(long, short, default_value = "1.0")]
-    pub rescale: f64,
+
+    #[clap(long, short)]
+    pub rescale: Option<f64>,
+
+    #[clap(short, long, allow_hyphen_values, value_delimiter = ' ', num_args = 2)]
+    pub translate: Option<Vec<f64>>,
 }
