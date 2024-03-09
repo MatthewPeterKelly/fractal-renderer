@@ -13,9 +13,22 @@ pub enum CommandsEnum {
     MandelbrotSearch(ParameterFilePath),
 }
 
-#[derive(Debug, Args, Default)]
+#[derive(Debug, Args)]
 pub struct ParameterFilePath {
     pub params_path: String,
+
     #[clap(long, short)]
     pub date_time_out: bool,
+
+    #[clap(long, short)]
+    pub rescale: Option<f64>,
+
+    #[clap(
+        short,
+        long,
+        allow_negative_numbers = true,
+        value_delimiter = ' ',
+        num_args = 2
+    )]
+    pub translate: Option<Vec<f64>>,
 }

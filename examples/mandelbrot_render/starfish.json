@@ -4,12 +4,12 @@
         400
     ],
     "center": [
-        -0.6657881227124438,
-        0.45364628022222275
+        -0.6754990000000001,
+        -0.45850599999999997
     ],
-    "view_scale_real": 0.05,
+    "view_scale_real": 0.018,
     "escape_radius_squared": 5,
-    "max_iter_count": 720,
+    "max_iter_count": 256,
     "refinement_count": 5,
     "histogram_bin_count": 1024
 }
