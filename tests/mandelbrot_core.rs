@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use approx::assert_relative_eq;
-    use fractal_renderer::mandelbrot_core::LinearPixelMap;
+    use fractal_renderer::render::LinearPixelMap;
 
     #[test]
     fn test_linear_pixel_map_domain_bounds_pos() {
