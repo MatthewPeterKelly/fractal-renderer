@@ -16,6 +16,9 @@ cargo run --release --  mandelbrot-render .\examples\mandelbrot_render\complete.
 cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default.json
 ```
 
+```
+cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\default.json
+```
 ## Testing notes:
 
 Example, run the histogram test with outputs:
