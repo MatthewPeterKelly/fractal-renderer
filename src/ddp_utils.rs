@@ -39,7 +39,7 @@ impl Default for DrivenDampedPendulumParams {
 
 impl DrivenDampedPendulumParams {
     pub fn rate_scale(&self) -> f64 {
-        self.angle_scale * (self.image_resolution[0] as f64) / (self.image_resolution[1] as f64)
+        self.angle_scale * (self.image_resolution[1] as f64) / (self.image_resolution[0] as f64)
     }
 }
 

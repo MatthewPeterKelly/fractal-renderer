@@ -1,13 +1,13 @@
 {
     "image_resolution": [
-        400,
-        300
+        1600,
+        800
     ],
     "center": [
         0.0,
         0.0
     ],
-    "angle_scale": 8.0,
+    "angle_scale": 20.0,
     "n_max_period": 128,
     "n_steps_per_period": 10,
     "periodic_state_error_tolerance": 0.005
