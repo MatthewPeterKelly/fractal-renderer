@@ -11,6 +11,7 @@ pub struct FractalRendererArgs {
 pub enum CommandsEnum {
     MandelbrotRender(ParameterFilePath),
     MandelbrotSearch(ParameterFilePath),
+    DrivenDampedPendulumRender(ParameterFilePath),
 }
 
 #[derive(Debug, Args)]

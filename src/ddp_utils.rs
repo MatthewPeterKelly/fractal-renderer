@@ -9,10 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    histogram::{CumulativeDistributionFunction, Histogram},
-    render,
-};
+use crate::render;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DrivenDampedPendulumParams {
@@ -46,19 +43,19 @@ impl DrivenDampedPendulumParams {
     }
 }
 
-/**
- * @param dimensions: local "width" and "height" of the retangle in imaginary space
- * @param center: location of the center of that rectangle
- */
-// TODO: move to render utils, once common types shared with mandelbrot.
-pub fn fractal_range(
-    dimensions: nalgebra::Vector2<f64>,
-    center: nalgebra::Vector2<f64>,
-) -> nalgebra::Vector2<std::ops::Range<f64>> {
-    let angle_range = (center[0] - 0.5 * dimensions[0])..(center[0] + 0.5 * dimensions[0]);
-    let rate_range = (center[1] - 0.5 * dimensions[1])..(center[1] + 0.5 * dimensions[1]);
-    nalgebra::Vector2::<std::ops::Range<f64>>::new(angle_range, rate_range)
-}
+// /**
+//  * @param dimensions: local "width" and "height" of the retangle in imaginary space
+//  * @param center: location of the center of that rectangle
+//  */
+// // TODO: move to render utils, once common types shared with mandelbrot.
+// pub fn fractal_range(
+//     dimensions: nalgebra::Vector2<f64>,
+//     center: nalgebra::Vector2<f64>,
+// ) -> nalgebra::Vector2<std::ops::Range<f64>> {
+//     let angle_range = (center[0] - 0.5 * dimensions[0])..(center[0] + 0.5 * dimensions[0]);
+//     let rate_range = (center[1] - 0.5 * dimensions[1])..(center[1] + 0.5 * dimensions[1]);
+//     nalgebra::Vector2::<std::ops::Range<f64>>::new(angle_range, rate_range)
+// }
 
 /**
  * Based on implementation from:
