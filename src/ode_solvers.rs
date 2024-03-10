@@ -32,7 +32,7 @@ pub fn rk4_method_step(dt: f64, t: f64, x: na::Vector2<f64>) -> na::Vector2<f64>
 pub fn midpoint_simulate(
     t_begin: f64,
     t_final: f64,
-    n_steps: i32,
+    n_steps: u32,
     x0: na::Vector2<f64>,
 ) -> na::Vector2<f64> {
     let dt = (t_final - t_begin) / (n_steps as f64);
@@ -49,7 +49,7 @@ pub fn midpoint_simulate(
 pub fn rk4_simulate(
     t_begin: f64,
     t_final: f64,
-    n_steps: i32,
+    n_steps: u32,
     x0: na::Vector2<f64>,
 ) -> na::Vector2<f64> {
     let dt = (t_final - t_begin) / (n_steps as f64);

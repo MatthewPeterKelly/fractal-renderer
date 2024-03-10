@@ -3,6 +3,7 @@ mod file_io;
 mod histogram;
 mod mandelbrot_core;
 mod mandelbrot_search;
+mod render;
 
 use clap::Parser;
 

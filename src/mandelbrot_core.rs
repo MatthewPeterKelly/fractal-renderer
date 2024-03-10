@@ -4,7 +4,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::histogram::{CumulativeDistributionFunction, Histogram};
+use crate::{
+    histogram::{CumulativeDistributionFunction, Histogram},
+    render,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -50,36 +53,6 @@ pub fn complex_range(
     let real_range = (center.re - 0.5 * dimensions.re)..(center.re + 0.5 * dimensions.re);
     let imag_range = (center.im - 0.5 * dimensions.im)..(center.im + 0.5 * dimensions.im);
     nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
-}
-
-/**
- * Used to map from image space into the complex domain.
- */
-pub struct LinearPixelMap {
-    offset: f64,
-    slope: f64,
-}
-
-impl LinearPixelMap {
-    /**
-     * @param n: number of pixels spanned by [x0,x1]
-     * @param x0: output of the map at 0
-     * @param x1: output of the map at n-1
-     */
-    pub fn new(n: u32, x0: f64, x1: f64) -> LinearPixelMap {
-        assert!(n > 0);
-        let offset = x0;
-        let slope = (x1 - x0) / ((n - 1) as f64);
-        LinearPixelMap { offset, slope }
-    }
-
-    pub fn new_from_center_and_width(n: u32, center: f64, width: f64) -> LinearPixelMap {
-        LinearPixelMap::new(n, center - 0.5 * width, center + 0.5 * width)
-    }
-
-    pub fn map(&self, index: u32) -> f64 {
-        self.offset + self.slope * (index as f64)
-    }
 }
 
 pub struct MandelbrotSequence {
@@ -240,12 +213,12 @@ pub fn render_mandelbrot_set(
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     // Mapping from image space to complex space
-    let pixel_map_real = LinearPixelMap::new_from_center_and_width(
+    let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
         params.image_resolution.re,
         params.center.re,
         params.view_scale_real,
     );
-    let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
+    let pixel_map_imag = render::LinearPixelMap::new_from_center_and_width(
         params.image_resolution.im,
         params.center.im,
         -params.view_scale_im(), // Image coordinates are upside down.
