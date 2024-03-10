@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 /**
  * Used to map from image space into the complex domain.
  */
@@ -26,4 +28,13 @@ impl LinearPixelMap {
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
     }
+}
+
+/**
+ * Small utility function that resets a stopwatch and returns the elapsed time.
+ */
+pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
+    let duration = stopwatch.elapsed();
+    *stopwatch = Instant::now();
+    duration
 }

@@ -21,6 +21,7 @@ pub struct ParameterFilePath {
     #[clap(long, short)]
     pub date_time_out: bool,
 
+    // Note: so far, only the Mandelbrot render supports the following options.
     #[clap(long, short)]
     pub rescale: Option<f64>,
 

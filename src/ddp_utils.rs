@@ -1,6 +1,3 @@
-//! Explicit ODE solvers
-
-extern crate nalgebra as na; // TODO: standardize this
 use crate::ode_solvers::rk4_simulate;
 use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -43,20 +40,6 @@ impl DrivenDampedPendulumParams {
     }
 }
 
-// /**
-//  * @param dimensions: local "width" and "height" of the retangle in imaginary space
-//  * @param center: location of the center of that rectangle
-//  */
-// // TODO: move to render utils, once common types shared with mandelbrot.
-// pub fn fractal_range(
-//     dimensions: nalgebra::Vector2<f64>,
-//     center: nalgebra::Vector2<f64>,
-// ) -> nalgebra::Vector2<std::ops::Range<f64>> {
-//     let angle_range = (center[0] - 0.5 * dimensions[0])..(center[0] + 0.5 * dimensions[0]);
-//     let rate_range = (center[1] - 0.5 * dimensions[1])..(center[1] + 0.5 * dimensions[1]);
-//     nalgebra::Vector2::<std::ops::Range<f64>>::new(angle_range, rate_range)
-// }
-
 /**
  * Based on implementation from:
  * https://www.dropbox.com/home/mpk/Documents/Random_Projects/Driven_Damped_Pendulum/Version%202?preview=Driven_Damped_Pendulum.m
@@ -65,19 +48,22 @@ impl DrivenDampedPendulumParams {
  *
  * Note: hard-codes all parameters, eventually it might be nice to generalize it.
  */
-pub fn driven_damped_pendulum_dynamics(t: f64, x: na::Vector2<f64>) -> na::Vector2<f64> {
+pub fn driven_damped_pendulum_dynamics(
+    t: f64,
+    x: nalgebra::Vector2<f64>,
+) -> nalgebra::Vector2<f64> {
     let q = x[0]; // angle
     let v = x[1]; // rate
     let v_dot = t.cos() - 0.1 * v - q.sin();
-    na::Vector2::new(v, v_dot)
+    nalgebra::Vector2::new(v, v_dot)
 }
 
 // TODO:  move to DDP class
 // This function should be called in-phase with the driving function.
 // The exact phase is not important, only that it is consistent.
 pub fn driven_damped_pendulum_attractor(
-    x: na::Vector2<f64>,
-    x_prev: na::Vector2<f64>,
+    x: nalgebra::Vector2<f64>,
+    x_prev: nalgebra::Vector2<f64>,
     tol: f64,
 ) -> Option<i32> {
     let delta = x - x_prev;
@@ -100,7 +86,7 @@ pub fn compute_basin_index(angle: f64) -> i32 {
 // - basin at termination
 // - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(
-    x_begin: na::Vector2<f64>,
+    x_begin: nalgebra::Vector2<f64>,
     n_max_period: u32,
     n_steps_per_period: u32,
     periodic_state_error_tolerance: f64,
@@ -136,13 +122,6 @@ impl MeasuredElapsedTime {
     }
 }
 
-// TODO:  library?
-pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
-    let duration = stopwatch.elapsed();
-    *stopwatch = Instant::now();
-    duration
-}
-
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
     directory_path: &std::path::Path,
@@ -173,9 +152,9 @@ pub fn render_driven_damped_pendulum_attractor(
         -params.rate_scale(), // Image coordinates are upside down.
     );
 
-    // TODO:  everything above this could be shared
+    // Note:  everything above this could be shared, as well as some other stuff
 
-    timer.setup = elapsed_and_reset(&mut stopwatch);
+    timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
@@ -199,7 +178,7 @@ pub fn render_driven_damped_pendulum_attractor(
             .collect()
     }));
 
-    timer.simulation = elapsed_and_reset(&mut stopwatch);
+    timer.simulation = render::elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = simple_black_and_white_color_map();
@@ -209,7 +188,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
-    timer.write_png = elapsed_and_reset(&mut stopwatch);
+    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
 
     println!("Wrote image file to: {}", render_path.display());
 

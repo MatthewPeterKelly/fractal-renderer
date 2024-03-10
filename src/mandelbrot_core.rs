@@ -55,6 +55,10 @@ pub fn complex_range(
     nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
 }
 
+/**
+ * Data structure for storing the internal state of the mandelbrot sequence calculation.
+ * Highly optimized version of the equation to reduce floating point operation count.
+ */
 pub struct MandelbrotSequence {
     pub x0: f64,
     pub y0: f64,
@@ -188,12 +192,6 @@ impl MeasuredElapsedTime {
     }
 }
 
-pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
-    let duration = stopwatch.elapsed();
-    *stopwatch = Instant::now();
-    duration
-}
-
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
     directory_path: &std::path::Path,
@@ -224,7 +222,7 @@ pub fn render_mandelbrot_set(
         -params.view_scale_im(), // Image coordinates are upside down.
     );
 
-    timer.setup = elapsed_and_reset(&mut stopwatch);
+    timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
@@ -244,7 +242,7 @@ pub fn render_mandelbrot_set(
             .collect()
     }));
 
-    timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
+    timer.mandelbrot = render::elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f64);
@@ -256,12 +254,12 @@ pub fn render_mandelbrot_set(
         });
     });
 
-    timer.histogram = elapsed_and_reset(&mut stopwatch);
+    timer.histogram = render::elapsed_and_reset(&mut stopwatch);
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
 
-    timer.cdf = elapsed_and_reset(&mut stopwatch);
+    timer.cdf = render::elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_color_map_black_blue_white();
@@ -269,11 +267,11 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    timer.color_map = elapsed_and_reset(&mut stopwatch);
+    timer.color_map = render::elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
-    timer.write_png = elapsed_and_reset(&mut stopwatch);
+    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
 
     println!("Wrote image file to: {}", render_path.display());
 
