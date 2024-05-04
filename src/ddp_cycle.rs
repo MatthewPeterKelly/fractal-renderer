@@ -1,5 +1,3 @@
-use crate::ode_solvers::rk4_simulate;
-use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
