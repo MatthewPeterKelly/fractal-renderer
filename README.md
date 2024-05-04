@@ -17,7 +17,10 @@ cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default.js
 ```
 
 ```
+# Windows:
 cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\default.json
+# Linux:
+cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/default.json
 ```
 ## Testing notes:
 
