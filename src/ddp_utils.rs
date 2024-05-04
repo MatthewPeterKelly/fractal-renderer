@@ -9,12 +9,18 @@ use std::{
 use crate::render;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum TimePhaseSpecification {
+    Snapshot(f64),
+    Series { low: f64, upp: f64, count: u32 },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DrivenDampedPendulumParams {
     // Where to render?
     pub image_resolution: nalgebra::Vector2<u32>,
     pub center: nalgebra::Vector2<f64>,
-    pub angle_scale: f64,         // angle_max - angle_min
-    pub time_phase_fraction: f64, // [0, 1] phase offset for the time used in the driving function
+    pub angle_scale: f64,                   // angle_max - angle_min
+    pub time_phase: TimePhaseSpecification, // See above.
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
     pub n_steps_per_period: u32,
@@ -28,7 +34,7 @@ impl Default for DrivenDampedPendulumParams {
             image_resolution: nalgebra::Vector2::<u32>::new(400, 300),
             center: nalgebra::Vector2::<f64>::new(0.0, 0.0),
             angle_scale: std::f64::consts::TAU,
-            time_phase_fraction: (0.0),
+            time_phase: TimePhaseSpecification::Snapshot(0.0),
             n_max_period: (100),
             n_steps_per_period: (10),
             periodic_state_error_tolerance: (1e-4),
@@ -161,6 +167,11 @@ pub fn render_driven_damped_pendulum_attractor(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
+    let time_phase_fraction = match params.time_phase {
+        TimePhaseSpecification::Snapshot(time) => time,
+        TimePhaseSpecification::Series { low, upp, count } => low,
+    };
+
     // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
     raw_data.par_extend((0..params.image_resolution[0]).into_par_iter().map(|x| {
@@ -170,7 +181,7 @@ pub fn render_driven_damped_pendulum_attractor(
                 let rate = pixel_map_imag.map(y);
                 let result = compute_basin_of_attraction(
                     nalgebra::Vector2::<f64>::new(angle, rate),
-                    params.time_phase_fraction,
+                    time_phase_fraction,
                     params.n_max_period,
                     params.n_steps_per_period,
                     params.periodic_state_error_tolerance,
