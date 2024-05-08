@@ -8,13 +8,13 @@ use std::{
 
 use crate::render;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TimePhaseSpecification {
     Snapshot(f64),
     Series { low: f64, upp: f64, count: u32 },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
     // Where to render?
     pub image_resolution: nalgebra::Vector2<u32>,
@@ -141,15 +141,36 @@ pub fn render_driven_damped_pendulum_attractor(
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
 
+    // write out the parameters to a file:
+    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
+
+    // decide whether to split out to create multiple images, or just continue with a snapshot:
+    let time_phase_fraction = match params.time_phase {
+        TimePhaseSpecification::Snapshot(time) => time,
+        TimePhaseSpecification::Series { low, upp, count } => {
+            let scale = (count as f64) / (upp - low);
+            let inner_directory_path = directory_path.join("series");
+            for idx in 0..count {
+                let time = (idx as f64) * scale;
+                let mut inner_params = params.clone();
+                inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
+                render_driven_damped_pendulum_attractor(
+                    &inner_params,
+                    &inner_directory_path,
+                    &format!("{}_{}", file_prefix, idx),
+                )?;
+            }
+            // TODO: add timing diagnostics file too
+            return Ok(());
+        }
+    };
+
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
-
-    // write out the parameters too:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
-    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     // Mapping from image space to complex space
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
@@ -166,11 +187,6 @@ pub fn render_driven_damped_pendulum_attractor(
     // Note:  everything above this could be shared, as well as some other stuff
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
-
-    let time_phase_fraction = match params.time_phase {
-        TimePhaseSpecification::Snapshot(time) => time,
-        TimePhaseSpecification::Series { low, upp, count } => low,
-    };
 
     // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
