@@ -4,12 +4,12 @@
         160
     ],
     "center": [
-        0.0,
-        0.0
+        0,
+        0
     ],
-    "angle_scale": 16.0,
+    "angle_scale": 16,
     "time_phase": {
-        "Snapshot": 0.0
+        "Snapshot": 0
     },
     "n_max_period": 200,
     "n_steps_per_period": 24,

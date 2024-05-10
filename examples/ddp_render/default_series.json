@@ -1,7 +1,7 @@
 {
     "image_resolution": [
-        240,
-        160
+        480,
+        240
     ],
     "center": [
         0.0,
@@ -12,7 +12,7 @@
         "Series": {
             "low": 0.0,
             "upp": 1.0,
-            "count": 6
+            "count": 10
           }
     },
     "n_max_period": 200,

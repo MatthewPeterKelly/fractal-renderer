@@ -143,16 +143,19 @@ pub fn render_driven_damped_pendulum_attractor(
 
     // write out the parameters to a file:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
-    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
+    let params_str = serde_json::to_string(params)?;
+    std::fs::write(params_path, params_str).expect("Unable to write params file.");
 
     // decide whether to split out to create multiple images, or just continue with a snapshot:
     let time_phase_fraction = match params.time_phase {
         TimePhaseSpecification::Snapshot(time) => time,
         TimePhaseSpecification::Series { low, upp, count } => {
-            let scale = (count as f64) / (upp - low);
+            more_asserts::assert_gt!(count, 0);
+            let scale = (upp - low) / (count as f64);
             let inner_directory_path = directory_path.join("series");
+            std::fs::create_dir_all(&inner_directory_path).unwrap();
             for idx in 0..count {
-                let time = (idx as f64) * scale;
+                let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
                 inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
                 render_driven_damped_pendulum_attractor(
