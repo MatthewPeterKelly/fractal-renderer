@@ -26,3 +26,16 @@ Example, run the histogram test with outputs:
 cargo test --test histogram
 cargo test --test mandelbrot_core
 ```
+
+## Windows Rust Dummy Notes
+
+Stack Trace:
+```
+$env:RUST_BACKTRACE=1; cargo run
+```
+
+## Rendering an image series to an animation:
+Run this from the output directory where the images are:
+```
+ffmpeg -framerate 30 -i high_res_series_%d.png -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p high_res_series.mp4
+```
