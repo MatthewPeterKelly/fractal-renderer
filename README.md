@@ -19,6 +19,16 @@ cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default.js
 ```
 cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\default.json
 ```
+
+## Autoformatting:
+
+```
+cargo fmt
+```
+```
+cargo clippy --fix
+```
+
 ## Testing notes:
 
 Example, run the histogram test with outputs:
