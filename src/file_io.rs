@@ -36,3 +36,13 @@ pub fn date_time_string() -> String {
         local_time.minute()
     )
 }
+
+pub fn create_text_file(
+    directory_path: &std::path::Path,
+    prefix: &str,
+    suffix: &str,
+) -> std::io::BufWriter<std::fs::File> {
+    let path = directory_path.join(prefix.to_owned() + suffix);
+    let file = std::fs::File::create(path).expect("failed to create diagnostics file"); // TODO:  better msg
+    std::io::BufWriter::new(file)
+}

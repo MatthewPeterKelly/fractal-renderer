@@ -167,12 +167,11 @@ pub fn render_driven_damped_pendulum_attractor(
                 )?;
             }
             timer.simulation = render::elapsed_and_reset(&mut stopwatch);
-            let file = std::fs::File::create(
-                directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"),
-            )
-            .expect("failed to create diagnostics file");
-            let mut diagnostics_file = std::io::BufWriter::new(file);
-            timer.display(&mut diagnostics_file)?;
+            timer.display(&mut crate::file_io::create_text_file(
+                directory_path,
+                file_prefix,
+                "_diagnostics.txt",
+            ))?;
             return Ok(());
         }
     };
