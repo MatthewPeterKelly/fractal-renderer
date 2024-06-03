@@ -275,10 +275,9 @@ pub fn render_mandelbrot_set(
 
     println!("Wrote image file to: {}", render_path.display());
 
-    let file =
-        std::fs::File::create(directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"))
-            .expect("failed to create diagnostics file");
-    let mut diagnostics_file = std::io::BufWriter::new(file);
+    let mut diagnostics_file =
+        crate::file_io::create_text_file(directory_path, file_prefix, "_diagnostics.txt");
+
     timer.display(&mut diagnostics_file)?;
     cdf.display(&mut diagnostics_file)?;
     hist.display(&mut diagnostics_file)?;
