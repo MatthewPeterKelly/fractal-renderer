@@ -13,7 +13,7 @@
             "low": 0.0,
             "upp": 1.0,
             "count": 600
-          }
+        }
     },
     "n_max_period": 256,
     "n_steps_per_period": 32,

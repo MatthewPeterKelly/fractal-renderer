@@ -154,6 +154,8 @@ pub fn render_driven_damped_pendulum_attractor(
             let scale = (upp - low) / (count as f64);
             let inner_directory_path = directory_path.join("series");
             std::fs::create_dir_all(&inner_directory_path).unwrap();
+
+            timer.setup = render::elapsed_and_reset(&mut stopwatch);
             for idx in 0..count {
                 let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
@@ -164,7 +166,13 @@ pub fn render_driven_damped_pendulum_attractor(
                     &format!("{}_{}", file_prefix, idx),
                 )?;
             }
-            // TODO: add timing diagnostics file too
+            timer.simulation = render::elapsed_and_reset(&mut stopwatch);
+            let file = std::fs::File::create(
+                directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"),
+            )
+            .expect("failed to create diagnostics file");
+            let mut diagnostics_file = std::io::BufWriter::new(file);
+            timer.display(&mut diagnostics_file)?;
             return Ok(());
         }
     };
