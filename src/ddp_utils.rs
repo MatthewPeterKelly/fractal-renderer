@@ -8,13 +8,19 @@ use std::{
 
 use crate::render;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TimePhaseSpecification {
+    Snapshot(f64),
+    Series { low: f64, upp: f64, count: u32 },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
     // Where to render?
     pub image_resolution: nalgebra::Vector2<u32>,
     pub center: nalgebra::Vector2<f64>,
-    pub angle_scale: f64,      // angle_max - angle_min
-    pub t_phase_fraction: f64, // [0, 1] phase offset for the time used in the driving function
+    pub angle_scale: f64,                   // angle_max - angle_min
+    pub time_phase: TimePhaseSpecification, // See above.
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
     pub n_steps_per_period: u32,
@@ -28,7 +34,7 @@ impl Default for DrivenDampedPendulumParams {
             image_resolution: nalgebra::Vector2::<u32>::new(400, 300),
             center: nalgebra::Vector2::<f64>::new(0.0, 0.0),
             angle_scale: std::f64::consts::TAU,
-            t_phase_fraction: (0.0),
+            time_phase: TimePhaseSpecification::Snapshot(0.0),
             n_max_period: (100),
             n_steps_per_period: (10),
             periodic_state_error_tolerance: (1e-4),
@@ -89,14 +95,14 @@ pub fn compute_basin_index(angle: f64) -> i32 {
 // - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(
     x_begin: nalgebra::Vector2<f64>,
-    t_phase_fraction: f64, // [0, 1] driving function phase offset
+    time_phase_fraction: f64, // [0, 1] driving function phase offset
     n_max_period: u32,
     n_steps_per_period: u32,
     periodic_state_error_tolerance: f64,
 ) -> Option<i32> {
     const TWO_PI: f64 = 2.0 * std::f64::consts::PI;
-    let t_begin = t_phase_fraction * TWO_PI;
-    let t_final = (t_phase_fraction + 1.0) * TWO_PI;
+    let t_begin = time_phase_fraction * TWO_PI;
+    let t_final = (time_phase_fraction + 1.0) * TWO_PI;
     let mut x = x_begin;
     for _ in 0..n_max_period {
         let x_prev = x;
@@ -135,15 +141,47 @@ pub fn render_driven_damped_pendulum_attractor(
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
 
+    // write out the parameters to a file:
+    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    let params_str = serde_json::to_string(params)?;
+    std::fs::write(params_path, params_str).expect("Unable to write params file.");
+
+    // decide whether to split out to create multiple images, or just continue with a snapshot:
+    let time_phase_fraction = match params.time_phase {
+        TimePhaseSpecification::Snapshot(time) => time,
+        TimePhaseSpecification::Series { low, upp, count } => {
+            more_asserts::assert_gt!(count, 0);
+            let scale = (upp - low) / (count as f64);
+            let inner_directory_path = directory_path.join("series");
+            std::fs::create_dir_all(&inner_directory_path).unwrap();
+
+            timer.setup = render::elapsed_and_reset(&mut stopwatch);
+            for idx in 0..count {
+                let time = low + (idx as f64) * scale;
+                let mut inner_params = params.clone();
+                inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
+                render_driven_damped_pendulum_attractor(
+                    &inner_params,
+                    &inner_directory_path,
+                    &format!("{}_{}", file_prefix, idx),
+                )?;
+            }
+            timer.simulation = render::elapsed_and_reset(&mut stopwatch);
+            let file = std::fs::File::create(
+                directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"),
+            )
+            .expect("failed to create diagnostics file");
+            let mut diagnostics_file = std::io::BufWriter::new(file);
+            timer.display(&mut diagnostics_file)?;
+            return Ok(());
+        }
+    };
+
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
-
-    // write out the parameters too:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
-    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     // Mapping from image space to complex space
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
@@ -170,7 +208,7 @@ pub fn render_driven_damped_pendulum_attractor(
                 let rate = pixel_map_imag.map(y);
                 let result = compute_basin_of_attraction(
                     nalgebra::Vector2::<f64>::new(angle, rate),
-                    params.t_phase_fraction,
+                    time_phase_fraction,
                     params.n_max_period,
                     params.n_steps_per_period,
                     params.periodic_state_error_tolerance,

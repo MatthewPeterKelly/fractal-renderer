@@ -1,7 +1,7 @@
 {
     "image_resolution": [
-        1200,
-        800
+        1920,
+        1080
     ],
     "center": [
         0.0,
@@ -9,9 +9,13 @@
     ],
     "angle_scale": 16.0,
     "time_phase": {
-        "Snapshot": 0.0
+        "Series": {
+            "low": 0.0,
+            "upp": 1.0,
+            "count": 600
+        }
     },
-    "n_max_period": 200,
+    "n_max_period": 256,
     "n_steps_per_period": 32,
     "periodic_state_error_tolerance": 0.002
 }

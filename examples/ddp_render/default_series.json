@@ -1,0 +1,21 @@
+{
+    "image_resolution": [
+        640,
+        480
+    ],
+    "center": [
+        0.0,
+        0.0
+    ],
+    "angle_scale": 16.0,
+    "time_phase": {
+        "Series": {
+            "low": 0.0,
+            "upp": 1.0,
+            "count": 32
+        }
+    },
+    "n_max_period": 120,
+    "n_steps_per_period": 18,
+    "periodic_state_error_tolerance": 0.01
+}
