@@ -6,7 +6,7 @@ Initial goal:  write a simple CLI for generating high-quality images of the mand
 
 Long-term goal:  add support for zoom sequences and other fractals, along with (maybe?) a browser interface.
 
-## Usage:
+## Usage (Windows)
 
 ```
 cargo run --release --  mandelbrot-render .\examples\mandelbrot_render\complete.json
@@ -18,6 +18,26 @@ cargo run --release -- mandelbrot-search .\examples\mandelbrot_search\default.js
 
 ```
 cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\default.json
+```
+```
+cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\default_series.json
+```
+
+## Usage (Unix-Based)
+
+```
+cargo run --release --  mandelbrot-render ./examples/mandelbrot_render/complete.json
+```
+
+```
+cargo run --release -- mandelbrot-search ./examples/mandelbrot_search/default.json
+```
+
+```
+cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/default.json
+```
+```
+cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/default_series.json
 ```
 
 ## Autoformatting:

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 /**
- * Used to map from image space into the complex domain.
+ * Used to map from image space into the "regular" domain used to generate the fractals.
  */
 pub struct LinearPixelMap {
     offset: f64,

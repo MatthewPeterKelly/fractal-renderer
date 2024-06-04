@@ -1,7 +1,7 @@
 {
     "image_resolution": [
-        1200,
-        800
+        800,
+        600
     ],
     "center": [
         0.0,
@@ -11,7 +11,7 @@
     "time_phase": {
         "Snapshot": 0.0
     },
-    "n_max_period": 200,
-    "n_steps_per_period": 32,
-    "periodic_state_error_tolerance": 0.002
+    "n_max_period": 100,
+    "n_steps_per_period": 24,
+    "periodic_state_error_tolerance": 0.005
 }

@@ -210,7 +210,7 @@ pub fn render_mandelbrot_set(
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
-    // Mapping from image space to complex space
+    // Mapping from image space to regular space
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
         params.image_resolution[0],
         params.center[0],

@@ -182,7 +182,7 @@ pub fn render_driven_damped_pendulum_attractor(
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
 
-    // Mapping from image space to complex space
+    // Mapping from image space to regular space
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
         params.image_resolution[0],
         params.center[0],
