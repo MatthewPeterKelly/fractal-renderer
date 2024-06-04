@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
     // Where to render?
-    pub image_resolution: nalgebra::Complex<u32>,
-    pub center: nalgebra::Complex<f64>,
+    pub image_resolution: nalgebra::Vector2<u32>,
+    pub center: nalgebra::Vector2<f64>,
     pub view_scale_real: f64,
     // Convergence criteria
     pub escape_radius_squared: f64,
@@ -26,8 +26,8 @@ pub struct MandelbrotParams {
 impl Default for MandelbrotParams {
     fn default() -> MandelbrotParams {
         MandelbrotParams {
-            image_resolution: nalgebra::Complex::<u32>::new(1920, 1080),
-            center: nalgebra::Complex::<f64>::new(-0.2, 0.0),
+            image_resolution: nalgebra::Vector2::<u32>::new(1920, 1080),
+            center: nalgebra::Vector2::<f64>::new(-0.2, 0.0),
             view_scale_real: (3.0),
             escape_radius_squared: (4.0),
             max_iter_count: (550),
@@ -38,7 +38,7 @@ impl Default for MandelbrotParams {
 }
 impl MandelbrotParams {
     pub fn view_scale_im(&self) -> f64 {
-        self.view_scale_real * (self.image_resolution.im as f64) / (self.image_resolution.re as f64)
+        self.view_scale_real * (self.image_resolution[1] as f64) / (self.image_resolution[0] as f64)
     }
 }
 
@@ -47,12 +47,12 @@ impl MandelbrotParams {
  * @param center: location of the center of that rectangle
  */
 pub fn complex_range(
-    dimensions: nalgebra::Complex<f64>,
-    center: nalgebra::Complex<f64>,
-) -> nalgebra::Complex<std::ops::Range<f64>> {
-    let real_range = (center.re - 0.5 * dimensions.re)..(center.re + 0.5 * dimensions.re);
-    let imag_range = (center.im - 0.5 * dimensions.im)..(center.im + 0.5 * dimensions.im);
-    nalgebra::Complex::<std::ops::Range<f64>>::new(real_range, imag_range)
+    dimensions: nalgebra::Vector2<f64>,
+    center: nalgebra::Vector2<f64>,
+) -> nalgebra::Vector2<std::ops::Range<f64>> {
+    let real_range = (center[0] - 0.5 * dimensions[0])..(center[0] + 0.5 * dimensions[0]);
+    let imag_range = (center[1] - 0.5 * dimensions[1])..(center[1] + 0.5 * dimensions[1]);
+    nalgebra::Vector2::<std::ops::Range<f64>>::new(real_range, imag_range)
 }
 
 /**
@@ -70,10 +70,10 @@ pub struct MandelbrotSequence {
 }
 
 impl MandelbrotSequence {
-    fn new(point: &nalgebra::Complex<f64>) -> MandelbrotSequence {
+    fn new(point: &nalgebra::Vector2<f64>) -> MandelbrotSequence {
         let mut value = MandelbrotSequence {
-            x0: point.re,
-            y0: point.im,
+            x0: point[0],
+            y0: point[1],
             x_sqr: 0.0,
             y_sqr: 0.0,
             x: 0.0,
@@ -149,7 +149,7 @@ impl MandelbrotSequence {
     /// @param refinement_count: normalize the escape count, providing smooth interpolation between integer "escape count" values.
     /// @return: normalized (smooth) iteration count if the point escapes, otherwise None().
     pub fn normalized_escape_count(
-        test_point: &nalgebra::Complex<f64>,
+        test_point: &nalgebra::Vector2<f64>,
         escape_radius_squared: f64,
         max_iter_count: u32,
         refinement_count: u32,
@@ -204,7 +204,7 @@ pub fn render_mandelbrot_set(
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf =
-        image::ImageBuffer::new(params.image_resolution.re, params.image_resolution.im);
+        image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
 
     // write out the parameters too:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
@@ -212,27 +212,27 @@ pub fn render_mandelbrot_set(
 
     // Mapping from image space to complex space
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution.re,
-        params.center.re,
+        params.image_resolution[0],
+        params.center[0],
         params.view_scale_real,
     );
     let pixel_map_imag = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution.im,
-        params.center.im,
+        params.image_resolution[1],
+        params.center[1],
         -params.view_scale_im(), // Image coordinates are upside down.
     );
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
-    raw_data.par_extend((0..params.image_resolution.re).into_par_iter().map(|x| {
+    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
+    raw_data.par_extend((0..params.image_resolution[0]).into_par_iter().map(|x| {
         let re = pixel_map_real.map(x);
-        (0..params.image_resolution.im)
+        (0..params.image_resolution[1])
             .map(|y| {
                 let im = pixel_map_imag.map(y);
                 let result = MandelbrotSequence::normalized_escape_count(
-                    &nalgebra::Complex::<f64>::new(re, im),
+                    &nalgebra::Vector2::<f64>::new(re, im),
                     params.escape_radius_squared,
                     params.max_iter_count,
                     params.refinement_count,
