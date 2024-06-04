@@ -168,28 +168,6 @@ impl MandelbrotSequence {
     }
 }
 
-pub fn generate_scalar_image() -> Vec<Vec<f64>> {
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution.re as usize);
-    raw_data.par_extend((0..params.image_resolution.re).into_par_iter().map(|x| {
-        let re = pixel_map_real.map(x);
-        (0..params.image_resolution.im)
-            .map(|y| {
-                let im = pixel_map_imag.map(y);
-
-                let result = MandelbrotSequence::normalized_escape_count(
-                    &nalgebra::Complex::<f64>::new(re, im),
-                    params.escape_radius_squared,
-                    params.max_iter_count,
-                    params.refinement_count,
-                );
-                result.unwrap_or(0.0)
-            })
-            .collect()
-    }));
-
-    raw_data
-}
-
 #[derive(Default)]
 pub struct MeasuredElapsedTime {
     pub setup: Duration,
@@ -253,7 +231,6 @@ pub fn render_mandelbrot_set(
         (0..params.image_resolution.im)
             .map(|y| {
                 let im = pixel_map_imag.map(y);
-
                 let result = MandelbrotSequence::normalized_escape_count(
                     &nalgebra::Complex::<f64>::new(re, im),
                     params.escape_radius_squared,
