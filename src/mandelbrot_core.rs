@@ -168,11 +168,31 @@ impl MandelbrotSequence {
     }
 }
 
-pub fn generate_scalar_image(
+use nalgebra::Vector2;
+
+fn apply_lambda<F>(vec: Vector2<f64>, lambda: F) -> f64
+where
+    F: Fn(Vector2<f64>) -> f64,
+{
+    lambda(vec)
+}
+
+fn main() {
+    // Example usage
+    let vector = Vector2::new(1.0, 2.0);
+    let result = apply_lambda(vector, |v| v.x + v.y);
+    println!("Result: {}", result); // Should print "Result: 3"
+}
+
+pub fn generate_scalar_image<F>(
     image_resolution: &nalgebra::Vector2<u32>,
     center: &nalgebra::Vector2<f64>,
     image_width: f64,
-) -> Vec<Vec<f64>> {
+    pixel_renderer: F,
+) -> Vec<Vec<f64>>
+where
+    F: Fn(&Vector2<f64>) -> f64 + std::marker::Sync,
+{
     let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
         image_resolution[0],
         center[0],
@@ -192,14 +212,7 @@ pub fn generate_scalar_image(
         (0..image_resolution[1])
             .map(|y| {
                 let im = pixel_map_imag.map(y);
-
-                let result = MandelbrotSequence::normalized_escape_count(
-                    &nalgebra::Vector2::<f64>::new(re, im),
-                    escape_radius_squared,
-                    max_iter_count,
-                    refinement_count,
-                );
-                result.unwrap_or(0.0)
+                pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
             })
             .collect()
     }));
@@ -249,37 +262,24 @@ pub fn render_mandelbrot_set(
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
-    // Mapping from image space to regular space
-    let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution[0],
-        params.center[0],
-        params.view_scale_real,
-    );
-    let pixel_map_imag = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution[1],
-        params.center[1],
-        -params.view_scale_im(), // Image coordinates are upside down.
-    );
-
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
-    raw_data.par_extend((0..params.image_resolution[0]).into_par_iter().map(|x| {
-        let re = pixel_map_real.map(x);
-        (0..params.image_resolution[1])
-            .map(|y| {
-                let im = pixel_map_imag.map(y);
-                let result = MandelbrotSequence::normalized_escape_count(
-                    &nalgebra::Vector2::<f64>::new(re, im),
-                    params.escape_radius_squared,
-                    params.max_iter_count,
-                    params.refinement_count,
-                );
-                result.unwrap_or(0.0)
-            })
-            .collect()
-    }));
+    let pixel_renderer = |point: &Vector2<f64>| {
+        let result = MandelbrotSequence::normalized_escape_count(
+            point,
+            params.escape_radius_squared,
+            params.max_iter_count,
+            params.refinement_count,
+        );
+        result.unwrap_or(0.0)
+    };
+
+    let raw_data = generate_scalar_image(
+        &params.image_resolution,
+        &params.center,
+        params.view_scale_real,
+        pixel_renderer,
+    );
 
     timer.mandelbrot = render::elapsed_and_reset(&mut stopwatch);
 
