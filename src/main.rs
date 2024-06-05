@@ -18,12 +18,14 @@ fn build_params(cli_params: &cli::ParameterFilePath) -> mandelbrot_core::Mandelb
     .unwrap();
 
     if let Some(trans) = &cli_params.translate {
-        mandel_params.center[0] += trans[0] * mandel_params.view_scale_real;
-        mandel_params.center[1] += trans[1] * mandel_params.view_scale_im();
+        mandel_params.image_specification.center[0] +=
+            trans[0] * mandel_params.image_specification.width;
+        mandel_params.image_specification.center[1] +=
+            trans[1] * mandel_params.image_specification.height();
     }
 
     if let Some(alpha) = cli_params.rescale {
-        mandel_params.view_scale_real *= alpha
+        mandel_params.image_specification.width *= alpha
     }
 
     mandel_params
