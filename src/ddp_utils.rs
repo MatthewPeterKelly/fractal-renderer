@@ -16,9 +16,7 @@ pub enum TimePhaseSpecification {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
     // Where to render?
-    pub image_resolution: nalgebra::Vector2<u32>,
-    pub center: nalgebra::Vector2<f64>,
-    pub angle_scale: f64,                   // angle_max - angle_min
+    pub image_specification: render::ImageSpecification,
     pub time_phase: TimePhaseSpecification, // See above.
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
@@ -30,9 +28,7 @@ pub struct DrivenDampedPendulumParams {
 impl Default for DrivenDampedPendulumParams {
     fn default() -> DrivenDampedPendulumParams {
         DrivenDampedPendulumParams {
-            image_resolution: nalgebra::Vector2::<u32>::new(400, 300),
-            center: nalgebra::Vector2::<f64>::new(0.0, 0.0),
-            angle_scale: std::f64::consts::TAU,
+            image_specification: render::ImageSpecification::default(),
             time_phase: TimePhaseSpecification::Snapshot(0.0),
             n_max_period: (100),
             n_steps_per_period: (10),
@@ -172,8 +168,10 @@ pub fn render_driven_damped_pendulum_attractor(
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf =
-        image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
+    let mut imgbuf = image::ImageBuffer::new(
+        params.image_specification.resolution[0],
+        params.image_specification.resolution[1],
+    );
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
@@ -192,12 +190,7 @@ pub fn render_driven_damped_pendulum_attractor(
         }
     };
 
-    let raw_data = render::generate_scalar_image(
-        &params.image_resolution,
-        &params.center,
-        params.angle_scale,
-        pixel_renderer,
-    );
+    let raw_data = render::generate_scalar_image(&params.image_specification, pixel_renderer);
 
     timer.simulation = render::elapsed_and_reset(&mut stopwatch);
 
