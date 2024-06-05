@@ -9,6 +9,12 @@ pub struct ImageSpecification {
     pub width: f64,
 }
 
+impl ImageSpecification {
+    pub fn height(&self) -> f64 {
+        self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
+    }
+}
+
 impl Default for ImageSpecification {
     fn default() -> ImageSpecification {
         ImageSpecification {
@@ -72,12 +78,11 @@ where
 {
     let pixel_map_real =
         LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
-    let image_height = spec.width * (spec.resolution[1] as f64) / (spec.resolution[0] as f64);
 
     let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
         spec.resolution[1],
         spec.center[1],
-        -image_height, // Image coordinates are upside down.
+        -spec.height(), // Image coordinates are upside down.
     );
 
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(spec.resolution[0] as usize);
