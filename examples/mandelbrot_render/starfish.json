@@ -1,13 +1,15 @@
 {
-    "image_resolution": [
-        600,
-        400
-    ],
-    "center": [
-        -0.6754990000000001,
-        -0.45850599999999997
-    ],
-    "view_scale_real": 0.018,
+    "image_specification": {
+        "resolution": [
+            600,
+            400
+        ],
+        "center": [
+            -0.6754990000000001,
+            -0.45850599999999997
+        ],
+        "width": 0.018
+    },
     "escape_radius_squared": 5,
     "max_iter_count": 256,
     "refinement_count": 5,
