@@ -1,7 +1,8 @@
+use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use std::time::{Duration, Instant};
 
 /**
- * Used to map from image space into the complex domain.
+ * Used to map from image space into the "regular" domain used to generate the fractals.
  */
 pub struct LinearPixelMap {
     offset: f64,
@@ -37,4 +38,45 @@ pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
     let duration = stopwatch.elapsed();
     *stopwatch = Instant::now();
     duration
+}
+
+/**
+ * Given image size parameters and a mapping into "regular" space used by the fractal,
+ * iterate over each pixel, using a lambda function to compute the "value" of the fractal image
+ * at each pixel location.
+ *
+ * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
+ * value which can then later be plugged into a color map by the rendering pipeline.
+ */
+pub fn generate_scalar_image<F>(
+    image_resolution: &nalgebra::Vector2<u32>,
+    center: &nalgebra::Vector2<f64>,
+    image_width: f64,
+    pixel_renderer: F,
+) -> Vec<Vec<f64>>
+where
+    F: Fn(&nalgebra::Vector2<f64>) -> f64 + std::marker::Sync,
+{
+    let pixel_map_real =
+        LinearPixelMap::new_from_center_and_width(image_resolution[0], center[0], image_width);
+    let image_height = image_width * (image_resolution[1] as f64) / (image_resolution[0] as f64);
+
+    let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
+        image_resolution[1],
+        center[1],
+        -image_height, // Image coordinates are upside down.
+    );
+
+    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(image_resolution[0] as usize);
+    raw_data.par_extend((0..image_resolution[0]).into_par_iter().map(|x| {
+        let re = pixel_map_real.map(x);
+        (0..image_resolution[1])
+            .map(|y| {
+                let im = pixel_map_imag.map(y);
+                pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
+            })
+            .collect()
+    }));
+
+    raw_data
 }

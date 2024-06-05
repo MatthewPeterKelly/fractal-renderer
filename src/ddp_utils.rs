@@ -1,5 +1,4 @@
 use crate::ode_solvers::rk4_simulate;
-use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
@@ -39,12 +38,6 @@ impl Default for DrivenDampedPendulumParams {
             n_steps_per_period: (10),
             periodic_state_error_tolerance: (1e-4),
         }
-    }
-}
-
-impl DrivenDampedPendulumParams {
-    pub fn rate_scale(&self) -> f64 {
-        self.angle_scale * (self.image_resolution[1] as f64) / (self.image_resolution[0] as f64)
     }
 }
 
@@ -167,12 +160,11 @@ pub fn render_driven_damped_pendulum_attractor(
                 )?;
             }
             timer.simulation = render::elapsed_and_reset(&mut stopwatch);
-            let file = std::fs::File::create(
-                directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"),
-            )
-            .expect("failed to create diagnostics file");
-            let mut diagnostics_file = std::io::BufWriter::new(file);
-            timer.display(&mut diagnostics_file)?;
+            timer.display(&mut crate::file_io::create_text_file(
+                directory_path,
+                file_prefix,
+                "_diagnostics.txt",
+            ))?;
             return Ok(());
         }
     };
@@ -183,44 +175,29 @@ pub fn render_driven_damped_pendulum_attractor(
     let mut imgbuf =
         image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
 
-    // Mapping from image space to complex space
-    let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution[0],
-        params.center[0],
-        params.angle_scale,
-    );
-    let pixel_map_imag = render::LinearPixelMap::new_from_center_and_width(
-        params.image_resolution[1],
-        params.center[1],
-        -params.rate_scale(), // Image coordinates are upside down.
-    );
-
-    // Note:  everything above this could be shared, as well as some other stuff
-
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    // Generate the raw data for the fractal, using Rayon to parallelize the calculation.
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(params.image_resolution[0] as usize);
-    raw_data.par_extend((0..params.image_resolution[0]).into_par_iter().map(|x| {
-        let angle = pixel_map_real.map(x);
-        (0..params.image_resolution[1])
-            .map(|y| {
-                let rate = pixel_map_imag.map(y);
-                let result = compute_basin_of_attraction(
-                    nalgebra::Vector2::<f64>::new(angle, rate),
-                    time_phase_fraction,
-                    params.n_max_period,
-                    params.n_steps_per_period,
-                    params.periodic_state_error_tolerance,
-                );
-                if Option::<i32>::Some(0) == result {
-                    1.0
-                } else {
-                    0.0
-                }
-            })
-            .collect()
-    }));
+    let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
+        let result = compute_basin_of_attraction(
+            nalgebra::Vector2::<f64>::new(point[0], point[1]),
+            time_phase_fraction,
+            params.n_max_period,
+            params.n_steps_per_period,
+            params.periodic_state_error_tolerance,
+        );
+        if Option::<i32>::Some(0) == result {
+            1.0
+        } else {
+            0.0
+        }
+    };
+
+    let raw_data = render::generate_scalar_image(
+        &params.image_resolution,
+        &params.center,
+        params.angle_scale,
+        pixel_renderer,
+    );
 
     timer.simulation = render::elapsed_and_reset(&mut stopwatch);
 
@@ -236,11 +213,11 @@ pub fn render_driven_damped_pendulum_attractor(
 
     println!("Wrote image file to: {}", render_path.display());
 
-    let file =
-        std::fs::File::create(directory_path.join(file_prefix.to_owned() + "_diagnostics.txt"))
-            .expect("failed to create diagnostics file");
-    let mut diagnostics_file = std::io::BufWriter::new(file);
-    timer.display(&mut diagnostics_file)?;
+    timer.display(&mut crate::file_io::create_text_file(
+        directory_path,
+        file_prefix,
+        "_diagnostics.txt",
+    ))?;
 
     Ok(())
 }
