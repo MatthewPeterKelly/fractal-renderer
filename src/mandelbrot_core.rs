@@ -11,10 +11,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
-    // Where to render?
-    pub image_resolution: nalgebra::Vector2<u32>,
-    pub center: nalgebra::Vector2<f64>,
-    pub view_scale_real: f64,
+    pub image_specification: render::ImageSpecification,
     // Convergence criteria
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
@@ -25,19 +22,12 @@ pub struct MandelbrotParams {
 impl Default for MandelbrotParams {
     fn default() -> MandelbrotParams {
         MandelbrotParams {
-            image_resolution: nalgebra::Vector2::<u32>::new(1920, 1080),
-            center: nalgebra::Vector2::<f64>::new(-0.2, 0.0),
-            view_scale_real: (3.0),
+            image_specification: render::ImageSpecification::default(),
             escape_radius_squared: (4.0),
             max_iter_count: (550),
             refinement_count: (5),
             histogram_bin_count: (512),
         }
-    }
-}
-impl MandelbrotParams {
-    pub fn view_scale_im(&self) -> f64 {
-        self.view_scale_real * (self.image_resolution[1] as f64) / (self.image_resolution[0] as f64)
     }
 }
 
@@ -202,8 +192,10 @@ pub fn render_mandelbrot_set(
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf =
-        image::ImageBuffer::new(params.image_resolution[0], params.image_resolution[1]);
+    let mut imgbuf = image::ImageBuffer::new(
+        params.image_specification.resolution[0],
+        params.image_specification.resolution[1],
+    );
 
     // write out the parameters too:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
@@ -221,12 +213,7 @@ pub fn render_mandelbrot_set(
         result.unwrap_or(0.0)
     };
 
-    let raw_data = render::generate_scalar_image(
-        &params.image_resolution,
-        &params.center,
-        params.view_scale_real,
-        pixel_renderer,
-    );
+    let raw_data = render::generate_scalar_image(&params.image_specification, pixel_renderer);
 
     timer.mandelbrot = render::elapsed_and_reset(&mut stopwatch);
 

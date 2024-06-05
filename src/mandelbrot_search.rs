@@ -1,3 +1,4 @@
+use crate::render;
 use iter_num_tools::grid_space;
 use nalgebra::Vector2;
 use rand::Rng;
@@ -141,9 +142,11 @@ pub fn mandelbrot_search_render(
         // Render the best point that we found:
         if let Some(ref query) = best_result {
             let render_params = MandelbrotParams {
-                image_resolution: params.render_image_resolution,
-                center: query.point,
-                view_scale_real: params.render_view_scale_real,
+                image_specification: render::ImageSpecification {
+                    resolution: params.render_image_resolution,
+                    center: query.point,
+                    width: params.render_view_scale_real,
+                },
                 escape_radius_squared: params.render_escape_radius_squared,
                 max_iter_count: params.render_max_iter_count,
                 refinement_count: params.render_refinement_count,

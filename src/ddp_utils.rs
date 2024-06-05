@@ -15,7 +15,6 @@ pub enum TimePhaseSpecification {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
-    // Where to render?
     pub image_specification: render::ImageSpecification,
     pub time_phase: TimePhaseSpecification, // See above.
     // simulation parameters
