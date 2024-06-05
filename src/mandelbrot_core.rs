@@ -1,4 +1,3 @@
-use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use std::{
     io::{self, Write},
     time::{Duration, Instant},
@@ -168,58 +167,6 @@ impl MandelbrotSequence {
     }
 }
 
-use nalgebra::Vector2;
-
-fn apply_lambda<F>(vec: Vector2<f64>, lambda: F) -> f64
-where
-    F: Fn(Vector2<f64>) -> f64,
-{
-    lambda(vec)
-}
-
-fn main() {
-    // Example usage
-    let vector = Vector2::new(1.0, 2.0);
-    let result = apply_lambda(vector, |v| v.x + v.y);
-    println!("Result: {}", result); // Should print "Result: 3"
-}
-
-pub fn generate_scalar_image<F>(
-    image_resolution: &nalgebra::Vector2<u32>,
-    center: &nalgebra::Vector2<f64>,
-    image_width: f64,
-    pixel_renderer: F,
-) -> Vec<Vec<f64>>
-where
-    F: Fn(&Vector2<f64>) -> f64 + std::marker::Sync,
-{
-    let pixel_map_real = render::LinearPixelMap::new_from_center_and_width(
-        image_resolution[0],
-        center[0],
-        image_width,
-    );
-    let image_height = image_width * (image_resolution[1] as f64) / (image_resolution[0] as f64);
-
-    let pixel_map_imag = render::LinearPixelMap::new_from_center_and_width(
-        image_resolution[1],
-        center[1],
-        -image_height, // Image coordinates are upside down.
-    );
-
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(image_resolution[0] as usize);
-    raw_data.par_extend((0..image_resolution[0]).into_par_iter().map(|x| {
-        let re = pixel_map_real.map(x);
-        (0..image_resolution[1])
-            .map(|y| {
-                let im = pixel_map_imag.map(y);
-                pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
-            })
-            .collect()
-    }));
-
-    raw_data
-}
-
 #[derive(Default)]
 pub struct MeasuredElapsedTime {
     pub setup: Duration,
@@ -264,7 +211,7 @@ pub fn render_mandelbrot_set(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let pixel_renderer = |point: &Vector2<f64>| {
+    let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
         let result = MandelbrotSequence::normalized_escape_count(
             point,
             params.escape_radius_squared,
@@ -274,7 +221,7 @@ pub fn render_mandelbrot_set(
         result.unwrap_or(0.0)
     };
 
-    let raw_data = generate_scalar_image(
+    let raw_data = render::generate_scalar_image(
         &params.image_resolution,
         &params.center,
         params.view_scale_real,
