@@ -51,24 +51,29 @@ impl LinearPixelMap {
     }
 
     // Map from pixel (integer) to point (float)
-    // TODO:  use `i32` here
+    // TODO:  use `i32` here (and fix consistency throughout)
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
     }
 
+    //TODO:  add unit test for this...
     pub fn inverse_map(&self, point: f64) -> i32 {
-        // TODO:
-        0
+        ((point - self.offset) / self.slope) as i32
     }
 }
 
-struct PixelMapper {
+pub struct PixelMapper {
     width: LinearPixelMap,
     height: LinearPixelMap,
 }
 
+// TODO:  standardize on "point" = Vector2 and "index" = (u32, u32)?
+// Logic: image library standardized on u32, u32
+// need to do math on points
+// Using a named type helps make things more consistent
+
 impl PixelMapper {
-    pub fn new(image_specification: ImageSpecification) -> PixelMapper {
+    pub fn new(image_specification: &ImageSpecification) -> PixelMapper {
         PixelMapper {
             width: LinearPixelMap::new_from_center_and_width(
                 image_specification.resolution[0],

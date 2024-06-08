@@ -49,6 +49,17 @@ const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
 const FERN_HEIGHT: f64 = 10.0;
 const FERN_WIDTH: f64 = 6.0;
 
+fn get_image_width(resolution: &nalgebra::Vector2<u32>) -> f64 {
+    let height = resolution[1] as f64;
+    let width = resolution[0] as f64;
+    let aspect_ratio = height / width; // of the rendered image
+    if aspect_ratio > (FERN_HEIGHT / FERN_WIDTH) {
+        FERN_WIDTH
+    } else {
+        FERN_HEIGHT / aspect_ratio
+    }
+}
+
 // Fern Generation Algorithm taken from:
 // https://en.wikipedia.org/wiki/Barnsley_fern
 
@@ -84,15 +95,21 @@ pub fn render_barnsley_fern(
         *pixel = COLOR_BLACK;
     }
 
-    let pixel_mapper = PixelMapper::new();
+    let image_specification = render::ImageSpecification {
+        resolution: params.resolution,
+        center: FERN_CENTER,
+        width: get_image_width(&params.resolution),
+    };
+
+    let pixel_mapper = render::PixelMapper::new(&image_specification);
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..params.sample_count {
         sample_point = next_barnsley_fern_sample(sample_point);
-        let (x, y) = pixel_mapper.inverse_map(sample_point);
-        if let Some(pixel) = imgbuf.get_pixel_checked(x, y) {
+        let (x, y) = pixel_mapper.inverse_map(&sample_point);
+        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = COLOR_GREEN;
         }
     }
