@@ -55,6 +55,21 @@ impl LinearPixelMap {
     }
 }
 
+struct PixelMapper {
+    width: LinearPixelMap,
+    height: LinearPixelMap,
+}
+
+impl PixelMapper {
+    pub fn map(point: &nalgebra::Vector2<f64>) -> (i32, i32) {
+        // TODO:
+        (0, 0)
+    }
+}
+
+// Use the PixelMapper to map from "point" to "pixel" space, and then
+// use existing utilitites in the ImageBuffer to draw the pixel at a specific color
+
 /**
  * Small utility function that resets a stopwatch and returns the elapsed time.
  */
@@ -76,10 +91,10 @@ pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) ->
 where
     F: Fn(&nalgebra::Vector2<f64>) -> f64 + std::marker::Sync,
 {
-    let pixel_map_real =
+    let pixel_map_width =
         LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
 
-    let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
+    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
         spec.resolution[1],
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
@@ -87,10 +102,10 @@ where
 
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(spec.resolution[0] as usize);
     raw_data.par_extend((0..spec.resolution[0]).into_par_iter().map(|x| {
-        let re = pixel_map_real.map(x);
+        let re = pixel_map_width.map(x);
         (0..spec.resolution[1])
             .map(|y| {
-                let im = pixel_map_imag.map(y);
+                let im = pixel_map_height.map(y);
                 pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
             })
             .collect()
