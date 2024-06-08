@@ -1,3 +1,4 @@
+use rand::seq::index::sample;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
@@ -39,6 +40,16 @@ impl MeasuredElapsedTime {
     }
 }
 
+const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
+const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
+
+// Fern Generation Algorithm taken from:
+// https://en.wikipedia.org/wiki/Barnsley_fern
+
+pub fn next_barnsley_fern_sample(prev: nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+    prev
+}
+
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
     directory_path: &std::path::Path,
@@ -62,14 +73,22 @@ pub fn render_barnsley_fern(
         params.resolution[1],
     );
 
-    // HACK!
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = image::Rgb([0, 255, 0]);
+    // Set the background to black:
+    for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
+        *pixel = COLOR_BLACK;
     }
+
+    let pixel_mapper = PixelMapper::new();
+    let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    // TODO:  core calculation here!
+    for _ in 0..params.sample_count {
+        sample_point = next_barnsley_fern_sample(sample_point);
+        let pixel = pixel_mapper.inverse_map(sample_point);
+        // TODO:  draw the pixel into the buffer!
+        // canvas.draw_pixel(sample_point, COLOR_GREEN);
+    }
 
     timer.sampling = render::elapsed_and_reset(&mut stopwatch);
 

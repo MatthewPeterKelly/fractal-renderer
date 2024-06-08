@@ -50,8 +50,15 @@ impl LinearPixelMap {
         LinearPixelMap::new(n, center - 0.5 * width, center + 0.5 * width)
     }
 
+    // Map from pixel (integer) to point (float)
+    // TODO:  use `i32` here
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
+    }
+
+    pub fn inverse_map(&self, point: f64) -> i32 {
+        // TODO:
+        0
     }
 }
 
@@ -61,9 +68,28 @@ struct PixelMapper {
 }
 
 impl PixelMapper {
-    pub fn map(point: &nalgebra::Vector2<f64>) -> (i32, i32) {
-        // TODO:
-        (0, 0)
+    pub fn new(image_specification: ImageSpecification) -> PixelMapper {
+        PixelMapper {
+            width: LinearPixelMap::new_from_center_and_width(
+                image_specification.resolution[0],
+                image_specification.center[0],
+                image_specification.width,
+            ),
+            height: LinearPixelMap::new_from_center_and_width(
+                image_specification.resolution[1],
+                image_specification.center[1],
+                -image_specification.height(),
+            ),
+        }
+    }
+
+    // TODO:  use this in other fractals
+    // TODO: match naming convention for mapping direction... standardize it!
+    pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> (i32, i32) {
+        (
+            self.width.inverse_map(point[0]),
+            self.height.inverse_map(point[1]),
+        )
     }
 }
 
