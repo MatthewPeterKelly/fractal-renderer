@@ -12,7 +12,7 @@ pub enum CommandsEnum {
     MandelbrotRender(ParameterFilePath),
     MandelbrotSearch(ParameterFilePath),
     DrivenDampedPendulumRender(ParameterFilePath),
-    BarnsleyFernParams(ParameterFilePath),
+    BarnsleyFernRender(ParameterFilePath),
 }
 
 #[derive(Debug, Args)]

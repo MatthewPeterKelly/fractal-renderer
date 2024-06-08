@@ -79,7 +79,7 @@ fn main() {
             .unwrap();
         }
 
-        Some(CommandsEnum::BarnsleyFernParams(params)) => {
+        Some(CommandsEnum::BarnsleyFernRender(params)) => {
             crate::barnsley_fern::render_barnsley_fern(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)

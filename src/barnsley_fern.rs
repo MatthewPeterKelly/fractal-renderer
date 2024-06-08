@@ -57,7 +57,15 @@ pub fn render_barnsley_fern(
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::new(params.resolution[0], params.resolution[1]);
+    let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::new(
+        params.resolution[0],
+        params.resolution[1],
+    );
+
+    // HACK!
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        *pixel = image::Rgb([0, 255, 0]);
+    }
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
