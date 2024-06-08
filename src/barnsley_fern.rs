@@ -43,6 +43,12 @@ impl MeasuredElapsedTime {
 const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
 const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
 
+// x values: from -3 to 3
+// y values: from 0 to 10
+const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
+const FERN_HEIGHT: f64 = 10.0;
+const FERN_WIDTH: f64 = 6.0;
+
 // Fern Generation Algorithm taken from:
 // https://en.wikipedia.org/wiki/Barnsley_fern
 
@@ -85,9 +91,10 @@ pub fn render_barnsley_fern(
 
     for _ in 0..params.sample_count {
         sample_point = next_barnsley_fern_sample(sample_point);
-        let pixel = pixel_mapper.inverse_map(sample_point);
-        // TODO:  draw the pixel into the buffer!
-        // canvas.draw_pixel(sample_point, COLOR_GREEN);
+        let (x, y) = pixel_mapper.inverse_map(sample_point);
+        if let Some(pixel) = imgbuf.get_pixel_checked(x, y) {
+            *pixel = COLOR_GREEN;
+        }
     }
 
     timer.sampling = render::elapsed_and_reset(&mut stopwatch);
