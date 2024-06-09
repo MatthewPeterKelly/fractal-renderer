@@ -42,8 +42,13 @@ impl MeasuredElapsedTime {
     }
 }
 
+// TODO:  make color a parameter
+
+// TODO:  make color converge towards the target.
+
 const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
 const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
+// const COLOR_HOT_PINK: image::Rgb<u8> = image::Rgb([252, 3, 252]);
 
 // x values: from -3 to 3
 // y values: from 0 to 10
