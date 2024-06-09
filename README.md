@@ -39,6 +39,9 @@ cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/de
 ```
 cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/default_series.json
 ```
+```
+cargo run --release  -- barnsley-fern-render  ./examples/barnsley_fern/default.json
+```
 
 ## Autoformatting:
 

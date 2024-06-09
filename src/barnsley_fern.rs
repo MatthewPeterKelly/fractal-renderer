@@ -1,4 +1,6 @@
+use rand::distributions::{Distribution, Uniform};
 use rand::seq::index::sample;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
@@ -48,23 +50,62 @@ const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
 const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
 const FERN_HEIGHT: f64 = 10.0;
 const FERN_WIDTH: f64 = 6.0;
+const FERN_PADDING: f64 = 1.1;
 
 fn get_image_width(resolution: &nalgebra::Vector2<u32>) -> f64 {
     let height = resolution[1] as f64;
     let width = resolution[0] as f64;
     let aspect_ratio = height / width; // of the rendered image
-    if aspect_ratio > (FERN_HEIGHT / FERN_WIDTH) {
+    let selected_width = if aspect_ratio > (FERN_HEIGHT / FERN_WIDTH) {
         FERN_WIDTH
     } else {
         FERN_HEIGHT / aspect_ratio
-    }
+    };
+    FERN_PADDING * selected_width
+}
+
+pub fn barnsley_f1_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+    nalgebra::Vector2::<f64>::new(0.0, 0.16 * prev[1])
+}
+
+pub fn barnsley_f2_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.85, 0.04, -0.04, 0.85);
+    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
+    A * prev + B
+}
+
+pub fn barnsley_f3_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.20, -0.26, 0.23, 0.22);
+    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
+    A * prev + B
+}
+
+pub fn barnsley_f4_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(-0.15, 0.28, 0.26, 0.24);
+    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 0.44);
+    A * prev + B
 }
 
 // Fern Generation Algorithm taken from:
 // https://en.wikipedia.org/wiki/Barnsley_fern
 
-pub fn next_barnsley_fern_sample(prev: nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    prev
+pub fn next_barnsley_fern_sample<R: Rng>(
+    rng: &mut R,
+    prev: &nalgebra::Vector2<f64>,
+) -> nalgebra::Vector2<f64> {
+    let distribution = Uniform::from(0.0..1.0); // TODO:  construct only once?
+    let sample = distribution.sample(rng);
+
+    if sample < 0.85 {
+        return barnsley_f2_update(prev);
+    }
+    if sample < 0.92 {
+        return barnsley_f3_update(prev);
+    }
+    if sample < 0.99 {
+        return barnsley_f4_update(prev);
+    }
+    barnsley_f1_update(prev)
 }
 
 pub fn render_barnsley_fern(
@@ -106,8 +147,10 @@ pub fn render_barnsley_fern(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
+    let mut rng = rand::thread_rng();
+
     for _ in 0..params.sample_count {
-        sample_point = next_barnsley_fern_sample(sample_point);
+        sample_point = next_barnsley_fern_sample(&mut rng, &sample_point);
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = COLOR_GREEN;

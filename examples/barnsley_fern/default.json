@@ -1,7 +1,7 @@
 {
     "resolution": [
-        600,
-        800
+        3000,
+        5000
     ],
-    "sample_count": 1024
+    "sample_count": 800000
 }
