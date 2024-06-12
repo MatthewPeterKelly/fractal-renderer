@@ -1,3 +1,4 @@
+mod barnsley_fern;
 mod cli;
 mod ddp_utils;
 mod file_io;
@@ -64,6 +65,7 @@ fn main() {
             )
             .unwrap();
         }
+
         Some(CommandsEnum::DrivenDampedPendulumRender(params)) => {
             crate::ddp_utils::render_driven_damped_pendulum_attractor(
                 &serde_json::from_str(
@@ -72,6 +74,23 @@ fn main() {
                 )
                 .unwrap(),
                 &crate::file_io::build_output_path_with_date_time(params, "ddp_render", &datetime),
+                file_io::extract_base_name(&params.params_path),
+            )
+            .unwrap();
+        }
+
+        Some(CommandsEnum::BarnsleyFernRender(params)) => {
+            crate::barnsley_fern::render_barnsley_fern(
+                &serde_json::from_str(
+                    &std::fs::read_to_string(&params.params_path)
+                        .expect("Unable to read param file"),
+                )
+                .unwrap(),
+                &crate::file_io::build_output_path_with_date_time(
+                    params,
+                    "barnsley_fern",
+                    &datetime,
+                ),
                 file_io::extract_base_name(&params.params_path),
             )
             .unwrap();

@@ -50,10 +50,53 @@ impl LinearPixelMap {
         LinearPixelMap::new(n, center - 0.5 * width, center + 0.5 * width)
     }
 
+    // Map from pixel (integer) to point (float)
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
     }
+
+    // Maps from point to pixel.
+    // Rename as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/48?
+    pub fn inverse_map(&self, point: f64) -> i32 {
+        ((point - self.offset) / self.slope) as i32
+    }
 }
+
+pub struct PixelMapper {
+    width: LinearPixelMap,
+    height: LinearPixelMap,
+}
+
+// TODO:  standardize on "point" = Vector2 and "pixel_coordinate" = (u32, u32)?
+// https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
+// Improve this class generally:
+// https://github.com/MatthewPeterKelly/fractal-renderer/issues/48
+impl PixelMapper {
+    pub fn new(image_specification: &ImageSpecification) -> PixelMapper {
+        PixelMapper {
+            width: LinearPixelMap::new_from_center_and_width(
+                image_specification.resolution[0],
+                image_specification.center[0],
+                image_specification.width,
+            ),
+            height: LinearPixelMap::new_from_center_and_width(
+                image_specification.resolution[1],
+                image_specification.center[1],
+                -image_specification.height(),
+            ),
+        }
+    }
+
+    pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> (i32, i32) {
+        (
+            self.width.inverse_map(point[0]),
+            self.height.inverse_map(point[1]),
+        )
+    }
+}
+
+// Use the PixelMapper to map from "point" to "pixel" space, and then
+// use existing utilitites in the ImageBuffer to draw the pixel at a specific color
 
 /**
  * Small utility function that resets a stopwatch and returns the elapsed time.
@@ -76,10 +119,10 @@ pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) ->
 where
     F: Fn(&nalgebra::Vector2<f64>) -> f64 + std::marker::Sync,
 {
-    let pixel_map_real =
+    let pixel_map_width =
         LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
 
-    let pixel_map_imag = LinearPixelMap::new_from_center_and_width(
+    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
         spec.resolution[1],
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
@@ -87,10 +130,10 @@ where
 
     let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(spec.resolution[0] as usize);
     raw_data.par_extend((0..spec.resolution[0]).into_par_iter().map(|x| {
-        let re = pixel_map_real.map(x);
+        let re = pixel_map_width.map(x);
         (0..spec.resolution[1])
             .map(|y| {
-                let im = pixel_map_imag.map(y);
+                let im = pixel_map_height.map(y);
                 pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
             })
             .collect()
