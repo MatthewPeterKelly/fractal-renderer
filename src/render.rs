@@ -51,12 +51,12 @@ impl LinearPixelMap {
     }
 
     // Map from pixel (integer) to point (float)
-    // TODO:  use `i32` here (and fix consistency throughout)
     pub fn map(&self, index: u32) -> f64 {
         self.offset + self.slope * (index as f64)
     }
 
-    //TODO:  add unit test for this...
+    // Maps from point to pixel.
+    // Rename as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/48?
     pub fn inverse_map(&self, point: f64) -> i32 {
         ((point - self.offset) / self.slope) as i32
     }
@@ -67,11 +67,10 @@ pub struct PixelMapper {
     height: LinearPixelMap,
 }
 
-// TODO:  standardize on "point" = Vector2 and "index" = (u32, u32)?
-// Logic: image library standardized on u32, u32
-// need to do math on points
-// Using a named type helps make things more consistent
-
+// TODO:  standardize on "point" = Vector2 and "pixel_coordinate" = (u32, u32)?
+// https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
+// Improve this class generally:
+// https://github.com/MatthewPeterKelly/fractal-renderer/issues/48
 impl PixelMapper {
     pub fn new(image_specification: &ImageSpecification) -> PixelMapper {
         PixelMapper {
@@ -88,8 +87,6 @@ impl PixelMapper {
         }
     }
 
-    // TODO:  use this in other fractals
-    // TODO: match naming convention for mapping direction... standardize it!
     pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> (i32, i32) {
         (
             self.width.inverse_map(point[0]),

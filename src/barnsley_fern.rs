@@ -42,13 +42,11 @@ impl MeasuredElapsedTime {
     }
 }
 
-// TODO:  make color a parameter
-
-// TODO:  make color converge towards the target.
+// TODO: pass all parameters from .json as part of:
+// https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
 
 const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
 const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
-// const COLOR_HOT_PINK: image::Rgb<u8> = image::Rgb([252, 3, 252]);
 
 // x values: from -3 to 3
 // y values: from 0 to 10
@@ -98,7 +96,8 @@ pub fn next_barnsley_fern_sample<R: Rng>(
     rng: &mut R,
     prev: &nalgebra::Vector2<f64>,
 ) -> nalgebra::Vector2<f64> {
-    let distribution = Uniform::from(0.0..1.0); // TODO:  construct only once?
+    // TODO:  construct only once as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
+    let distribution = Uniform::from(0.0..1.0);
     let sample = distribution.sample(rng);
 
     if sample < 0.85 {
@@ -120,8 +119,6 @@ pub fn render_barnsley_fern(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
-
-    // TODO:  the following block could be a file I/O utility...
 
     // write out the parameters to a file:
     let params_path = directory_path.join(file_prefix.to_owned() + ".json");
@@ -163,8 +160,6 @@ pub fn render_barnsley_fern(
     }
 
     timer.sampling = render::elapsed_and_reset(&mut stopwatch);
-
-    // TODO:  this terminal block of boilerplate could also be shared.
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
