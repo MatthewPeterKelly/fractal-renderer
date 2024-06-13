@@ -45,8 +45,8 @@ impl MeasuredElapsedTime {
 // TODO: pass all parameters from .json as part of:
 // https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
 
-const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
-const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
+const COLOR_BLACK: image::Rgba<u8> = image::Rgba([0, 0, 0, 255]);
+const COLOR_GREEN: image::Rgba<u8> = image::Rgba([79, 121, 66, 255]);
 
 // x values: from -3 to 3
 // y values: from 0 to 10
@@ -115,7 +115,7 @@ pub fn render_barnsley_fern(
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::new(
+    let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
         params.fit_image.resolution[0],
         params.fit_image.resolution[1],
     );
