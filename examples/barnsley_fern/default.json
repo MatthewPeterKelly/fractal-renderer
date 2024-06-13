@@ -6,5 +6,7 @@
         ],
         "padding_scale": 1.05
     },
-    "sample_count": 300000
+    "sample_count": 300000,
+    "background_color_rgba": [0, 0, 0, 255],
+    "fern_color_rgba": [79, 121, 66, 255]
 }

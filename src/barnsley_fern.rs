@@ -13,6 +13,8 @@ use crate::render;
 pub struct BarnsleyFernParams {
     pub fit_image: render::FitImage,
     pub sample_count: u32,
+    pub background_color_rgba: [u8; 4],
+    pub fern_color_rgba: [u8; 4],
 }
 
 impl Default for BarnsleyFernParams {
@@ -20,6 +22,8 @@ impl Default for BarnsleyFernParams {
         BarnsleyFernParams {
             fit_image: render::FitImage::default(),
             sample_count: 1000,
+            background_color_rgba: [0, 0, 0, 255],
+            fern_color_rgba: [79, 121, 66, 255],
         }
     }
 }
@@ -41,12 +45,6 @@ impl MeasuredElapsedTime {
         Ok(())
     }
 }
-
-// TODO: pass all parameters from .json as part of:
-// https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
-
-const COLOR_BLACK: image::Rgba<u8> = image::Rgba([0, 0, 0, 255]);
-const COLOR_GREEN: image::Rgba<u8> = image::Rgba([79, 121, 66, 255]);
 
 // x values: from -3 to 3
 // y values: from 0 to 10
@@ -120,9 +118,12 @@ pub fn render_barnsley_fern(
         params.fit_image.resolution[1],
     );
 
+    let background_color = image::Rgba(params.background_color_rgba);
+    let fern_color = image::Rgba(params.fern_color_rgba);
+
     // Set the background to black:
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = COLOR_BLACK;
+        *pixel = background_color;
     }
 
     let image_specification = params.fit_image.image_specification(
@@ -141,7 +142,7 @@ pub fn render_barnsley_fern(
         sample_point = next_barnsley_fern_sample(&mut rng, &sample_point);
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = COLOR_GREEN;
+            *pixel = fern_color;
         }
     }
 
