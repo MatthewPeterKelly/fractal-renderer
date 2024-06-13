@@ -68,6 +68,9 @@ impl DiscreteMapCoeff {
 /**
  * Coefficients needed to generate the Barnsley Fern fractal.
  * This is where the bulk of the "math" for the fractal occurs.
+ *
+ * This data structure is used to import all "parameters" from the JSON
+ * file, specified by the user.
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Coeffs {
@@ -111,27 +114,64 @@ impl Default for Coeffs {
     }
 }
 
-// TODO:  WIP refactor got to here.
-
-pub fn next_barnsley_fern_sample<R: Rng>(
-    rng: &mut R,
-    prev: &nalgebra::Vector2<f64>,
-) -> nalgebra::Vector2<f64> {
-    // TODO:  construct only once as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
-    let distribution = Uniform::from(0.0..1.0);
-    let sample = distribution.sample(rng);
-
-    if sample < 0.85 {
-        return barnsley_f2_update(prev);
+impl Coeffs {
+    pub fn normalize_weights(&mut self) {
+        let total =
+            self.f1_map.weight + self.f2_map.weight + self.f3_map.weight + self.f4_map.weight;
+        let scale = 1.0 / total;
+        self.f1_map.weight *= scale;
+        self.f2_map.weight *= scale;
+        self.f3_map.weight *= scale;
+        self.f4_map.weight *= scale;
     }
-    if sample < 0.92 {
-        return barnsley_f3_update(prev);
-    }
-    if sample < 0.99 {
-        return barnsley_f4_update(prev);
-    }
-    barnsley_f1_update(prev)
 }
+
+/**
+ * Wrapper around `Coeffs`, used to precompute a few things before
+ * running the sample generation.
+ */
+pub struct SampleGenerator {
+    distribution: Uniform<f64>,
+    coeffs: Coeffs,
+    f2_threshold: f64,
+    f3_threshold: f64,
+    f4_threshold: f64,
+}
+
+impl SampleGenerator {
+    pub fn new(raw_coeffs: &Coeffs) -> SampleGenerator {
+        let mut coeffs = *raw_coeffs;
+        coeffs.normalize_weights();
+
+        SampleGenerator {
+            distribution: Uniform::from(0.0..1.0),
+            coeffs,
+            f2_threshold: coeffs.f2_map.weight,
+            f3_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight,
+            f4_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight + coeffs.f4_map.weight,
+        }
+    }
+
+    pub fn next<R: Rng>(
+        &self,
+        rng: &mut R,
+        prev_sample: &nalgebra::Vector2<f64>,
+    ) -> nalgebra::Vector2<f64> {
+        let r = self.distribution.sample(rng);
+        if r < self.f2_threshold {
+            return self.coeffs.f2_map.map(prev_sample);
+        }
+        if r < self.f3_threshold {
+            return self.coeffs.f3_map.map(prev_sample);
+        }
+        if r < self.f4_threshold {
+            return self.coeffs.f4_map.map(prev_sample);
+        }
+        self.coeffs.f1_map.map(prev_sample)
+    }
+}
+
+// TODO:  WIP refactor got to here.
 
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
