@@ -11,14 +11,14 @@ use crate::render;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BarnsleyFernParams {
-    pub resolution: nalgebra::Vector2<u32>,
+    pub fit_image: render::FitImage,
     pub sample_count: u32,
 }
 
 impl Default for BarnsleyFernParams {
     fn default() -> BarnsleyFernParams {
         BarnsleyFernParams {
-            resolution: nalgebra::Vector2::<u32>::new(400, 300),
+            fit_image: render::FitImage::default(),
             sample_count: 1000,
         }
     }
@@ -53,19 +53,6 @@ const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
 const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
 const FERN_HEIGHT: f64 = 10.0;
 const FERN_WIDTH: f64 = 6.0;
-const FERN_PADDING: f64 = 1.1;
-
-fn get_image_width(resolution: &nalgebra::Vector2<u32>) -> f64 {
-    let height = resolution[1] as f64;
-    let width = resolution[0] as f64;
-    let aspect_ratio = height / width; // of the rendered image
-    let selected_width = if aspect_ratio > (FERN_HEIGHT / FERN_WIDTH) {
-        FERN_WIDTH
-    } else {
-        FERN_HEIGHT / aspect_ratio
-    };
-    FERN_PADDING * selected_width
-}
 
 pub fn barnsley_f1_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
     nalgebra::Vector2::<f64>::new(0.0, 0.16 * prev[1])
@@ -129,8 +116,8 @@ pub fn render_barnsley_fern(
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::new(
-        params.resolution[0],
-        params.resolution[1],
+        params.fit_image.resolution[0],
+        params.fit_image.resolution[1],
     );
 
     // Set the background to black:
@@ -138,11 +125,10 @@ pub fn render_barnsley_fern(
         *pixel = COLOR_BLACK;
     }
 
-    let image_specification = render::ImageSpecification {
-        resolution: params.resolution,
-        center: FERN_CENTER,
-        width: get_image_width(&params.resolution),
-    };
+    let image_specification = params.fit_image.image_specification(
+        &nalgebra::Vector2::new(FERN_WIDTH, FERN_HEIGHT),
+        &FERN_CENTER,
+    );
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);

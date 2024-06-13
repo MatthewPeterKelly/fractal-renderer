@@ -9,6 +9,11 @@ pub struct ImageSpecification {
     pub width: f64,
 }
 
+/**
+ * Used to fully-specify both an image resolution and how it is anchored into the "real"
+ * space in which the fractal (or other subject) lives. The height in "real" space is derived
+ * from the aspect ratio of the image and the specified width.
+ */
 impl ImageSpecification {
     pub fn height(&self) -> f64 {
         self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
@@ -21,6 +26,54 @@ impl Default for ImageSpecification {
             resolution: nalgebra::Vector2::<u32>::new(400, 300),
             center: nalgebra::Vector2::<f64>::new(0.0, 0.0),
             width: 1.0,
+        }
+    }
+}
+
+/**
+ * Allows the user to specify only the resolution of the image and how much "extra space" to leave
+ * around the fractal (subject) in the image. The real coordinates are derived automatically from
+ * other information in the fractal.
+ *
+ * The `FitImage` can then be converted into a full `ImageSpecification` to be passed into other code.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FitImage {
+    pub resolution: nalgebra::Vector2<u32>,
+    pub padding_scale: f64,
+}
+
+impl FitImage {
+    pub fn image_specification(
+        &self,
+        dims: &nalgebra::Vector2<f64>,
+        center: &nalgebra::Vector2<f64>,
+    ) -> ImageSpecification {
+        let pixel_height = self.resolution[1] as f64;
+        let pixel_width = self.resolution[0] as f64;
+        let dims_height = dims[1];
+        let dims_width = dims[0];
+
+        let aspect_ratio = pixel_height / pixel_width; // of the rendered image
+        let selected_width = if aspect_ratio > (dims_height / dims_width) {
+            dims_width
+        } else {
+            dims_height / aspect_ratio
+        };
+
+        ImageSpecification {
+            resolution: self.resolution,
+            center: *center,
+            width: self.padding_scale * selected_width,
+        }
+    }
+}
+
+impl Default for FitImage {
+    fn default() -> FitImage {
+        FitImage {
+            resolution: nalgebra::Vector2::<u32>::new(400, 300),
+            padding_scale: 1.05,
         }
     }
 }
@@ -111,6 +164,9 @@ pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
  * Given image size parameters and a mapping into "regular" space used by the fractal,
  * iterate over each pixel, using a lambda function to compute the "value" of the fractal image
  * at each pixel location.
+ *
+ * This is used as the core implementation for pixel-based fractals, such as the Mandelbrot set and
+ * the Driven-Damped Pendulum attractor.
  *
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.

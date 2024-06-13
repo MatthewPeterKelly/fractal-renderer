@@ -1,7 +1,10 @@
 {
-    "resolution": [
-        600,
-        1000
-    ],
+    "fit_image" : {
+        "resolution": [
+            600,
+            1000
+        ],
+        "padding_scale": 1.05
+    },
     "sample_count": 300000
 }
