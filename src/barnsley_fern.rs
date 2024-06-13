@@ -46,36 +46,72 @@ impl MeasuredElapsedTime {
     }
 }
 
-// x values: from -3 to 3
-// y values: from 0 to 10
-const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
-const FERN_HEIGHT: f64 = 10.0;
-const FERN_WIDTH: f64 = 6.0;
-
-pub fn barnsley_f1_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    nalgebra::Vector2::<f64>::new(0.0, 0.16 * prev[1])
-}
-
-pub fn barnsley_f2_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.85, 0.04, -0.04, 0.85);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
-    A * prev + B
-}
-
-pub fn barnsley_f3_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.20, -0.26, 0.23, 0.22);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
-    A * prev + B
-}
-
-pub fn barnsley_f4_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(-0.15, 0.28, 0.26, 0.24);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 0.44);
-    A * prev + B
-}
-
-// Fern Generation Algorithm taken from:
+// Fern Generation Algorithm reference:
 // https://en.wikipedia.org/wiki/Barnsley_fern
+
+/**
+ * The Barnsley Fern is implemented by a sequence of samples, where each maps from the previous using a 2D affine transform. There are four possible transforms, which are selected randomly (with non-uniform weights).
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DiscreteMapCoeff {
+    linear: nalgebra::Matrix2<f64>,
+    offset: nalgebra::Vector2<f64>,
+    weight: f64,
+}
+
+impl DiscreteMapCoeff {
+    pub fn map(&self, prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+        self.linear * prev + self.offset
+    }
+}
+
+/**
+ * Coefficients needed to generate the Barnsley Fern fractal.
+ * This is where the bulk of the "math" for the fractal occurs.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Coeffs {
+    // x values: from -3 to 3
+    // y values: from 0 to 10
+    center: nalgebra::Vector2<f64>,
+    dimensions: nalgebra::Vector2<f64>, // width, height
+
+    f1_map: DiscreteMapCoeff,
+    f2_map: DiscreteMapCoeff,
+    f3_map: DiscreteMapCoeff,
+    f4_map: DiscreteMapCoeff,
+}
+
+impl Default for Coeffs {
+    fn default() -> Coeffs {
+        Coeffs {
+            center: nalgebra::Vector2::new(0.0, 5.0),
+            dimensions: nalgebra::Vector2::new(6.0, 10.0),
+            f1_map: DiscreteMapCoeff {
+                linear: nalgebra::Matrix2::<f64>::new(0.0, 0.0, 0.0, 0.16),
+                offset: nalgebra::Vector2::<f64>::new(0.0, 0.0),
+                weight: 0.01,
+            },
+            f2_map: DiscreteMapCoeff {
+                linear: nalgebra::Matrix2::<f64>::new(0.85, 0.04, -0.04, 0.85),
+                offset: nalgebra::Vector2::<f64>::new(0.0, 1.60),
+                weight: 0.01,
+            },
+            f3_map: DiscreteMapCoeff {
+                linear: nalgebra::Matrix2::<f64>::new(0.20, -0.26, 0.23, 0.22),
+                offset: nalgebra::Vector2::<f64>::new(0.0, 1.6),
+                weight: 0.01,
+            },
+            f4_map: DiscreteMapCoeff {
+                linear: nalgebra::Matrix2::<f64>::new(-0.15, 0.28, 0.26, 0.24),
+                offset: nalgebra::Vector2::<f64>::new(0.0, 0.44),
+                weight: 0.01,
+            },
+        }
+    }
+}
+
+// TODO:  WIP refactor got to here.
 
 pub fn next_barnsley_fern_sample<R: Rng>(
     rng: &mut R,
