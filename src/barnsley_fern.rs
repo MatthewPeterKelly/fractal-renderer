@@ -18,18 +18,6 @@ pub struct BarnsleyFernParams {
     pub coeffs: Coeffs,
 }
 
-impl Default for BarnsleyFernParams {
-    fn default() -> BarnsleyFernParams {
-        BarnsleyFernParams {
-            fit_image: render::FitImage::default(),
-            sample_count: 1000,
-            background_color_rgba: [0, 0, 0, 255],
-            fern_color_rgba: [79, 121, 66, 255],
-            coeffs: Coeffs::default(),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct MeasuredElapsedTime {
     pub setup: Duration,
@@ -85,35 +73,6 @@ pub struct Coeffs {
     f2_map: DiscreteMapCoeff,
     f3_map: DiscreteMapCoeff,
     f4_map: DiscreteMapCoeff,
-}
-
-impl Default for Coeffs {
-    fn default() -> Coeffs {
-        Coeffs {
-            center: nalgebra::Vector2::new(0.0, 5.0),
-            dimensions: nalgebra::Vector2::new(6.0, 10.0),
-            f1_map: DiscreteMapCoeff {
-                linear: nalgebra::Matrix2::<f64>::new(0.0, 0.0, 0.0, 0.16),
-                offset: nalgebra::Vector2::<f64>::new(0.0, 0.0),
-                weight: 0.01,
-            },
-            f2_map: DiscreteMapCoeff {
-                linear: nalgebra::Matrix2::<f64>::new(0.85, 0.04, -0.04, 0.85),
-                offset: nalgebra::Vector2::<f64>::new(0.0, 1.60),
-                weight: 0.85,
-            },
-            f3_map: DiscreteMapCoeff {
-                linear: nalgebra::Matrix2::<f64>::new(0.20, -0.26, 0.23, 0.22),
-                offset: nalgebra::Vector2::<f64>::new(0.0, 1.6),
-                weight: 0.07,
-            },
-            f4_map: DiscreteMapCoeff {
-                linear: nalgebra::Matrix2::<f64>::new(-0.15, 0.28, 0.26, 0.24),
-                offset: nalgebra::Vector2::<f64>::new(0.0, 0.44),
-                weight: 0.07,
-            },
-        }
-    }
 }
 
 impl Coeffs {
@@ -172,8 +131,6 @@ impl SampleGenerator {
         self.coeffs.f1_map.map(prev_sample)
     }
 }
-
-// TODO:  WIP refactor got to here.
 
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
