@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::cli::ParameterFilePath;
+use crate::render;
 
 pub fn extract_base_name(path: &str) -> &str {
     std::path::Path::new(path)
@@ -37,13 +38,24 @@ pub fn date_time_string() -> String {
     )
 }
 
-pub fn create_text_file(
-    directory_path: &std::path::Path,
-    prefix: &str,
-    suffix: &str,
-) -> std::io::BufWriter<std::fs::File> {
-    let path = directory_path.join(prefix.to_owned() + suffix);
-    let file = std::fs::File::create(&path)
-        .unwrap_or_else(|_| panic!("failed to create file: {:?}", path));
-    std::io::BufWriter::new(file)
+/**
+ * Store a path and prefix together, making it easily to quickly generate
+ * a collection of files with the same prefix, but separate suffixes.
+ */
+pub struct FilePrefix {
+    directory_path: std::path::PathBuf,
+    file_prefix: String,
+}
+
+impl FilePrefix {
+    pub fn with_suffix(&self, suffix: &str) -> std::path::PathBuf {
+        self.directory_path.join(self.file_prefix.clone() + suffix)
+    }
+
+    pub fn create_file(&self, suffix: &str) -> std::io::BufWriter<std::fs::File> {
+        let path = self.with_suffix(suffix);
+        let file = std::fs::File::create(&path)
+            .unwrap_or_else(|_| panic!("failed to create file: {:?}", path));
+        std::io::BufWriter::new(file)
+    }
 }

@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::render;
+use crate::{file_io, render};
 
 // Fern Generation Algorithm reference:
 // https://en.wikipedia.org/wiki/Barnsley_fern
@@ -215,18 +215,21 @@ pub fn render_barnsley_fern(
     Ok(())
 }
 
+pub struct Colors {
+    background: image::Rgba<u8>,
+    subject: image::Rgba<u8>,
+}
+
 /**
  * Renders a fractal defined by a
  */
 pub fn render_sampled_fractal<D>(
-    params_str: &str, // For diagnostics only --> written to a file
-    image_specification: &render::ImageSpecification,
-    background_color: &image::Rgba<u8>,
-    sample_color: &image::Rgba<u8>,
+    colors: &Colors,
     distribution_generator: &D,
-    directory_path: &std::path::Path,
     sample_count: u32,
-    file_prefix: &str,
+    image_specification: &render::ImageSpecification,
+    file_prefix: &file_io::FilePrefix,
+    params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     D: Fn() -> nalgebra::Vector2<f64>,
@@ -235,10 +238,10 @@ where
     let mut timer = MeasuredElapsedTime::default();
 
     // write out the parameters to a file:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    let params_path = file_prefix.with_suffix(".json");
     std::fs::write(params_path, params_str).expect("Unable to write params file.");
 
-    let render_path = directory_path.join(file_prefix.to_owned() + ".png");
+    let render_path = file_prefix.with_suffix(".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
@@ -247,7 +250,7 @@ where
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = *background_color;
+        *pixel = colors.background;
     }
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
@@ -258,7 +261,7 @@ where
         let sample_point = distribution_generator();
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = *sample_color;
+            *pixel = colors.subject;
         }
     }
 
@@ -270,11 +273,7 @@ where
 
     println!("Wrote image file to: {}", render_path.display());
 
-    timer.display(&mut crate::file_io::create_text_file(
-        directory_path,
-        file_prefix,
-        "_diagnostics.txt",
-    ))?;
+    timer.display(&mut file_prefix.create_file("_diagnostics.txt"))?;
 
     Ok(())
 }
