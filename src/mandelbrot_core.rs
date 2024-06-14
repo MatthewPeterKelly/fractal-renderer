@@ -19,18 +19,6 @@ pub struct MandelbrotParams {
     pub histogram_bin_count: usize,
 }
 
-impl Default for MandelbrotParams {
-    fn default() -> MandelbrotParams {
-        MandelbrotParams {
-            image_specification: render::ImageSpecification::default(),
-            escape_radius_squared: (4.0),
-            max_iter_count: (550),
-            refinement_count: (5),
-            histogram_bin_count: (512),
-        }
-    }
-}
-
 /**
  * @param dimensions: local "width" and "height" of the retangle in imaginary space
  * @param center: location of the center of that rectangle

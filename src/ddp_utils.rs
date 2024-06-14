@@ -24,18 +24,6 @@ pub struct DrivenDampedPendulumParams {
     pub periodic_state_error_tolerance: f64,
 }
 
-impl Default for DrivenDampedPendulumParams {
-    fn default() -> DrivenDampedPendulumParams {
-        DrivenDampedPendulumParams {
-            image_specification: render::ImageSpecification::default(),
-            time_phase: TimePhaseSpecification::Snapshot(0.0),
-            n_max_period: (100),
-            n_steps_per_period: (10),
-            periodic_state_error_tolerance: (1e-4),
-        }
-    }
-}
-
 /**
  * Based on implementation from:
  * https://www.dropbox.com/home/mpk/Documents/Random_Projects/Driven_Damped_Pendulum/Version%202?preview=Driven_Damped_Pendulum.m

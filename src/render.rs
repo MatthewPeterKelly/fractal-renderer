@@ -20,16 +20,6 @@ impl ImageSpecification {
     }
 }
 
-impl Default for ImageSpecification {
-    fn default() -> ImageSpecification {
-        ImageSpecification {
-            resolution: nalgebra::Vector2::<u32>::new(400, 300),
-            center: nalgebra::Vector2::<f64>::new(0.0, 0.0),
-            width: 1.0,
-        }
-    }
-}
-
 /**
  * Allows the user to specify only the resolution of the image and how much "extra space" to leave
  * around the fractal (subject) in the image. The real coordinates are derived automatically from
@@ -65,15 +55,6 @@ impl FitImage {
             resolution: self.resolution,
             center: *center,
             width: self.padding_scale * selected_width,
-        }
-    }
-}
-
-impl Default for FitImage {
-    fn default() -> FitImage {
-        FitImage {
-            resolution: nalgebra::Vector2::<u32>::new(400, 300),
-            padding_scale: 1.05,
         }
     }
 }

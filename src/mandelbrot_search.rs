@@ -39,29 +39,6 @@ pub struct MandelbrotSearchParams {
     pub max_search_count: i32,
 }
 
-impl Default for MandelbrotSearchParams {
-    fn default() -> MandelbrotSearchParams {
-        MandelbrotSearchParams {
-            // Parameters for each individual render:
-            render_image_resolution: nalgebra::Vector2::<u32>::new(1920, 1080),
-            render_escape_radius_squared: (4.0),
-            render_max_iter_count: (550),
-            render_refinement_count: (5),
-            render_view_scale_real: (0.15),
-            render_histogram_bin_count: (512),
-
-            center: nalgebra::Vector2::<f64>::new(-0.2, 0.0),
-            view_scale: nalgebra::Vector2::<f64>::new(3.0, 2.0),
-            search_escape_radius_squared: (4.0),
-            search_max_iter_count: (550),
-            query_resolution: nalgebra::Vector2::<u32>::new(16, 9),
-
-            max_num_renders: (16),
-            max_search_count: (10_000),
-        }
-    }
-}
-
 pub struct QueryResult {
     pub value: f64,
     pub point: nalgebra::Vector2<f64>,
