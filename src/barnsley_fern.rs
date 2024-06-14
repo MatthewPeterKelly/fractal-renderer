@@ -218,18 +218,18 @@ pub fn render_barnsley_fern(
 /**
  * Renders a fractal defined by a
  */
-pub fn render_sampled_fractal<D, R: rng>(
-    params_str: &str,
+pub fn render_sampled_fractal<D>(
+    params_str: &str, // For diagnostics only --> written to a file
     image_specification: &render::ImageSpecification,
-    background_color: &image::Rgba,
-    sample_color: &image::Rgba,
-    distribution: &D,
-    params: &BarnsleyFernParams,
+    background_color: &image::Rgba<u8>,
+    sample_color: &image::Rgba<u8>,
+    distribution_generator: &D,
     directory_path: &std::path::Path,
+    sample_count: u32,
     file_prefix: &str,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    D: Fn(&mut R, &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64>,
+    D: Fn() -> nalgebra::Vector2<f64>,
 {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
@@ -247,29 +247,18 @@ where
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = background_color;
+        *pixel = *background_color;
     }
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
 
-    // MPK
-    let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
-
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let mut rng = rand::thread_rng();
-
-    // MPK
-    let generator = SampleGenerator::new(&params.coeffs);
-
-    for _ in 0..params.sample_count {
-        sample_point = distribution(&mut rng, &sample_point);
-
-        // TODO:  hacking on distribution here
-
+    for _ in 0..sample_count {
+        let sample_point = distribution_generator();
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = fern_color;
+            *pixel = *sample_color;
         }
     }
 
