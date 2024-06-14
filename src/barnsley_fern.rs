@@ -134,23 +134,23 @@ impl Coeffs {
  */
 pub struct SampleGenerator {
     distribution: Uniform<f64>,
-    coeffs: Coeffs,
     f2_threshold: f64,
     f3_threshold: f64,
     f4_threshold: f64,
+    coeffs: Coeffs,
 }
 
 impl SampleGenerator {
     pub fn new(raw_coeffs: &Coeffs) -> SampleGenerator {
-        let mut coeffs = *raw_coeffs;
+        let mut coeffs = raw_coeffs.clone();
         coeffs.normalize_weights();
 
         SampleGenerator {
             distribution: Uniform::from(0.0..1.0),
-            coeffs,
             f2_threshold: coeffs.f2_map.weight,
             f3_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight,
             f4_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight + coeffs.f4_map.weight,
+            coeffs,
         }
     }
 
@@ -204,10 +204,9 @@ pub fn render_barnsley_fern(
         *pixel = background_color;
     }
 
-    let image_specification = params.fit_image.image_specification(
-        &nalgebra::Vector2::new(FERN_WIDTH, FERN_HEIGHT),
-        &FERN_CENTER,
-    );
+    let image_specification = params
+        .fit_image
+        .image_specification(&params.coeffs.dimensions, &params.coeffs.center);
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
@@ -215,9 +214,10 @@ pub fn render_barnsley_fern(
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     let mut rng = rand::thread_rng();
+    let generator = SampleGenerator::new(&params.coeffs);
 
     for _ in 0..params.sample_count {
-        sample_point = next_barnsley_fern_sample(&mut rng, &sample_point);
+        sample_point = generator.next(&mut rng, &sample_point);
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = fern_color;
