@@ -9,21 +9,117 @@ use std::{
 
 use crate::render;
 
+// Fern Generation Algorithm reference:
+// https://en.wikipedia.org/wiki/Barnsley_fern
+
+/**
+ * The Barnsley Fern is implemented by a sequence of samples, where each maps from the previous using a 2D affine transform. There are four possible transforms, which are selected randomly (with non-uniform weights).
+ */
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BarnsleyFernParams {
-    pub resolution: nalgebra::Vector2<u32>,
-    pub sample_count: u32,
+pub struct DiscreteMapCoeff {
+    linear: nalgebra::Matrix2<f64>,
+    offset: nalgebra::Vector2<f64>,
+    weight: f64,
 }
 
-impl Default for BarnsleyFernParams {
-    fn default() -> BarnsleyFernParams {
-        BarnsleyFernParams {
-            resolution: nalgebra::Vector2::<u32>::new(400, 300),
-            sample_count: 1000,
-        }
+impl DiscreteMapCoeff {
+    pub fn map(&self, prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
+        self.linear * prev + self.offset
     }
 }
 
+/**
+ * Coefficients needed to generate the Barnsley Fern fractal.
+ * This is where the bulk of the "math" for the fractal occurs.
+ *
+ * This data structure is used to import all "parameters" from the JSON
+ * file, specified by the user.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Coeffs {
+    // x values: from -3 to 3
+    // y values: from 0 to 10
+    center: nalgebra::Vector2<f64>,
+    dimensions: nalgebra::Vector2<f64>, // width, height
+
+    f1_map: DiscreteMapCoeff,
+    f2_map: DiscreteMapCoeff,
+    f3_map: DiscreteMapCoeff,
+    f4_map: DiscreteMapCoeff,
+}
+
+impl Coeffs {
+    pub fn normalize_weights(&mut self) {
+        let total =
+            self.f1_map.weight + self.f2_map.weight + self.f3_map.weight + self.f4_map.weight;
+        let scale = 1.0 / total;
+        self.f1_map.weight *= scale;
+        self.f2_map.weight *= scale;
+        self.f3_map.weight *= scale;
+        self.f4_map.weight *= scale;
+    }
+}
+
+/**
+ * Complete set of parameters that are fed in from the JSON for the Barnsley Fern fractal.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BarnsleyFernParams {
+    pub fit_image: render::FitImage,
+    pub sample_count: u32,
+    pub background_color_rgba: [u8; 4],
+    pub fern_color_rgba: [u8; 4],
+    pub coeffs: Coeffs,
+}
+
+/**
+ * Wrapper around `Coeffs`, used to precompute a few things before
+ * running the sample generation.
+ */
+pub struct SampleGenerator {
+    distribution: Uniform<f64>,
+    f2_threshold: f64,
+    f3_threshold: f64,
+    f4_threshold: f64,
+    coeffs: Coeffs,
+}
+
+impl SampleGenerator {
+    pub fn new(raw_coeffs: &Coeffs) -> SampleGenerator {
+        let mut coeffs = raw_coeffs.clone();
+        coeffs.normalize_weights();
+
+        SampleGenerator {
+            distribution: Uniform::from(0.0..1.0),
+            f2_threshold: coeffs.f2_map.weight,
+            f3_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight,
+            f4_threshold: coeffs.f2_map.weight + coeffs.f3_map.weight + coeffs.f4_map.weight,
+            coeffs,
+        }
+    }
+
+    pub fn next<R: Rng>(
+        &self,
+        rng: &mut R,
+        prev_sample: &nalgebra::Vector2<f64>,
+    ) -> nalgebra::Vector2<f64> {
+        let r = self.distribution.sample(rng);
+        if r < self.f2_threshold {
+            return self.coeffs.f2_map.map(prev_sample);
+        }
+        if r < self.f3_threshold {
+            return self.coeffs.f3_map.map(prev_sample);
+        }
+        if r < self.f4_threshold {
+            return self.coeffs.f4_map.map(prev_sample);
+        }
+        self.coeffs.f1_map.map(prev_sample)
+    }
+}
+
+/**
+ * Timing data, used for simple analysis logging.
+ */
 #[derive(Default)]
 pub struct MeasuredElapsedTime {
     pub setup: Duration,
@@ -42,76 +138,12 @@ impl MeasuredElapsedTime {
     }
 }
 
-// TODO: pass all parameters from .json as part of:
-// https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
-
-const COLOR_BLACK: image::Rgb<u8> = image::Rgb([0, 0, 0]);
-const COLOR_GREEN: image::Rgb<u8> = image::Rgb([79, 121, 66]);
-
-// x values: from -3 to 3
-// y values: from 0 to 10
-const FERN_CENTER: nalgebra::Vector2<f64> = nalgebra::Vector2::new(0.0, 5.0);
-const FERN_HEIGHT: f64 = 10.0;
-const FERN_WIDTH: f64 = 6.0;
-const FERN_PADDING: f64 = 1.1;
-
-fn get_image_width(resolution: &nalgebra::Vector2<u32>) -> f64 {
-    let height = resolution[1] as f64;
-    let width = resolution[0] as f64;
-    let aspect_ratio = height / width; // of the rendered image
-    let selected_width = if aspect_ratio > (FERN_HEIGHT / FERN_WIDTH) {
-        FERN_WIDTH
-    } else {
-        FERN_HEIGHT / aspect_ratio
-    };
-    FERN_PADDING * selected_width
-}
-
-pub fn barnsley_f1_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    nalgebra::Vector2::<f64>::new(0.0, 0.16 * prev[1])
-}
-
-pub fn barnsley_f2_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.85, 0.04, -0.04, 0.85);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
-    A * prev + B
-}
-
-pub fn barnsley_f3_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(0.20, -0.26, 0.23, 0.22);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 1.60);
-    A * prev + B
-}
-
-pub fn barnsley_f4_update(prev: &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64> {
-    const A: nalgebra::Matrix2<f64> = nalgebra::Matrix2::<f64>::new(-0.15, 0.28, 0.26, 0.24);
-    const B: nalgebra::Vector2<f64> = nalgebra::Vector2::<f64>::new(0.0, 0.44);
-    A * prev + B
-}
-
-// Fern Generation Algorithm taken from:
-// https://en.wikipedia.org/wiki/Barnsley_fern
-
-pub fn next_barnsley_fern_sample<R: Rng>(
-    rng: &mut R,
-    prev: &nalgebra::Vector2<f64>,
-) -> nalgebra::Vector2<f64> {
-    // TODO:  construct only once as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/46
-    let distribution = Uniform::from(0.0..1.0);
-    let sample = distribution.sample(rng);
-
-    if sample < 0.85 {
-        return barnsley_f2_update(prev);
-    }
-    if sample < 0.92 {
-        return barnsley_f3_update(prev);
-    }
-    if sample < 0.99 {
-        return barnsley_f4_update(prev);
-    }
-    barnsley_f1_update(prev)
-}
-
+/**
+ * Called by main, used to render the fractal using the above data structures.
+ *
+ * Note:  most of this code is agnostic to the Barnsley Fern. It could be pulled out into
+ * a common library whenever the next sample-based fractal is added to the project.
+ */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
     directory_path: &std::path::Path,
@@ -128,21 +160,21 @@ pub fn render_barnsley_fern(
     let render_path = directory_path.join(file_prefix.to_owned() + ".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::new(
-        params.resolution[0],
-        params.resolution[1],
+    let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
+        params.fit_image.resolution[0],
+        params.fit_image.resolution[1],
     );
 
-    // Set the background to black:
+    let background_color = image::Rgba(params.background_color_rgba);
+    let fern_color = image::Rgba(params.fern_color_rgba);
+
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = COLOR_BLACK;
+        *pixel = background_color;
     }
 
-    let image_specification = render::ImageSpecification {
-        resolution: params.resolution,
-        center: FERN_CENTER,
-        width: get_image_width(&params.resolution),
-    };
+    let image_specification = params
+        .fit_image
+        .image_specification(&params.coeffs.dimensions, &params.coeffs.center);
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
@@ -150,12 +182,13 @@ pub fn render_barnsley_fern(
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     let mut rng = rand::thread_rng();
+    let generator = SampleGenerator::new(&params.coeffs);
 
     for _ in 0..params.sample_count {
-        sample_point = next_barnsley_fern_sample(&mut rng, &sample_point);
+        sample_point = generator.next(&mut rng, &sample_point);
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = COLOR_GREEN;
+            *pixel = fern_color;
         }
     }
 
