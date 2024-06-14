@@ -9,33 +9,6 @@ use std::{
 
 use crate::render;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BarnsleyFernParams {
-    pub fit_image: render::FitImage,
-    pub sample_count: u32,
-    pub background_color_rgba: [u8; 4],
-    pub fern_color_rgba: [u8; 4],
-    pub coeffs: Coeffs,
-}
-
-#[derive(Default)]
-pub struct MeasuredElapsedTime {
-    pub setup: Duration,
-    pub sampling: Duration,
-    pub write_png: Duration,
-}
-
-impl MeasuredElapsedTime {
-    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writeln!(writer, "MeasuredElapsedTime:")?;
-        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
-        writeln!(writer, " -- Sampling: {:?}", self.sampling)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
-        writeln!(writer)?;
-        Ok(())
-    }
-}
-
 // Fern Generation Algorithm reference:
 // https://en.wikipedia.org/wiki/Barnsley_fern
 
@@ -88,6 +61,18 @@ impl Coeffs {
 }
 
 /**
+ * Complete set of parameters that are fed in from the JSON for the Barnsley Fern fractal.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BarnsleyFernParams {
+    pub fit_image: render::FitImage,
+    pub sample_count: u32,
+    pub background_color_rgba: [u8; 4],
+    pub fern_color_rgba: [u8; 4],
+    pub coeffs: Coeffs,
+}
+
+/**
  * Wrapper around `Coeffs`, used to precompute a few things before
  * running the sample generation.
  */
@@ -132,6 +117,33 @@ impl SampleGenerator {
     }
 }
 
+/**
+ * Timing data, used for simple analysis logging.
+ */
+#[derive(Default)]
+pub struct MeasuredElapsedTime {
+    pub setup: Duration,
+    pub sampling: Duration,
+    pub write_png: Duration,
+}
+
+impl MeasuredElapsedTime {
+    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "MeasuredElapsedTime:")?;
+        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
+        writeln!(writer, " -- Sampling: {:?}", self.sampling)?;
+        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
+        writeln!(writer)?;
+        Ok(())
+    }
+}
+
+/**
+ * Called by main, used to render the fractal using the above data structures.
+ *
+ * Note:  most of this code is agnostic to the Barnsley Fern. It could be pulled out into
+ * a common library whenever the next sample-based fractal is added to the project.
+ */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
     directory_path: &std::path::Path,
@@ -156,7 +168,6 @@ pub fn render_barnsley_fern(
     let background_color = image::Rgba(params.background_color_rgba);
     let fern_color = image::Rgba(params.fern_color_rgba);
 
-    // Set the background to black:
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = background_color;
     }
