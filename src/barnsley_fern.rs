@@ -165,6 +165,7 @@ pub fn render_barnsley_fern(
         params.fit_image.resolution[1],
     );
 
+    // MPK
     let background_color = image::Rgba(params.background_color_rgba);
     let fern_color = image::Rgba(params.fern_color_rgba);
 
@@ -172,20 +173,100 @@ pub fn render_barnsley_fern(
         *pixel = background_color;
     }
 
+    // MPK
     let image_specification = params
         .fit_image
         .image_specification(&params.coeffs.dimensions, &params.coeffs.center);
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
+
+    // MPK
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     let mut rng = rand::thread_rng();
+
+    // MPK
     let generator = SampleGenerator::new(&params.coeffs);
 
     for _ in 0..params.sample_count {
         sample_point = generator.next(&mut rng, &sample_point);
+        let (x, y) = pixel_mapper.inverse_map(&sample_point);
+        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
+            *pixel = fern_color;
+        }
+    }
+
+    timer.sampling = render::elapsed_and_reset(&mut stopwatch);
+
+    // Save the image to a file, deducing the type from the file name
+    imgbuf.save(&render_path).unwrap();
+    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
+
+    println!("Wrote image file to: {}", render_path.display());
+
+    timer.display(&mut crate::file_io::create_text_file(
+        directory_path,
+        file_prefix,
+        "_diagnostics.txt",
+    ))?;
+
+    Ok(())
+}
+
+/**
+ * Renders a fractal defined by a
+ */
+pub fn render_sampled_fractal<D, R: rng>(
+    params_str: &str,
+    image_specification: &render::ImageSpecification,
+    background_color: &image::Rgba,
+    sample_color: &image::Rgba,
+    distribution: &D,
+    params: &BarnsleyFernParams,
+    directory_path: &std::path::Path,
+    file_prefix: &str,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    D: Fn(&mut R, &nalgebra::Vector2<f64>) -> nalgebra::Vector2<f64>,
+{
+    let mut stopwatch: Instant = Instant::now();
+    let mut timer = MeasuredElapsedTime::default();
+
+    // write out the parameters to a file:
+    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    std::fs::write(params_path, params_str).expect("Unable to write params file.");
+
+    let render_path = directory_path.join(file_prefix.to_owned() + ".png");
+
+    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
+    let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
+        image_specification.resolution[0],
+        image_specification.resolution[1],
+    );
+
+    for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
+        *pixel = background_color;
+    }
+
+    let pixel_mapper = render::PixelMapper::new(&image_specification);
+
+    // MPK
+    let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
+
+    timer.setup = render::elapsed_and_reset(&mut stopwatch);
+
+    let mut rng = rand::thread_rng();
+
+    // MPK
+    let generator = SampleGenerator::new(&params.coeffs);
+
+    for _ in 0..params.sample_count {
+        sample_point = distribution(&mut rng, &sample_point);
+
+        // TODO:  hacking on distribution here
+
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = fern_color;
