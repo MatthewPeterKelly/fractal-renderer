@@ -14,7 +14,6 @@ pub struct DiscreteMapCoeff {
     linear: nalgebra::Matrix2<f64>,
     offset: nalgebra::Vector2<f64>,
     weight: f64,
-    // TODO:   store associated color here?
 }
 
 impl DiscreteMapCoeff {
@@ -143,7 +142,7 @@ pub fn render_barnsley_fern(
         &params
             .fit_image
             .image_specification(&params.coeffs.dimensions, &params.coeffs.center),
-        &file_prefix,
+        file_prefix,
         &serde_json::to_string(params)?,
     )
 }

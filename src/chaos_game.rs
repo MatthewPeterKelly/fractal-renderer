@@ -69,7 +69,7 @@ where
         *pixel = background_color;
     }
 
-    let pixel_mapper = render::PixelMapper::new(&image_specification);
+    let pixel_mapper = render::PixelMapper::new(image_specification);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
