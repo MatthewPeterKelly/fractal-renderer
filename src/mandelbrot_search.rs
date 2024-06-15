@@ -134,7 +134,7 @@ pub fn mandelbrot_search_render(
                 &render_params,
                 &file_io::FilePrefix {
                     directory_path: directory_path.to_path_buf(),
-                    file_prefix: format!("render_{}", render_iter),
+                    file_base: format!("render_{}", render_iter),
                 },
             );
 

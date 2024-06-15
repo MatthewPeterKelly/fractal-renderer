@@ -137,7 +137,7 @@ pub fn render_driven_damped_pendulum_attractor(
                 inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
                 let inner_file_prefix = file_io::FilePrefix {
                     directory_path: inner_directory_path.clone(),
-                    file_prefix: format!("{}_{}", file_prefix.file_prefix, idx),
+                    file_base: format!("{}_{}", file_prefix.file_base, idx),
                 };
                 render_driven_damped_pendulum_attractor(&inner_params, &inner_file_prefix)?;
             }

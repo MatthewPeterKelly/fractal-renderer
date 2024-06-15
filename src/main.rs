@@ -47,7 +47,7 @@ fn main() {
                         "mandelbrot_render",
                         &datetime,
                     ),
-                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
                 },
             )
             .unwrap();
@@ -82,7 +82,7 @@ fn main() {
                         "ddp_render",
                         &datetime,
                     ),
-                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
                 },
             )
             .unwrap();
@@ -101,7 +101,7 @@ fn main() {
                         "barnsley_fern",
                         &datetime,
                     ),
-                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
                 },
             )
             .unwrap();

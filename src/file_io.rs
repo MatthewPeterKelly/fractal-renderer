@@ -43,12 +43,12 @@ pub fn date_time_string() -> String {
  */
 pub struct FilePrefix {
     pub directory_path: std::path::PathBuf,
-    pub file_prefix: String,
+    pub file_base: String,
 }
 
 impl FilePrefix {
     pub fn with_suffix(&self, suffix: &str) -> std::path::PathBuf {
-        self.directory_path.join(self.file_prefix.clone() + suffix)
+        self.directory_path.join(self.file_base.clone() + suffix)
     }
 
     pub fn create_file_with_suffix(&self, suffix: &str) -> std::io::BufWriter<std::fs::File> {
