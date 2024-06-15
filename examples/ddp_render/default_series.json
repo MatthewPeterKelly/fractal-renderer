@@ -14,7 +14,7 @@
         "Series": {
             "low": 0.0,
             "upp": 1.0,
-            "count": 32
+            "count": 16
         }
     },
     "n_max_period": 120,

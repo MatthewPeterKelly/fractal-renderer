@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    file_io,
     histogram::{CumulativeDistributionFunction, Histogram},
     render,
 };
@@ -171,13 +172,12 @@ impl MeasuredElapsedTime {
 
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
-    directory_path: &std::path::Path,
-    file_prefix: &str,
+    file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
 
-    let render_path = directory_path.join(file_prefix.to_owned() + ".png");
+    let render_path = file_prefix.with_suffix(".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
@@ -186,7 +186,7 @@ pub fn render_mandelbrot_set(
     );
 
     // write out the parameters too:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    let params_path = file_prefix.with_suffix(".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
@@ -236,8 +236,7 @@ pub fn render_mandelbrot_set(
 
     println!("Wrote image file to: {}", render_path.display());
 
-    let mut diagnostics_file =
-        crate::file_io::create_text_file(directory_path, file_prefix, "_diagnostics.txt");
+    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
 
     timer.display(&mut diagnostics_file)?;
     cdf.display(&mut diagnostics_file)?;

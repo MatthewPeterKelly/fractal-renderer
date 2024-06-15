@@ -1,4 +1,4 @@
-use crate::ode_solvers::rk4_simulate;
+use crate::{file_io, ode_solvers::rk4_simulate};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
@@ -111,14 +111,13 @@ impl MeasuredElapsedTime {
 
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
-    directory_path: &std::path::Path,
-    file_prefix: &str,
+    file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
 
     // write out the parameters to a file:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
+    let params_path = file_prefix.with_suffix(".json");
     let params_str = serde_json::to_string(params)?;
     std::fs::write(params_path, params_str).expect("Unable to write params file.");
 
@@ -128,7 +127,7 @@ pub fn render_driven_damped_pendulum_attractor(
         TimePhaseSpecification::Series { low, upp, count } => {
             more_asserts::assert_gt!(count, 0);
             let scale = (upp - low) / (count as f64);
-            let inner_directory_path = directory_path.join("series");
+            let inner_directory_path = file_prefix.directory_path.join("series");
             std::fs::create_dir_all(&inner_directory_path).unwrap();
 
             timer.setup = render::elapsed_and_reset(&mut stopwatch);
@@ -136,23 +135,19 @@ pub fn render_driven_damped_pendulum_attractor(
                 let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
                 inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
-                render_driven_damped_pendulum_attractor(
-                    &inner_params,
-                    &inner_directory_path,
-                    &format!("{}_{}", file_prefix, idx),
-                )?;
+                let inner_file_prefix = file_io::FilePrefix {
+                    directory_path: inner_directory_path.clone(),
+                    file_base: format!("{}_{}", file_prefix.file_base, idx),
+                };
+                render_driven_damped_pendulum_attractor(&inner_params, &inner_file_prefix)?;
             }
             timer.simulation = render::elapsed_and_reset(&mut stopwatch);
-            timer.display(&mut crate::file_io::create_text_file(
-                directory_path,
-                file_prefix,
-                "_diagnostics.txt",
-            ))?;
+            timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
             return Ok(());
         }
     };
 
-    let render_path = directory_path.join(file_prefix.to_owned() + ".png");
+    let render_path = file_prefix.with_suffix(".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
@@ -193,11 +188,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     println!("Wrote image file to: {}", render_path.display());
 
-    timer.display(&mut crate::file_io::create_text_file(
-        directory_path,
-        file_prefix,
-        "_diagnostics.txt",
-    ))?;
+    timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
     Ok(())
 }

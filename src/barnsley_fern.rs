@@ -1,13 +1,7 @@
+use crate::{chaos_game, file_io, render};
 use rand::distributions::{Distribution, Uniform};
-
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::{
-    io::{self, Write},
-    time::{Duration, Instant},
-};
-
-use crate::render;
 
 // Fern Generation Algorithm reference:
 // https://en.wikipedia.org/wiki/Barnsley_fern
@@ -118,27 +112,6 @@ impl SampleGenerator {
 }
 
 /**
- * Timing data, used for simple analysis logging.
- */
-#[derive(Default)]
-pub struct MeasuredElapsedTime {
-    pub setup: Duration,
-    pub sampling: Duration,
-    pub write_png: Duration,
-}
-
-impl MeasuredElapsedTime {
-    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writeln!(writer, "MeasuredElapsedTime:")?;
-        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
-        writeln!(writer, " -- Sampling: {:?}", self.sampling)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
-        writeln!(writer)?;
-        Ok(())
-    }
-}
-
-/**
  * Called by main, used to render the fractal using the above data structures.
  *
  * Note:  most of this code is agnostic to the Barnsley Fern. It could be pulled out into
@@ -146,65 +119,30 @@ impl MeasuredElapsedTime {
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
-    directory_path: &std::path::Path,
-    file_prefix: &str,
+    file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch: Instant = Instant::now();
-    let mut timer = MeasuredElapsedTime::default();
-
-    // write out the parameters to a file:
-    let params_path = directory_path.join(file_prefix.to_owned() + ".json");
-    let params_str = serde_json::to_string(params)?;
-    std::fs::write(params_path, params_str).expect("Unable to write params file.");
-
-    let render_path = directory_path.join(file_prefix.to_owned() + ".png");
-
-    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
-        params.fit_image.resolution[0],
-        params.fit_image.resolution[1],
-    );
-
-    let background_color = image::Rgba(params.background_color_rgba);
-    let fern_color = image::Rgba(params.fern_color_rgba);
-
-    for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = background_color;
-    }
-
-    let image_specification = params
-        .fit_image
-        .image_specification(&params.coeffs.dimensions, &params.coeffs.center);
-
-    let pixel_mapper = render::PixelMapper::new(&image_specification);
+    // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
-
-    timer.setup = render::elapsed_and_reset(&mut stopwatch);
-
     let mut rng = rand::thread_rng();
     let generator = SampleGenerator::new(&params.coeffs);
+    let fern_color = image::Rgba(params.fern_color_rgba);
 
-    for _ in 0..params.sample_count {
+    let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
-        let (x, y) = pixel_mapper.inverse_map(&sample_point);
-        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = fern_color;
+        chaos_game::ColoredPoint {
+            point: sample_point,
+            color: fern_color,
         }
-    }
+    };
 
-    timer.sampling = render::elapsed_and_reset(&mut stopwatch);
-
-    // Save the image to a file, deducing the type from the file name
-    imgbuf.save(&render_path).unwrap();
-    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
-
-    println!("Wrote image file to: {}", render_path.display());
-
-    timer.display(&mut crate::file_io::create_text_file(
-        directory_path,
+    chaos_game::render(
+        image::Rgba(params.background_color_rgba),
+        &mut distribution,
+        params.sample_count,
+        &params
+            .fit_image
+            .image_specification(&params.coeffs.dimensions, &params.coeffs.center),
         file_prefix,
-        "_diagnostics.txt",
-    ))?;
-
-    Ok(())
+        &serde_json::to_string(params)?,
+    )
 }
