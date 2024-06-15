@@ -126,8 +126,7 @@ impl SampleGenerator {
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
-    directory_path: &std::path::Path,
-    file_prefix: &str,
+    file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
@@ -150,10 +149,7 @@ pub fn render_barnsley_fern(
         &params
             .fit_image
             .image_specification(&params.coeffs.dimensions, &params.coeffs.center),
-        &file_io::FilePrefix {
-            directory_path: directory_path.to_path_buf(),
-            file_prefix: file_prefix.to_owned(),
-        },
+        &file_prefix,
         &serde_json::to_string(params)?,
     )
 }

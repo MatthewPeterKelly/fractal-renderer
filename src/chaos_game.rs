@@ -92,7 +92,7 @@ where
 
     println!("Wrote image file to: {}", render_path.display());
 
-    timer.display(&mut file_prefix.create_file("_diagnostics.txt"))?;
+    timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
     Ok(())
 }

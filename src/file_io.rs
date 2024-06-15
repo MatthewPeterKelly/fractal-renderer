@@ -52,7 +52,7 @@ impl FilePrefix {
         self.directory_path.join(self.file_prefix.clone() + suffix)
     }
 
-    pub fn create_file(&self, suffix: &str) -> std::io::BufWriter<std::fs::File> {
+    pub fn create_file_with_suffix(&self, suffix: &str) -> std::io::BufWriter<std::fs::File> {
         let path = self.with_suffix(suffix);
         let file = std::fs::File::create(&path)
             .unwrap_or_else(|_| panic!("failed to create file: {:?}", path));

@@ -1,4 +1,4 @@
-use crate::render;
+use crate::{file_io, render};
 use iter_num_tools::grid_space;
 use nalgebra::Vector2;
 use rand::Rng;
@@ -132,8 +132,10 @@ pub fn mandelbrot_search_render(
 
             let render_result = render_mandelbrot_set(
                 &render_params,
-                directory_path,
-                &format!("render_{}", render_iter),
+                &file_io::FilePrefix {
+                    directory_path: directory_path.to_path_buf(),
+                    file_prefix: format!("render_{}", render_iter),
+                },
             );
 
             match render_result {
