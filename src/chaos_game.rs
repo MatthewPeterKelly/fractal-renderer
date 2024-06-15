@@ -31,16 +31,16 @@ impl MeasuredElapsedTime {
     }
 }
 
-pub struct Colors {
-    background: image::Rgba<u8>,
-    subject: image::Rgba<u8>, // TODO:  just have the distribution return this.
+pub struct ColoredPoint {
+    pub point: nalgebra::Vector2<f64>,
+    pub color: image::Rgba<u8>,
 }
 
 /**
  * Renders a fractal defined by a
  */
 pub fn render<D>(
-    colors: &Colors,
+    background_color: image::Rgba<u8>,
     distribution_generator: &D,
     sample_count: u32,
     image_specification: &render::ImageSpecification,
@@ -48,7 +48,7 @@ pub fn render<D>(
     params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    D: Fn() -> nalgebra::Vector2<f64>, // TODO:  return point and color
+    D: FnMut() -> ColoredPoint,
 {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
@@ -66,7 +66,7 @@ where
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = colors.background;
+        *pixel = background_color;
     }
 
     let pixel_mapper = render::PixelMapper::new(&image_specification);
@@ -74,10 +74,10 @@ where
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
-        let sample_point = distribution_generator();
-        let (x, y) = pixel_mapper.inverse_map(&sample_point);
+        let colored_point = distribution_generator();
+        let (x, y) = pixel_mapper.inverse_map(&colored_point.point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = colors.subject; // grab color from distribution instead.
+            *pixel = colored_point.color;
         }
     }
 

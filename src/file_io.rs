@@ -43,8 +43,8 @@ pub fn date_time_string() -> String {
  * a collection of files with the same prefix, but separate suffixes.
  */
 pub struct FilePrefix {
-    directory_path: std::path::PathBuf,
-    file_prefix: String,
+    pub directory_path: std::path::PathBuf,
+    pub file_prefix: String,
 }
 
 impl FilePrefix {
