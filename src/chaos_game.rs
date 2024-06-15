@@ -37,7 +37,9 @@ pub struct ColoredPoint {
 }
 
 /**
- * Renders a fractal defined by a
+ * Renders a fractal defined by randomly generated sequence of points from a carefully crafted distribution.
+ * The user sets up the distribution, and this function samples from the distribution and handles all of the
+ * file generation and diagnostics.
  */
 pub fn render<D>(
     background_color: image::Rgba<u8>,
