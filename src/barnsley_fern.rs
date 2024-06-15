@@ -1,13 +1,7 @@
-use rand::distributions::{self, Distribution, Uniform};
-
+use crate::{chaos_game, file_io, render};
+use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::{
-    io::{self, Write},
-    time::{Duration, Instant},
-};
-
-use crate::{chaos_game, file_io, render};
 
 // Fern Generation Algorithm reference:
 // https://en.wikipedia.org/wiki/Barnsley_fern
@@ -134,7 +128,7 @@ pub fn render_barnsley_fern(
     let generator = SampleGenerator::new(&params.coeffs);
     let fern_color = image::Rgba(params.fern_color_rgba);
 
-    let distribution = || {
+    let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
         chaos_game::ColoredPoint {
             point: sample_point,
@@ -144,7 +138,7 @@ pub fn render_barnsley_fern(
 
     chaos_game::render(
         image::Rgba(params.background_color_rgba),
-        &distribution,
+        &mut distribution,
         params.sample_count,
         &params
             .fit_image

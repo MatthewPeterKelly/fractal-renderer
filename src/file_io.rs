@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::cli::ParameterFilePath;
-use crate::render;
 
 pub fn extract_base_name(path: &str) -> &str {
     std::path::Path::new(path)

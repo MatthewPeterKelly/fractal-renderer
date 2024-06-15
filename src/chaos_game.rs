@@ -41,7 +41,7 @@ pub struct ColoredPoint {
  */
 pub fn render<D>(
     background_color: image::Rgba<u8>,
-    distribution_generator: &D,
+    distribution_generator: &mut D,
     sample_count: u32,
     image_specification: &render::ImageSpecification,
     file_prefix: &file_io::FilePrefix,

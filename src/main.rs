@@ -1,4 +1,5 @@
 mod barnsley_fern;
+mod chaos_game;
 mod cli;
 mod ddp_utils;
 mod file_io;
@@ -40,12 +41,14 @@ fn main() {
         Some(CommandsEnum::MandelbrotRender(params)) => {
             crate::mandelbrot_core::render_mandelbrot_set(
                 &build_params(params),
-                &crate::file_io::build_output_path_with_date_time(
-                    params,
-                    "mandelbrot_render",
-                    &datetime,
-                ),
-                file_io::extract_base_name(&params.params_path),
+                &file_io::FilePrefix {
+                    directory_path: crate::file_io::build_output_path_with_date_time(
+                        params,
+                        "mandelbrot_render",
+                        &datetime,
+                    ),
+                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                },
             )
             .unwrap();
         }
@@ -73,8 +76,14 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(params, "ddp_render", &datetime),
-                file_io::extract_base_name(&params.params_path),
+                &file_io::FilePrefix {
+                    directory_path: crate::file_io::build_output_path_with_date_time(
+                        params,
+                        "ddp_render",
+                        &datetime,
+                    ),
+                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                },
             )
             .unwrap();
         }
@@ -86,12 +95,14 @@ fn main() {
                         .expect("Unable to read param file"),
                 )
                 .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(
-                    params,
-                    "barnsley_fern",
-                    &datetime,
-                ),
-                file_io::extract_base_name(&params.params_path),
+                &file_io::FilePrefix {
+                    directory_path: crate::file_io::build_output_path_with_date_time(
+                        params,
+                        "barnsley_fern",
+                        &datetime,
+                    ),
+                    file_prefix: file_io::extract_base_name(&params.params_path).to_owned(),
+                },
             )
             .unwrap();
         }
