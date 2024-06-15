@@ -33,7 +33,7 @@ impl MeasuredElapsedTime {
 
 pub struct Colors {
     background: image::Rgba<u8>,
-    subject: image::Rgba<u8>,
+    subject: image::Rgba<u8>, // TODO:  just have the distribution return this.
 }
 
 /**
@@ -48,7 +48,7 @@ pub fn render<D>(
     params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    D: Fn() -> nalgebra::Vector2<f64>,
+    D: Fn() -> nalgebra::Vector2<f64>, // TODO:  return point and color
 {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
@@ -77,10 +77,13 @@ where
         let sample_point = distribution_generator();
         let (x, y) = pixel_mapper.inverse_map(&sample_point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-            *pixel = colors.subject;
+            *pixel = colors.subject; // grab color from distribution instead.
         }
     }
 
+    // NOTE:  when we add anti-aliasing, just insert it near here, as a second parallel data strucutre that stores
+    // The count per pixel. Then, in post processing, iterate over the image and interpolate between the stored
+    // and background color. That allows for more than one subject color and also anti-aliasing.
     timer.sampling = render::elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name

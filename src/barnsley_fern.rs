@@ -20,6 +20,7 @@ pub struct DiscreteMapCoeff {
     linear: nalgebra::Matrix2<f64>,
     offset: nalgebra::Vector2<f64>,
     weight: f64,
+    // TODO:   store associated color here?
 }
 
 impl DiscreteMapCoeff {
