@@ -15,8 +15,35 @@ pub struct ImageSpecification {
  * from the aspect ratio of the image and the specified width.
  */
 impl ImageSpecification {
+    // TODO:  add a unit test for this!!
     pub fn height(&self) -> f64 {
         self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
+    }
+
+    /**
+     * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
+     * applied within a single pixel, generating a dense grid of samples within that pixel.
+     */
+    // TODO:  add a unit test for this!!
+    pub fn subpixel_offset_vector(&self, n: u32) -> Vec<nalgebra::Vector2<f64>> {
+        let mut offsets = Vec::with_capacity((n * n) as usize);
+        let step = 1.0 / n as f64;
+
+        let pixel_width = self.width / (self.resolution[0] as f64);
+        let pixel_height = self.height() / (self.resolution[1] as f64);
+
+        for i in 0..n {
+            let alpha_i = 0.5 - step * (i as f64); // [-0.5, 0.5)
+            let x = alpha_i * pixel_width;
+
+            for j in 0..n {
+                let alpha_j = 0.5 - step * (j as f64); // [-0.5, 0.5)
+                let y = alpha_j * pixel_height;
+                offsets.push(nalgebra::Vector2::new(x, y));
+            }
+        }
+
+        offsets
     }
 }
 

@@ -157,18 +157,30 @@ pub fn render_driven_damped_pendulum_attractor(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
-        let result = compute_basin_of_attraction(
-            nalgebra::Vector2::<f64>::new(point[0], point[1]),
-            time_phase_fraction,
-            params.n_max_period,
-            params.n_steps_per_period,
-            params.periodic_state_error_tolerance,
-        );
-        if Option::<i32>::Some(0) == result {
-            1.0
-        } else {
-            0.0
+    let n_subpixel_sample = 5;
+    let subpixel_samples = params
+        .image_specification
+        .subpixel_offset_vector(n_subpixel_sample);
+    let subpixel_scale = 1.0 / (subpixel_samples.len() as f64);
+
+    let pixel_renderer = {
+        let subpixel_samples = &subpixel_samples; // Capture by reference
+        move |point: &nalgebra::Vector2<f64>| {
+            let mut sum = 0.0;
+
+            for sample in subpixel_samples {
+                let result = compute_basin_of_attraction(
+                    nalgebra::Vector2::<f64>::new(point[0] + sample[0], point[1] + sample[1]),
+                    time_phase_fraction,
+                    params.n_max_period,
+                    params.n_steps_per_period,
+                    params.periodic_state_error_tolerance,
+                );
+                if Option::<i32>::Some(0) == result {
+                    sum += subpixel_scale;
+                }
+            }
+            sum
         }
     };
 
