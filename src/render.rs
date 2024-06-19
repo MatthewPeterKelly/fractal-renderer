@@ -24,7 +24,6 @@ impl ImageSpecification {
      * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
      * applied within a single pixel, generating a dense grid of samples within that pixel.
      */
-    // TODO:  add a unit test for this!!
     pub fn subpixel_offset_vector(&self, n: u32) -> Vec<nalgebra::Vector2<f64>> {
         let mut offsets = Vec::with_capacity((n * n) as usize);
         let step = 1.0 / n as f64;
@@ -33,11 +32,11 @@ impl ImageSpecification {
         let pixel_height = self.height() / (self.resolution[1] as f64);
 
         for i in 0..n {
-            let alpha_i = 0.5 - step * (i as f64); // [-0.5, 0.5)
+            let alpha_i = step * (i as f64) - 0.5; // [-0.5, 0.5)
             let x = alpha_i * pixel_width;
 
             for j in 0..n {
-                let alpha_j = 0.5 - step * (j as f64); // [-0.5, 0.5)
+                let alpha_j = step * (j as f64) - 0.5; // [-0.5, 0.5)
                 let y = alpha_j * pixel_height;
                 offsets.push(nalgebra::Vector2::new(x, y));
             }
@@ -204,4 +203,46 @@ where
     }));
 
     raw_data
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, iter::FromIterator};
+
+    use super::*;
+    use ordered_float::OrderedFloat;
+
+    #[test]
+    fn test_subpixel_offset_vector() {
+        // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [-1.0, -0.5, 0.0, 0.5]
+        // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
+        let image_specification = ImageSpecification {
+            resolution: nalgebra::Vector2::new(4, 8),
+            center: nalgebra::Vector2::new(2.0, 4.0),
+            width: 8.0,
+        };
+
+        let offset_vector = image_specification.subpixel_offset_vector(4);
+
+        let mut x_offset_data = BTreeSet::new();
+        let mut y_offset_data = BTreeSet::new();
+        for point in offset_vector {
+            x_offset_data.insert(OrderedFloat(point[0]));
+            y_offset_data.insert(OrderedFloat(point[1]));
+        }
+
+        let offset_soln = BTreeSet::from_iter(
+            [
+                OrderedFloat(-1.0),
+                OrderedFloat(-0.5),
+                OrderedFloat(0.0),
+                OrderedFloat(0.5),
+            ]
+            .iter()
+            .cloned(),
+        );
+
+        assert_eq!(x_offset_data, offset_soln);
+        assert_eq!(y_offset_data, offset_soln);
+    }
 }
