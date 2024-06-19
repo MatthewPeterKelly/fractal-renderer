@@ -18,6 +18,32 @@ impl ImageSpecification {
     pub fn height(&self) -> f64 {
         self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
     }
+
+    /**
+     * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
+     * applied within a single pixel, generating a dense grid of samples within that pixel.
+     */
+    pub fn subpixel_offset_vector(&self, n: u32) -> Vec<nalgebra::Vector2<f64>> {
+        assert!(n > 0);
+        let mut offsets = Vec::with_capacity((n * n) as usize);
+        let step = 1.0 / n as f64;
+
+        let pixel_width = self.width / (self.resolution[0] as f64);
+        let pixel_height = self.height() / (self.resolution[1] as f64);
+
+        for i in 0..n {
+            let alpha_i = step * (i as f64); // [0.0, 1.0)
+            let x = alpha_i * pixel_width;
+
+            for j in 0..n {
+                let alpha_j = step * (j as f64); // [0.0, 1.0)
+                let y = alpha_j * pixel_height;
+                offsets.push(nalgebra::Vector2::new(x, y));
+            }
+        }
+
+        offsets
+    }
 }
 
 /**
@@ -177,4 +203,71 @@ where
     }));
 
     raw_data
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, iter::FromIterator};
+
+    use super::*;
+    use ordered_float::OrderedFloat;
+
+    #[test]
+    fn test_image_specification_subpixel_offset_vector() {
+        // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [0.0, 0.5, 1.0, 1.5]
+        // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
+        let image_specification = ImageSpecification {
+            resolution: nalgebra::Vector2::new(4, 8),
+            center: nalgebra::Vector2::new(2.0, 4.0),
+            width: 8.0,
+        };
+
+        {
+            // n > 1
+            let offset_vector = image_specification.subpixel_offset_vector(4);
+
+            let mut x_offset_data = BTreeSet::new();
+            let mut y_offset_data = BTreeSet::new();
+            for point in offset_vector {
+                x_offset_data.insert(OrderedFloat(point[0]));
+                y_offset_data.insert(OrderedFloat(point[1]));
+            }
+
+            let offset_soln = BTreeSet::from_iter(
+                [
+                    OrderedFloat(0.0),
+                    OrderedFloat(0.5),
+                    OrderedFloat(1.0),
+                    OrderedFloat(1.5),
+                ]
+                .iter()
+                .cloned(),
+            );
+
+            assert_eq!(x_offset_data, offset_soln);
+            assert_eq!(y_offset_data, offset_soln);
+        }
+
+        {
+            // n = 1
+            let offset_vector = image_specification.subpixel_offset_vector(1);
+            assert_eq!(offset_vector.len(), 1);
+            assert_eq!(offset_vector[0], nalgebra::Vector2::new(0.0, 0.0));
+        }
+    }
+
+    #[test]
+    fn test_image_specification_height() {
+        let image_specification = ImageSpecification {
+            resolution: nalgebra::Vector2::new(5, 23),
+            center: nalgebra::Vector2::new(2.6, 3.4),
+            width: 8.5,
+        };
+
+        // The `height` is defined S.T. that aspect ratio is identical in both the image and the regular space.
+        let aspect_ratio = image_specification.width / image_specification.height();
+        let pixel_aspect_ratio =
+            (image_specification.resolution[0] as f64) / (image_specification.resolution[1] as f64);
+        assert_eq!(aspect_ratio, pixel_aspect_ratio);
+    }
 }

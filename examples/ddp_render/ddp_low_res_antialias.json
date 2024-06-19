@@ -1,8 +1,8 @@
 {
     "image_specification": {
         "resolution": [
-            800,
-            600
+            400,
+            300
         ],
         "center": [
             0,
@@ -13,8 +13,8 @@
     "time_phase": {
         "Snapshot": 0.0
     },
-    "n_max_period": 100,
-    "n_steps_per_period": 24,
-    "periodic_state_error_tolerance": 0.005,
-    "subpixel_antialiasing": 1
+    "n_max_period": 80,
+    "n_steps_per_period": 16,
+    "periodic_state_error_tolerance": 0.01,
+    "subpixel_antialiasing": 3
 }

@@ -22,6 +22,11 @@ pub struct DrivenDampedPendulumParams {
     pub n_steps_per_period: u32,
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
+    // Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
+    // 1 == no antialiasing
+    // 3 = some antialiasing (at 9x CPU time)
+    // 7 = high antialiasing (at cost of 49x CPU time)
+    pub subpixel_antialiasing: u32,
 }
 
 /**
@@ -157,18 +162,29 @@ pub fn render_driven_damped_pendulum_attractor(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
-        let result = compute_basin_of_attraction(
-            nalgebra::Vector2::<f64>::new(point[0], point[1]),
-            time_phase_fraction,
-            params.n_max_period,
-            params.n_steps_per_period,
-            params.periodic_state_error_tolerance,
-        );
-        if Option::<i32>::Some(0) == result {
-            1.0
-        } else {
-            0.0
+    let subpixel_samples = params
+        .image_specification
+        .subpixel_offset_vector(params.subpixel_antialiasing);
+    let subpixel_scale = 1.0 / (subpixel_samples.len() as f64);
+
+    let pixel_renderer = {
+        let subpixel_samples = &subpixel_samples; // Capture by reference
+        move |point: &nalgebra::Vector2<f64>| {
+            let mut sum = 0.0;
+
+            for sample in subpixel_samples {
+                let result = compute_basin_of_attraction(
+                    nalgebra::Vector2::<f64>::new(point[0] + sample[0], point[1] + sample[1]),
+                    time_phase_fraction,
+                    params.n_max_period,
+                    params.n_steps_per_period,
+                    params.periodic_state_error_tolerance,
+                );
+                if Option::<i32>::Some(0) == result {
+                    sum += subpixel_scale;
+                }
+            }
+            sum
         }
     };
 
@@ -177,7 +193,7 @@ pub fn render_driven_damped_pendulum_attractor(
     timer.simulation = render::elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
-    let color_map = simple_black_and_white_color_map();
+    let color_map = greyscale_color_map();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = color_map(raw_data[x as usize][y as usize]);
     }
@@ -193,13 +209,9 @@ pub fn render_driven_damped_pendulum_attractor(
     Ok(())
 }
 
-fn simple_black_and_white_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+fn greyscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        const THRESHOLD: f64 = 0.5;
-        if input > THRESHOLD {
-            image::Rgb([255, 255, 255])
-        } else {
-            image::Rgb([0, 0, 0])
-        }
+        let value = (input * 255.0) as u8;
+        image::Rgb([value, value, value])
     }
 }

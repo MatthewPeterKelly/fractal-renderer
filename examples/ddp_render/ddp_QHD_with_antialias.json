@@ -1,8 +1,8 @@
 {
     "image_specification": {
         "resolution": [
-            1920,
-            1080
+            2560,
+            1600
         ],
         "center": [
             0,
@@ -15,5 +15,6 @@
     },
     "n_max_period": 200,
     "n_steps_per_period": 32,
-    "periodic_state_error_tolerance": 0.002
+    "periodic_state_error_tolerance": 0.002,
+    "subpixel_antialiasing": 7
 }
