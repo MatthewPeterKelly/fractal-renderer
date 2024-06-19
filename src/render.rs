@@ -24,6 +24,7 @@ impl ImageSpecification {
      * applied within a single pixel, generating a dense grid of samples within that pixel.
      */
     pub fn subpixel_offset_vector(&self, n: u32) -> Vec<nalgebra::Vector2<f64>> {
+        assert!(n > 0);
         let mut offsets = Vec::with_capacity((n * n) as usize);
         let step = 1.0 / n as f64;
 
@@ -31,11 +32,11 @@ impl ImageSpecification {
         let pixel_height = self.height() / (self.resolution[1] as f64);
 
         for i in 0..n {
-            let alpha_i = step * (i as f64) - 0.5; // [-0.5, 0.5)
+            let alpha_i = step * (i as f64); // [0.0, 1.0)
             let x = alpha_i * pixel_width;
 
             for j in 0..n {
-                let alpha_j = step * (j as f64) - 0.5; // [-0.5, 0.5)
+                let alpha_j = step * (j as f64); // [0.0, 1.0)
                 let y = alpha_j * pixel_height;
                 offsets.push(nalgebra::Vector2::new(x, y));
             }
@@ -213,7 +214,7 @@ mod tests {
 
     #[test]
     fn test_image_specification_subpixel_offset_vector() {
-        // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [-1.0, -0.5, 0.0, 0.5]
+        // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [0.0, 0.5, 1.0, 1.5]
         // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
         let image_specification = ImageSpecification {
             resolution: nalgebra::Vector2::new(4, 8),
@@ -221,28 +222,38 @@ mod tests {
             width: 8.0,
         };
 
-        let offset_vector = image_specification.subpixel_offset_vector(4);
+        {
+            // n > 1
+            let offset_vector = image_specification.subpixel_offset_vector(4);
 
-        let mut x_offset_data = BTreeSet::new();
-        let mut y_offset_data = BTreeSet::new();
-        for point in offset_vector {
-            x_offset_data.insert(OrderedFloat(point[0]));
-            y_offset_data.insert(OrderedFloat(point[1]));
+            let mut x_offset_data = BTreeSet::new();
+            let mut y_offset_data = BTreeSet::new();
+            for point in offset_vector {
+                x_offset_data.insert(OrderedFloat(point[0]));
+                y_offset_data.insert(OrderedFloat(point[1]));
+            }
+
+            let offset_soln = BTreeSet::from_iter(
+                [
+                    OrderedFloat(0.0),
+                    OrderedFloat(0.5),
+                    OrderedFloat(1.0),
+                    OrderedFloat(1.5),
+                ]
+                .iter()
+                .cloned(),
+            );
+
+            assert_eq!(x_offset_data, offset_soln);
+            assert_eq!(y_offset_data, offset_soln);
         }
 
-        let offset_soln = BTreeSet::from_iter(
-            [
-                OrderedFloat(-1.0),
-                OrderedFloat(-0.5),
-                OrderedFloat(0.0),
-                OrderedFloat(0.5),
-            ]
-            .iter()
-            .cloned(),
-        );
-
-        assert_eq!(x_offset_data, offset_soln);
-        assert_eq!(y_offset_data, offset_soln);
+        {
+            // n = 1
+            let offset_vector = image_specification.subpixel_offset_vector(1);
+            assert_eq!(offset_vector.len(), 1);
+            assert_eq!(offset_vector[0], nalgebra::Vector2::new(0.0, 0.0));
+        }
     }
 
     #[test]

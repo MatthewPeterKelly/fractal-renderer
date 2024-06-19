@@ -157,7 +157,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let n_subpixel_sample = 5;
+    let n_subpixel_sample = 5; // TODO:  pass this as parameter!
     let subpixel_samples = params
         .image_specification
         .subpixel_offset_vector(n_subpixel_sample);
@@ -189,7 +189,7 @@ pub fn render_driven_damped_pendulum_attractor(
     timer.simulation = render::elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
-    let color_map = simple_black_and_white_color_map();
+    let color_map = greyscale_color_map();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = color_map(raw_data[x as usize][y as usize]);
     }
@@ -205,13 +205,9 @@ pub fn render_driven_damped_pendulum_attractor(
     Ok(())
 }
 
-fn simple_black_and_white_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
+fn greyscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
     move |input: f64| {
-        const THRESHOLD: f64 = 0.5;
-        if input > THRESHOLD {
-            image::Rgb([255, 255, 255])
-        } else {
-            image::Rgb([0, 0, 0])
-        }
+        let value = (input * 255.0) as u8;
+        image::Rgb([value, value, value])
     }
 }
