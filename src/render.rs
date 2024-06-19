@@ -15,7 +15,6 @@ pub struct ImageSpecification {
  * from the aspect ratio of the image and the specified width.
  */
 impl ImageSpecification {
-    // TODO:  add a unit test for this!!
     pub fn height(&self) -> f64 {
         self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
     }
@@ -213,7 +212,7 @@ mod tests {
     use ordered_float::OrderedFloat;
 
     #[test]
-    fn test_subpixel_offset_vector() {
+    fn test_image_specification_subpixel_offset_vector() {
         // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [-1.0, -0.5, 0.0, 0.5]
         // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
         let image_specification = ImageSpecification {
@@ -244,5 +243,20 @@ mod tests {
 
         assert_eq!(x_offset_data, offset_soln);
         assert_eq!(y_offset_data, offset_soln);
+    }
+
+    #[test]
+    fn test_image_specification_height() {
+        let image_specification = ImageSpecification {
+            resolution: nalgebra::Vector2::new(5, 23),
+            center: nalgebra::Vector2::new(2.6, 3.4),
+            width: 8.5,
+        };
+
+        // The `height` is defined S.T. that aspect ratio is identical in both the image and the regular space.
+        let aspect_ratio = image_specification.width / image_specification.height();
+        let pixel_aspect_ratio =
+            (image_specification.resolution[0] as f64) / (image_specification.resolution[1] as f64);
+        assert_eq!(aspect_ratio, pixel_aspect_ratio);
     }
 }
