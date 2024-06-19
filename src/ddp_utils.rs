@@ -22,6 +22,11 @@ pub struct DrivenDampedPendulumParams {
     pub n_steps_per_period: u32,
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
+    // Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
+    // 1 == no antialiasing
+    // 3 = some antialiasing (at 9x CPU time)
+    // 7 = high antialiasing (at cost of 49x CPU time)
+    pub subpixel_antialiasing: u32,
 }
 
 /**
@@ -157,10 +162,9 @@ pub fn render_driven_damped_pendulum_attractor(
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
-    let n_subpixel_sample = 5; // TODO:  pass this as parameter!
     let subpixel_samples = params
         .image_specification
-        .subpixel_offset_vector(n_subpixel_sample);
+        .subpixel_offset_vector(params.subpixel_antialiasing);
     let subpixel_scale = 1.0 / (subpixel_samples.len() as f64);
 
     let pixel_renderer = {
