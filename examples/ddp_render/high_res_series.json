@@ -18,6 +18,7 @@
         }
     },
     "n_max_period": 256,
-    "n_steps_per_period": 32,
-    "periodic_state_error_tolerance": 0.002
+    "n_steps_per_period": 24,
+    "periodic_state_error_tolerance": 0.005,
+    "subpixel_antialiasing": 1
 }
