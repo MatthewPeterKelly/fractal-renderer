@@ -8,6 +8,7 @@ mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;
 mod render;
+mod serpinsky;
 
 use clap::Parser;
 
