@@ -1,3 +1,4 @@
+use crate::render::ViewRectangle;
 use crate::{chaos_game, file_io, render};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
@@ -86,15 +87,13 @@ pub fn render_serpinsky(
         next_colored_point
     };
 
-    // TODO:  compute the center, width, and height of the triangle to get the image spec.
-
     chaos_game::render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,
         &params
             .fit_image
-            .image_specification(&params.coeffs.dimensions, &params.coeffs.center),
+            .image_specification(&render::ViewRectangle::from_vertices(&vertices)),
         file_prefix,
         &serde_json::to_string(params)?,
     )

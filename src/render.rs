@@ -1,4 +1,3 @@
-use nalgebra::dimension;
 use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -50,6 +49,7 @@ impl ImageSpecification {
 /**
  * Describes a rectangular region in space.
  */
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ViewRectangle {
     pub center: nalgebra::Vector2<f64>,
     pub dimensions: nalgebra::Vector2<f64>,
@@ -88,15 +88,11 @@ pub struct FitImage {
 }
 
 impl FitImage {
-    pub fn image_specification(
-        &self,
-        dims: &nalgebra::Vector2<f64>,
-        center: &nalgebra::Vector2<f64>,
-    ) -> ImageSpecification {
+    pub fn image_specification(&self, view_rectangle: &ViewRectangle) -> ImageSpecification {
         let pixel_height = self.resolution[1] as f64;
         let pixel_width = self.resolution[0] as f64;
-        let dims_height = dims[1];
-        let dims_width = dims[0];
+        let dims_height = view_rectangle.dimensions[1];
+        let dims_width = view_rectangle.dimensions[0];
 
         let aspect_ratio = pixel_height / pixel_width; // of the rendered image
         let selected_width = if aspect_ratio > (dims_height / dims_width) {
@@ -107,7 +103,7 @@ impl FitImage {
 
         ImageSpecification {
             resolution: self.resolution,
-            center: *center,
+            center: view_rectangle.center,
             width: self.padding_scale * selected_width,
         }
     }
