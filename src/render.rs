@@ -56,7 +56,7 @@ pub struct ViewRectangle {
 }
 
 impl ViewRectangle {
-    pub fn from_vertices(vertices: &Vec<nalgebra::Vector2<f64>>) -> ViewRectangle {
+    pub fn from_vertices(vertices: &[nalgebra::Vector2<f64>]) -> ViewRectangle {
         assert!(!vertices.is_empty());
 
         let mut min_corner = vertices[0];
