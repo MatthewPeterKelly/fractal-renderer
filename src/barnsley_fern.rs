@@ -112,9 +112,6 @@ impl SampleGenerator {
 
 /**
  * Called by main, used to render the fractal using the above data structures.
- *
- * Note:  most of this code is agnostic to the Barnsley Fern. It could be pulled out into
- * a common library whenever the next sample-based fractal is added to the project.
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
