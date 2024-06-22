@@ -1,3 +1,4 @@
+use nalgebra::dimension;
 use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -43,6 +44,33 @@ impl ImageSpecification {
         }
 
         offsets
+    }
+}
+
+/**
+ * Describes a rectangular region in space.
+ */
+pub struct ViewRectangle {
+    pub center: nalgebra::Vector2<f64>,
+    pub dimensions: nalgebra::Vector2<f64>,
+}
+
+impl ViewRectangle {
+    pub fn from_vertices(vertices: &Vec<nalgebra::Vector2<f64>>) -> ViewRectangle {
+        assert!(!vertices.is_empty());
+
+        let mut min_corner = vertices[0];
+        let mut max_corner = vertices[0];
+
+        for vertex in vertices.iter() {
+            min_corner = min_corner.sup(vertex);
+            max_corner = max_corner.inf(vertex);
+        }
+
+        let center = 0.5 * (min_corner + max_corner);
+        let dimensions = max_corner - min_corner;
+
+        ViewRectangle { center, dimensions }
     }
 }
 
@@ -211,6 +239,28 @@ mod tests {
 
     use super::*;
     use ordered_float::OrderedFloat;
+
+    #[test]
+    fn test_view_port_from_vertices() {
+        let vertices = vec![
+            nalgebra::Vector2::new(1.0, 2.0),
+            nalgebra::Vector2::new(3.0, 5.0),
+            nalgebra::Vector2::new(-1.0, -2.0),
+            nalgebra::Vector2::new(2.0, 3.0),
+        ];
+
+        let view_rectangle = ViewRectangle::from_vertices(&vertices);
+
+        assert_eq!(view_rectangle.center, nalgebra::Vector2::new(1.0, 1.5));
+        assert_eq!(view_rectangle.dimensions, nalgebra::Vector2::new(4.0, 7.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed")]
+    fn test_view_port_empty_vertices() {
+        let vertices: Vec<nalgebra::Vector2<f64>> = Vec::new();
+        ViewRectangle::from_vertices(&vertices);
+    }
 
     #[test]
     fn test_image_specification_subpixel_offset_vector() {
