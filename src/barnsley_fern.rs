@@ -33,8 +33,7 @@ impl DiscreteMapCoeff {
 pub struct Coeffs {
     // x values: from -3 to 3
     // y values: from 0 to 10
-    center: nalgebra::Vector2<f64>,
-    dimensions: nalgebra::Vector2<f64>, // width, height
+    view_rectangle: render::ViewRectangle,
 
     f1_map: DiscreteMapCoeff,
     f2_map: DiscreteMapCoeff,
@@ -113,9 +112,6 @@ impl SampleGenerator {
 
 /**
  * Called by main, used to render the fractal using the above data structures.
- *
- * Note:  most of this code is agnostic to the Barnsley Fern. It could be pulled out into
- * a common library whenever the next sample-based fractal is added to the project.
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
@@ -141,7 +137,7 @@ pub fn render_barnsley_fern(
         params.sample_count,
         &params
             .fit_image
-            .image_specification(&params.coeffs.dimensions, &params.coeffs.center),
+            .image_specification(&params.coeffs.view_rectangle),
         file_prefix,
         &serde_json::to_string(params)?,
     )

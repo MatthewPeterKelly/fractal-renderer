@@ -8,6 +8,7 @@ mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;
 mod render;
+mod serpinsky;
 
 use clap::Parser;
 
@@ -99,6 +100,25 @@ fn main() {
                     directory_path: crate::file_io::build_output_path_with_date_time(
                         params,
                         "barnsley_fern",
+                        &datetime,
+                    ),
+                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
+                },
+            )
+            .unwrap();
+        }
+
+        Some(CommandsEnum::SerpinksyRender(params)) => {
+            crate::serpinsky::render_serpinsky(
+                &serde_json::from_str(
+                    &std::fs::read_to_string(&params.params_path)
+                        .expect("Unable to read param file"),
+                )
+                .unwrap(),
+                &file_io::FilePrefix {
+                    directory_path: crate::file_io::build_output_path_with_date_time(
+                        params,
+                        "serpinsky",
                         &datetime,
                     ),
                     file_base: file_io::extract_base_name(&params.params_path).to_owned(),

@@ -20,14 +20,16 @@
         255
     ],
     "coeffs": {
-        "center": [
-            0,
-            5
-        ],
-        "dimensions": [
-            6,
-            10
-        ],
+        "view_rectangle": {
+            "center": [
+                0,
+                5
+            ],
+            "dimensions": [
+                6,
+                10
+            ]
+        },
         "f1_map": {
             "linear": [
                 0,

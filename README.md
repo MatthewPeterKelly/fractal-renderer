@@ -9,7 +9,7 @@ Long-term goal:  add support for zoom sequences and other fractals, along with (
 ## Usage (Windows)
 
 ```
-cargo run --release --  mandelbrot-render .\examples\mandelbrot_render\complete.json
+cargo run --release --  mandelbrot-render ./examples\mandelbrot_render\complete.json
 ```
 
 ```
@@ -24,6 +24,9 @@ cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\de
 ```
 ```
 cargo run --release  -- barnsley-fern-render  .\examples\barnsley_fern\default.json
+```
+```
+cargo run --release  -- serpinksy-render  .\examples\serpinsky\triangle.json
 ```
 
 
@@ -45,6 +48,9 @@ cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/de
 ```
 ```
 cargo run --release  -- barnsley-fern-render  ./examples/barnsley_fern/default.json
+```
+```
+cargo run --release  -- serpinksy-render  ./examples/serpinsky/triangle.json
 ```
 
 ## Autoformatting:

@@ -47,6 +47,34 @@ impl ImageSpecification {
 }
 
 /**
+ * Describes a rectangular region in space.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ViewRectangle {
+    pub center: nalgebra::Vector2<f64>,
+    pub dimensions: nalgebra::Vector2<f64>,
+}
+
+impl ViewRectangle {
+    pub fn from_vertices(vertices: &[nalgebra::Vector2<f64>]) -> ViewRectangle {
+        assert!(!vertices.is_empty());
+
+        let mut min_corner = vertices[0];
+        let mut max_corner = vertices[0];
+
+        for vertex in vertices.iter() {
+            min_corner = min_corner.inf(vertex);
+            max_corner = max_corner.sup(vertex);
+        }
+
+        let center = 0.5 * (min_corner + max_corner);
+        let dimensions = max_corner - min_corner;
+
+        ViewRectangle { center, dimensions }
+    }
+}
+
+/**
  * Allows the user to specify only the resolution of the image and how much "extra space" to leave
  * around the fractal (subject) in the image. The real coordinates are derived automatically from
  * other information in the fractal.
@@ -60,15 +88,11 @@ pub struct FitImage {
 }
 
 impl FitImage {
-    pub fn image_specification(
-        &self,
-        dims: &nalgebra::Vector2<f64>,
-        center: &nalgebra::Vector2<f64>,
-    ) -> ImageSpecification {
+    pub fn image_specification(&self, view_rectangle: &ViewRectangle) -> ImageSpecification {
         let pixel_height = self.resolution[1] as f64;
         let pixel_width = self.resolution[0] as f64;
-        let dims_height = dims[1];
-        let dims_width = dims[0];
+        let dims_height = view_rectangle.dimensions[1];
+        let dims_width = view_rectangle.dimensions[0];
 
         let aspect_ratio = pixel_height / pixel_width; // of the rendered image
         let selected_width = if aspect_ratio > (dims_height / dims_width) {
@@ -79,7 +103,7 @@ impl FitImage {
 
         ImageSpecification {
             resolution: self.resolution,
-            center: *center,
+            center: view_rectangle.center,
             width: self.padding_scale * selected_width,
         }
     }
@@ -211,6 +235,28 @@ mod tests {
 
     use super::*;
     use ordered_float::OrderedFloat;
+
+    #[test]
+    fn test_view_port_from_vertices() {
+        let vertices = vec![
+            nalgebra::Vector2::new(1.0, 2.0),
+            nalgebra::Vector2::new(3.0, 5.0),
+            nalgebra::Vector2::new(-1.0, -2.0),
+            nalgebra::Vector2::new(2.0, 3.0),
+        ];
+
+        let view_rectangle = ViewRectangle::from_vertices(&vertices);
+
+        assert_eq!(view_rectangle.center, nalgebra::Vector2::new(1.0, 1.5));
+        assert_eq!(view_rectangle.dimensions, nalgebra::Vector2::new(4.0, 7.0));
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion failed")]
+    fn test_view_port_empty_vertices() {
+        let vertices: Vec<nalgebra::Vector2<f64>> = Vec::new();
+        ViewRectangle::from_vertices(&vertices);
+    }
 
     #[test]
     fn test_image_specification_subpixel_offset_vector() {
