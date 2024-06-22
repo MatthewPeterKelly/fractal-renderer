@@ -63,8 +63,8 @@ impl ViewRectangle {
         let mut max_corner = vertices[0];
 
         for vertex in vertices.iter() {
-            min_corner = min_corner.sup(vertex);
-            max_corner = max_corner.inf(vertex);
+            min_corner = min_corner.inf(vertex);
+            max_corner = max_corner.sup(vertex);
         }
 
         let center = 0.5 * (min_corner + max_corner);

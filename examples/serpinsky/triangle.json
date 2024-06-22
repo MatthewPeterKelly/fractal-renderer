@@ -1,10 +1,10 @@
 {
     "fit_image": {
         "resolution": [
-            1000,
-            1000
+            900,
+            800
         ],
-        "padding_scale": 1.05
+        "padding_scale": 1.1
     },
     "sample_count": 100000,
     "background_color_rgba": [0, 0, 0, 255],
