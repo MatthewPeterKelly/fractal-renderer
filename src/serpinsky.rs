@@ -1,4 +1,3 @@
-use crate::render::ViewRectangle;
 use crate::{chaos_game, file_io, render};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
@@ -21,7 +20,7 @@ fn polygon_verticies(num_vertices: usize) -> Vec<nalgebra::Vector2<f64>> {
 
     for i in 0..num_vertices {
         let angle = angle_scale * (i as f64);
-        vertices.push(nalgebra::Vector2::new(angle.cos(), angle.sin()));
+        vertices.push(nalgebra::Vector2::new(angle.sin(), angle.cos()));
     }
 
     vertices
@@ -35,8 +34,6 @@ struct SampleGenerator {
 
 impl SampleGenerator {
     pub fn new(vertex_colors: &[[u8; 4]; 3]) -> SampleGenerator {
-        for point in vertex_colors {}
-
         SampleGenerator {
             distribution: Uniform::from(0..3),
             vertices: polygon_verticies(3).clone(),
