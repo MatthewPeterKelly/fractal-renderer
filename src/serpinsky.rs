@@ -11,7 +11,7 @@ pub struct SerpinskyParams {
     pub fit_image: render::FitImage,
     pub sample_count: u32,
     pub background_color_rgba: [u8; 4],
-    pub vertex_colors: [[u8; 4]; 3], // 3 colors, each with 4 components (RGBA)
+    pub vertex_colors: Vec<[u8; 4]>,
 }
 
 fn polygon_verticies(num_vertices: usize) -> Vec<nalgebra::Vector2<f64>> {
@@ -51,10 +51,13 @@ struct SampleGenerator {
 }
 
 impl SampleGenerator {
-    pub fn new(vertex_colors: &[[u8; 4]; 3]) -> SampleGenerator {
+    pub fn regular_polygon(
+        vertex_colors: &Vec<[u8; 4]>,
+        vertices: &[nalgebra::Vector2<f64>],
+    ) -> SampleGenerator {
         SampleGenerator {
-            distribution: Uniform::from(0..3),
-            vertices: polygon_verticies(3).clone(),
+            distribution: Uniform::from(0..vertex_colors.len()),
+            vertices: vertices.to_vec(),
             colors: vertex_colors
                 .iter()
                 .map(|&color| image::Rgba(color))
@@ -87,10 +90,10 @@ pub fn render_serpinsky(
     params: &SerpinskyParams,
     file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let vertices = polygon_verticies(3);
+    let vertices = polygon_verticies(params.vertex_colors.len());
     let mut sample_point = vertices[0];
     let mut rng = rand::thread_rng();
-    let generator = SampleGenerator::new(&params.vertex_colors);
+    let generator = SampleGenerator::regular_polygon(&params.vertex_colors, &vertices);
 
     let mut distribution = || {
         let next_colored_point = generator.next(&mut rng, &sample_point);
@@ -117,8 +120,10 @@ mod tests {
 
     #[test]
     fn test_optimal_packing_ratio() {
-        // Solutions from: https://en.wikipedia.org/wiki/Chaos_game
         let tol = 0.005;
+        assert_relative_eq!(optimal_contraction_ratio(3), 0.5, epsilon = tol);
+
+        // Solutions from: https://en.wikipedia.org/wiki/Chaos_game
         assert_relative_eq!(optimal_contraction_ratio(5), 0.618, epsilon = tol);
         assert_relative_eq!(optimal_contraction_ratio(6), 0.667, epsilon = tol);
         assert_relative_eq!(optimal_contraction_ratio(7), 0.692, epsilon = tol);
