@@ -4,7 +4,8 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /**
- * Complete set of parameters that are fed in from the JSON for the Serpinsky Fern fractal.
+ * Complete set of parameters that are fed in from the JSON for the Serpinsky fractal.
+ * The traditional "triangle" fractal is generalized here to work for any regular polygon.
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SerpinskyParams {
@@ -14,6 +15,9 @@ pub struct SerpinskyParams {
     pub vertex_colors: Vec<[u8; 4]>,
 }
 
+/**
+ * Computes the set of polygon vertices that live on the unit circle for a polygon of `num_vertices` sides.
+ */
 fn polygon_verticies(num_vertices: usize) -> Vec<nalgebra::Vector2<f64>> {
     let mut vertices = Vec::with_capacity(num_vertices);
     let angle_scale = 2.0 * std::f64::consts::PI / (num_vertices as f64);
@@ -38,13 +42,13 @@ fn optimal_contraction_ratio(n: usize) -> f64 {
         0 => (PI / n as f64).tan(),
         1 | 3 => 2.0 * (PI / (2 * n) as f64).sin(),
         2 => (PI / n as f64).sin(),
-        _ => unreachable!(), // This case will never occur
+        _ => unreachable!(),
     };
     1.0 / (1.0 + alpha)
 }
 
 struct SampleGenerator {
-    distribution: Uniform<usize>, // which vertext to jump to?
+    distribution: Uniform<usize>, // samples the next vertex to jump to
     vertices: Vec<nalgebra::Vector2<f64>>,
     colors: Vec<image::Rgba<u8>>,
     ratio: f64,
@@ -55,6 +59,7 @@ impl SampleGenerator {
         vertex_colors: &Vec<[u8; 4]>,
         vertices: &[nalgebra::Vector2<f64>],
     ) -> SampleGenerator {
+        assert!(!vertices.is_empty());
         assert_eq!(vertex_colors.len(), vertices.len());
         SampleGenerator {
             distribution: Uniform::from(0..vertex_colors.len()),
