@@ -55,6 +55,7 @@ impl SampleGenerator {
         vertex_colors: &Vec<[u8; 4]>,
         vertices: &[nalgebra::Vector2<f64>],
     ) -> SampleGenerator {
+        assert_eq!(vertex_colors.len(), vertices.len());
         SampleGenerator {
             distribution: Uniform::from(0..vertex_colors.len()),
             vertices: vertices.to_vec(),
