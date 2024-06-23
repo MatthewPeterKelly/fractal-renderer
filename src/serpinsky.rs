@@ -56,7 +56,7 @@ struct SampleGenerator {
 
 impl SampleGenerator {
     pub fn regular_polygon(
-        vertex_colors: &Vec<[u8; 4]>,
+        vertex_colors: &[[u8; 4]],
         vertices: &[nalgebra::Vector2<f64>],
     ) -> SampleGenerator {
         assert!(!vertices.is_empty());
