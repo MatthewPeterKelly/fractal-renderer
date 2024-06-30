@@ -45,6 +45,7 @@ pub fn render<D>(
     background_color: image::Rgba<u8>,
     distribution_generator: &mut D,
     sample_count: u32,
+    subpixel_antialiasing: u32,
     image_specification: &render::ImageSpecification,
     file_prefix: &file_io::FilePrefix,
     params_str: &str, // For diagnostics only --> written to a file
@@ -65,6 +66,12 @@ where
     let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
         image_specification.resolution[0],
         image_specification.resolution[1],
+    );
+
+    // Create a second buffer in which to store the antialiasing mask:
+    let mut subpixel_mask: nalgebra::DMatrix<u16> = nalgebra::DMatrix::zeros(
+        image_specification.resolution[0] as usize,
+        image_specification.resolution[1] as usize,
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
