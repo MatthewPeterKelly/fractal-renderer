@@ -68,11 +68,11 @@ where
         image_specification.resolution[1],
     );
 
-    // Create a second buffer in which to store the antialiasing mask:
-    let mut subpixel_mask: nalgebra::DMatrix<u16> = nalgebra::DMatrix::zeros(
-        image_specification.resolution[0] as usize,
-        image_specification.resolution[1] as usize,
-    );
+    // // Create a second buffer in which to store the antialiasing mask:
+    // let mut subpixel_mask: nalgebra::DMatrix<u16> = nalgebra::DMatrix::zeros(
+    //     image_specification.resolution[0] as usize,
+    //     image_specification.resolution[1] as usize,
+    // );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = background_color;

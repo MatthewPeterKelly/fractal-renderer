@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct SerpinskyParams {
     pub fit_image: render::FitImage,
     pub sample_count: u32,
+    pub subpixel_antialiasing: u32,
     pub background_color_rgba: [u8; 4],
     pub vertex_colors: Vec<[u8; 4]>,
 }
@@ -111,6 +112,7 @@ pub fn render_serpinsky(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,
+        params.subpixel_antialiasing,
         &params
             .fit_image
             .image_specification(&render::ViewRectangle::from_vertices(&vertices)),
