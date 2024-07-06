@@ -68,6 +68,17 @@ pub struct ViewRectangle {
     pub dimensions: nalgebra::Vector2<f64>,
 }
 
+// TODO:  generalize this?
+pub fn interpolate(low: &image::Rgba<u8>, upp: &image::Rgba<u8>, alpha: f32) -> image::Rgba<u8> {
+    let beta = 1.0 - alpha;
+    image::Rgba([
+        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
+        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
+        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
+        (low[0] as f32) * beta + (upp[0] as) f32 * alpha
+    ])
+}
+
 impl ViewRectangle {
     pub fn from_vertices(vertices: &[nalgebra::Vector2<f64>]) -> ViewRectangle {
         assert!(!vertices.is_empty());
