@@ -68,15 +68,128 @@ pub struct ViewRectangle {
     pub dimensions: nalgebra::Vector2<f64>,
 }
 
-// TODO:  generalize this?
-pub fn interpolate(low: &image::Rgba<u8>, upp: &image::Rgba<u8>, alpha: f32) -> image::Rgba<u8> {
-    let beta = 1.0 - alpha;
-    image::Rgba([
-        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
-        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
-        (low[0] as f32) * beta + (upp[0] as) f32 * alpha,
-        (low[0] as f32) * beta + (upp[0] as) f32 * alpha
-    ])
+impl imageproc::image::Pixel for image::Rgba<u8> {
+    type Subpixel = u8;
+
+    fn channels(&self) -> &[Self::Subpixel] {
+        &self.0
+    }
+
+    fn channels_mut(&mut self) -> &mut [Self::Subpixel] {
+        &mut self.0
+    }
+
+    fn from_channels(channels: &[Self::Subpixel]) -> Self {
+        image::Rgba([channels[0], channels[1], channels[2], channels[3]])
+    }
+
+    const CHANNEL_COUNT: u8;
+
+    const COLOR_MODEL: &'static str;
+
+    fn channels4(
+        &self,
+    ) -> (
+        Self::Subpixel,
+        Self::Subpixel,
+        Self::Subpixel,
+        Self::Subpixel,
+    ) {
+        todo!()
+    }
+
+    fn from_slice(slice: &[Self::Subpixel]) -> &Self {
+        todo!()
+    }
+
+    fn from_slice_mut(slice: &mut [Self::Subpixel]) -> &mut Self {
+        todo!()
+    }
+
+    fn to_rgb(&self) -> imageproc::image::Rgb<Self::Subpixel> {
+        todo!()
+    }
+
+    fn to_rgba(&self) -> imageproc::image::Rgba<Self::Subpixel> {
+        todo!()
+    }
+
+    fn to_luma(&self) -> imageproc::image::Luma<Self::Subpixel> {
+        todo!()
+    }
+
+    fn to_luma_alpha(&self) -> imageproc::image::LumaA<Self::Subpixel> {
+        todo!()
+    }
+
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        todo!()
+    }
+
+    fn apply<F>(&mut self, f: F)
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        todo!()
+    }
+
+    fn map_with_alpha<F, G>(&self, f: F, g: G) -> Self
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+        G: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        todo!()
+    }
+
+    fn apply_with_alpha<F, G>(&mut self, f: F, g: G)
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+        G: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        todo!()
+    }
+
+    fn map2<F>(&self, _other: &Self, f: F) -> Self
+    where
+        F: FnMut(Self::Subpixel, Self::Subpixel) -> Self::Subpixel,
+    {
+        todo!()
+    }
+
+    fn apply2<F>(&mut self, other: &Self, f: F)
+    where
+        F: FnMut(Self::Subpixel, Self::Subpixel) -> Self::Subpixel,
+    {
+        let _ = other;
+        todo!()
+    }
+
+    fn invert(&mut self) {
+        todo!()
+    }
+
+    fn blend(&mut self, other: &Self) {
+        todo!()
+    }
+
+    fn map_without_alpha<F>(&self, f: F) -> Self
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        let mut this = *self;
+        this.apply_with_alpha(f, |x| x);
+        this
+    }
+
+    fn apply_without_alpha<F>(&mut self, f: F)
+    where
+        F: FnMut(Self::Subpixel) -> Self::Subpixel,
+    {
+        self.apply_with_alpha(f, |x| x);
+    }
 }
 
 impl ViewRectangle {
