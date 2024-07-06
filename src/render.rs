@@ -419,6 +419,21 @@ mod tests {
     }
 
     #[test]
+    fn test_pixel_grid_mask_valid_8() {
+        let mut grid_mask = super::SubpixelGridMask::new();
+
+        assert_eq!(grid_mask.bitmask.count_ones(), 0);
+        let n_grid = 8;
+
+        for i in 0..n_grid {
+            for j in 0..n_grid {
+                grid_mask.insert(n_grid, (i, j));
+            }
+        }
+        assert_eq!(grid_mask.count_ones() as i32, n_grid * n_grid);
+    }
+
+    #[test]
     #[should_panic]
     fn test_pixel_grid_mask_invalid_upp() {
         let mut grid_mask = super::SubpixelGridMask::new();
