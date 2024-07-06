@@ -44,6 +44,18 @@ impl ImageSpecification {
 
         offsets
     }
+
+    /**
+     * Returns a new image specification object with the same center and width, but
+     * with resolution scaled by `subpixel_count`. Used for some antialiasing operations.
+     */
+    pub fn upsample(&self, subpixel_count: u32) -> ImageSpecification {
+        ImageSpecification {
+            resolution: self.resolution * subpixel_count,
+            center: self.center,
+            width: self.width,
+        }
+    }
 }
 
 /**
@@ -184,6 +196,7 @@ impl PixelMapper {
  * bin count of 8 per size. The mask is stored in the bits of
  * a u64 integer as a space optimization.
  */
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubpixelGridMask {
     bitmask: u64,
 }
@@ -195,10 +208,16 @@ impl SubpixelGridMask {
 
     pub fn insert(&mut self, count_per_side: i32, coordinate: (i32, i32)) {
         let (x, y) = coordinate;
-        let index = x * count_per_side + y;
         assert!(x >= 0 && x < count_per_side);
         assert!(y >= 0 && y < count_per_side);
+        let index = x * count_per_side + y;
         self.bitmask |= 1 << index;
+    }
+}
+
+impl Default for SubpixelGridMask {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -340,38 +359,34 @@ mod tests {
         assert_eq!(aspect_ratio, pixel_aspect_ratio);
     }
 
-    #[cfg(test)]
-    mod tests {
+    #[test]
+    fn test_pixel_grid_mask_valid_3() {
+        let mut grid_mask = super::SubpixelGridMask::new();
 
-        #[test]
-        fn test_pixel_grid_mask_valid_3() {
-            let mut grid_mask = super::SubpixelGridMask::new();
+        assert_eq!(grid_mask.bitmask.count_ones(), 0);
+        let n_grid = 3;
+        grid_mask.insert(n_grid, (0, 0));
+        assert_eq!(grid_mask.bitmask.count_ones(), 1);
 
-            assert_eq!(grid_mask.bitmask.count_ones(), 0);
-            let n_grid = 3;
-            grid_mask.insert(n_grid, (0, 0));
-            assert_eq!(grid_mask.bitmask.count_ones(), 1);
+        grid_mask.insert(n_grid, (1, 1));
+        assert_eq!(grid_mask.bitmask.count_ones(), 2);
+        grid_mask.insert(n_grid, (1, 1));
+        assert_eq!(grid_mask.bitmask.count_ones(), 2);
+        grid_mask.insert(n_grid, (2, 1));
+        assert_eq!(grid_mask.bitmask.count_ones(), 3);
+    }
 
-            grid_mask.insert(n_grid, (1, 1));
-            assert_eq!(grid_mask.bitmask.count_ones(), 2);
-            grid_mask.insert(n_grid, (1, 1));
-            assert_eq!(grid_mask.bitmask.count_ones(), 2);
-            grid_mask.insert(n_grid, (2, 1));
-            assert_eq!(grid_mask.bitmask.count_ones(), 3);
-        }
+    #[test]
+    #[should_panic]
+    fn test_pixel_grid_mask_invalid_upp() {
+        let mut grid_mask = super::SubpixelGridMask::new();
+        grid_mask.insert(4, (5, 5));
+    }
 
-        #[test]
-        #[should_panic]
-        fn test_pixel_grid_mask_invalid_upp() {
-            let mut grid_mask = super::SubpixelGridMask::new();
-            grid_mask.insert(4, (5, 5));
-        }
-
-        #[test]
-        #[should_panic]
-        fn test_pixel_grid_mask_invalid_low() {
-            let mut grid_mask = super::SubpixelGridMask::new();
-            grid_mask.insert(6, (-1, 5));
-        }
+    #[test]
+    #[should_panic]
+    fn test_pixel_grid_mask_invalid_low() {
+        let mut grid_mask = super::SubpixelGridMask::new();
+        grid_mask.insert(6, (-1, 5));
     }
 }

@@ -68,23 +68,25 @@ where
         image_specification.resolution[1],
     );
 
-    // // Create a second buffer in which to store the antialiasing mask:
-    // let mut subpixel_mask: nalgebra::DMatrix<u16> = nalgebra::DMatrix::zeros(
-    //     image_specification.resolution[0] as usize,
-    //     image_specification.resolution[1] as usize,
-    // );
+    // Create a second buffer in which to store the antialiasing mask:
+    let mut subpixel_mask = nalgebra::DMatrix::from_element(
+        image_specification.resolution[0] as usize,
+        image_specification.resolution[1] as usize,
+        render::SubpixelGridMask::new(),
+    );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = background_color;
     }
 
-    let pixel_mapper = render::PixelMapper::new(image_specification);
+    let upsampled_image_specification = image_specification.upsample(subpixel_antialiasing);
+    let upsampled_pixel_mapper = render::PixelMapper::new(&upsampled_image_specification);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
-        let (x, y) = pixel_mapper.inverse_map(&colored_point.point);
+        let (x, y) = upsampled_pixel_mapper.inverse_map(&colored_point.point);
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = colored_point.color;
         }
