@@ -8,6 +8,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use image::Pixel;
+
 use crate::{file_io, render};
 
 /**
@@ -111,12 +113,18 @@ where
 
     // Scale back the colors toward the background, based on the subpixel sample data:
     let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
+
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let alpha =
+        let weight_upp =
             antialiasing_scale * (subpixel_mask[(x as usize, y as usize)].count_ones() as f32);
-        *pixel = imageproc::pixelops::interpolate(background_color, *pixel, alpha);
+        let weight_low = 1.0 - weight_upp;
+        pixel.apply2(&background_color, |low: u8, upp: u8| -> u8 {
+            ((low as f32) * weight_low + (upp as f32) * weight_upp) as u8
+        });
     }
     timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
+
+    // TODO:  histogram of weights?
 
     // Save the antialiased image to a file, deducing the type from the file name
     let render_path = file_prefix.with_suffix(".png");
