@@ -49,9 +49,10 @@ impl ImageSpecification {
      * Returns a new image specification object with the same center and width, but
      * with resolution scaled by `subpixel_count`. Used for some antialiasing operations.
      */
-    pub fn upsample(&self, subpixel_count: u32) -> ImageSpecification {
+    pub fn upsample(&self, subpixel_count: i32) -> ImageSpecification {
+        assert!(subpixel_count > 0);
         ImageSpecification {
-            resolution: self.resolution * subpixel_count,
+            resolution: self.resolution * (subpixel_count as u32),
             center: self.center,
             width: self.width,
         }
@@ -192,6 +193,43 @@ impl PixelMapper {
 }
 
 /**
+ * Coordinate of a subpixel within the entire image.
+ */
+pub struct SubpixelIndex {
+    pub pixel: (i32, i32),
+    pub subpixel: (i32, i32),
+}
+
+/**
+ * Used for antialiasing calculations. Splits a query into a pixel index and a
+ * subpixel index.
+ */
+pub struct UpsampledPixelMapper {
+    pixel_mapper: PixelMapper,
+    subpixel_count: i32,
+}
+
+impl UpsampledPixelMapper {
+    pub fn new(
+        image_specification: &ImageSpecification,
+        subpixel_count: i32,
+    ) -> UpsampledPixelMapper {
+        UpsampledPixelMapper {
+            pixel_mapper: PixelMapper::new(&image_specification.upsample(subpixel_count)),
+            subpixel_count,
+        }
+    }
+
+    pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> SubpixelIndex {
+        let (x_raw, y_raw) = self.pixel_mapper.inverse_map(point);
+        SubpixelIndex {
+            pixel: (x_raw / self.subpixel_count, y_raw / self.subpixel_count),
+            subpixel: (x_raw % self.subpixel_count, y_raw % self.subpixel_count),
+        }
+    }
+}
+
+/**
  * Used to store a bitmask for a square grid, with a maximum
  * bin count of 8 per size. The mask is stored in the bits of
  * a u64 integer as a space optimization.
@@ -212,6 +250,10 @@ impl SubpixelGridMask {
         assert!(y >= 0 && y < count_per_side);
         let index = x * count_per_side + y;
         self.bitmask |= 1 << index;
+    }
+
+    pub fn count_ones(&self) -> u32 {
+        self.bitmask.count_ones()
     }
 }
 

@@ -17,7 +17,8 @@ use crate::{file_io, render};
 pub struct MeasuredElapsedTime {
     pub setup: Duration,
     pub sampling: Duration,
-    pub write_png: Duration,
+    pub write_raw_png: Duration,
+    pub antialiasing_post_process: Duration,
 }
 
 impl MeasuredElapsedTime {
@@ -25,7 +26,12 @@ impl MeasuredElapsedTime {
         writeln!(writer, "MeasuredElapsedTime:")?;
         writeln!(writer, " -- Setup:      {:?}", self.setup)?;
         writeln!(writer, " -- Sampling: {:?}", self.sampling)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
+        writeln!(writer, " -- Write PNG:  {:?}", self.write_raw_png)?;
+        writeln!(
+            writer,
+            " -- Antialiasing post-processing:  {:?}",
+            self.antialiasing_post_process
+        )?;
         writeln!(writer)?;
         Ok(())
     }
@@ -60,8 +66,6 @@ where
     let params_path = file_prefix.with_suffix(".json");
     std::fs::write(params_path, params_str).expect("Unable to write params file.");
 
-    let render_path = file_prefix.with_suffix(".png");
-
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
         image_specification.resolution[0],
@@ -79,28 +83,45 @@ where
         *pixel = background_color;
     }
 
-    let upsampled_image_specification = image_specification.upsample(subpixel_antialiasing);
-    let upsampled_pixel_mapper = render::PixelMapper::new(&upsampled_image_specification);
+    // TODO:  clean up integer types
+    let pixel_mapper =
+        render::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing as i32);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
-        let (x, y) = upsampled_pixel_mapper.inverse_map(&colored_point.point);
+        let index = pixel_mapper.inverse_map(&colored_point.point);
+        let (x, y) = index.pixel;
+
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = colored_point.color;
+            subpixel_mask[(x as usize, y as usize)]
+                .insert(subpixel_antialiasing as i32, index.subpixel)
         }
     }
 
-    // NOTE:  when we add anti-aliasing, just insert it near here, as a second parallel data strucutre that stores
-    // The count per pixel. Then, in post processing, iterate over the image and interpolate between the stored
-    // and background color. That allows for more than one subject color and also anti-aliasing.
     timer.sampling = render::elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
-    imgbuf.save(&render_path).unwrap();
-    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
+    let raw_render_path = file_prefix.with_suffix("_raw.png");
+    imgbuf.save(&raw_render_path).unwrap();
+    timer.write_raw_png = render::elapsed_and_reset(&mut stopwatch);
+    println!("Wrote raw image file to: {}", raw_render_path.display());
 
+    // Scale back the colors toward the background, based on the subpixel sample data:
+    let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        let alpha =
+            antialiasing_scale * (subpixel_mask[(x as usize, y as usize)].count_ones() as f32);
+        *pixel = imageproc::pixelops::interpolate(background_color, *pixel, alpha);
+    }
+    timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
+
+    // Save the antialiased image to a file, deducing the type from the file name
+    let render_path = file_prefix.with_suffix(".png");
+    imgbuf.save(&render_path).unwrap();
+    timer.write_raw_png = render::elapsed_and_reset(&mut stopwatch);
     println!("Wrote image file to: {}", render_path.display());
 
     timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
