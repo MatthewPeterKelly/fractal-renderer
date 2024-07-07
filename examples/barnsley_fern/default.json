@@ -1,11 +1,12 @@
 {
     "fit_image": {
         "resolution": [
-          800, 1200
+            2560,
+            1600
         ],
         "padding_scale": 1.01
     },
-    "sample_count": 1000000,
+    "sample_count": 100000000,
     "subpixel_antialiasing": 8,
     "background_color_rgba": [
         0,
