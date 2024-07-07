@@ -53,7 +53,7 @@ pub fn render<D>(
     background_color: image::Rgba<u8>,
     distribution_generator: &mut D,
     sample_count: u32,
-    subpixel_antialiasing: u32,
+    subpixel_antialiasing: i32,
     image_specification: &render::ImageSpecification,
     file_prefix: &file_io::FilePrefix,
     params_str: &str, // For diagnostics only --> written to a file
@@ -85,9 +85,8 @@ where
         *pixel = background_color;
     }
 
-    // TODO:  clean up integer types
     let pixel_mapper =
-        render::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing as i32);
+        render::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
 
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
@@ -98,8 +97,7 @@ where
 
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = colored_point.color;
-            subpixel_mask[(x as usize, y as usize)]
-                .insert(subpixel_antialiasing as i32, index.subpixel)
+            subpixel_mask[(x as usize, y as usize)].insert(subpixel_antialiasing, index.subpixel)
         }
     }
 
@@ -129,8 +127,6 @@ where
         histogram.insert(weight_upp as f64);
     }
     timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
-
-    // TODO:  histogram of weights?
 
     // Save the antialiased image to a file, deducing the type from the file name
     let render_path = file_prefix.with_suffix(".png");

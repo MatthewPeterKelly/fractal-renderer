@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct SerpinskyParams {
     pub fit_image: render::FitImage,
     pub sample_count: u32,
-    pub subpixel_antialiasing: u32,
+    pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
     pub vertex_colors: Vec<[u8; 4]>,
 }
