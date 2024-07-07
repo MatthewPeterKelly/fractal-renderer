@@ -1,8 +1,8 @@
 {
     "fit_image": {
         "resolution": [
-            900,
-            800
+            400,
+            400
         ],
         "padding_scale": 1.1
     },
