@@ -6,8 +6,8 @@
         ],
         "padding_scale": 1.01
     },
-    "sample_count": 100000000,
-    "subpixel_antialiasing": 7,
+    "sample_count": 10000000,
+    "subpixel_antialiasing": 8,
     "background_color_rgba": [
         0,
         0,
