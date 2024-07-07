@@ -114,17 +114,17 @@ where
 
     let mut histogram = Histogram::new(
         (subpixel_antialiasing * subpixel_antialiasing + 1) as usize,
-        1.5,
+        1.0,
     );
 
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let weight_low =
+        let weight_background =
             antialiasing_scale * (subpixel_mask[(x as usize, y as usize)].count_ones() as f32);
-        let weight_upp = 1.0 - weight_low;
-        pixel.apply2(&background_color, |low: u8, upp: u8| -> u8 {
-            ((low as f32) * weight_low + (upp as f32) * weight_upp) as u8
+        let weight_pixel = 1.0 - weight_background;
+        pixel.apply2(&background_color, |background: u8, pixel: u8| -> u8 {
+            ((background as f32) * weight_background + (pixel as f32) * weight_pixel) as u8
         });
-        histogram.insert(weight_upp as f64);
+        histogram.insert(weight_background as f64);
     }
     timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
 
