@@ -108,7 +108,7 @@ fn main() {
             .unwrap();
         }
 
-        Some(CommandsEnum::SerpinksyRender(params)) => {
+        Some(CommandsEnum::SerpinskyRender(params)) => {
             crate::serpinsky::render_serpinsky(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
