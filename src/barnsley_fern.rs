@@ -60,6 +60,7 @@ impl Coeffs {
 pub struct BarnsleyFernParams {
     pub fit_image: render::FitImage,
     pub sample_count: u32,
+    pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
     pub fern_color_rgba: [u8; 4],
     pub coeffs: Coeffs,
@@ -135,6 +136,7 @@ pub fn render_barnsley_fern(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,
+        params.subpixel_antialiasing,
         &params
             .fit_image
             .image_specification(&params.coeffs.view_rectangle),

@@ -26,7 +26,7 @@ cargo run --release  --  driven-damped-pendulum-render  .\examples\ddp_render\de
 cargo run --release  -- barnsley-fern-render  .\examples\barnsley_fern\default.json
 ```
 ```
-cargo run --release  -- serpinksy-render  .\examples\serpinsky\triangle.json
+cargo run --release  -- serpinsky-render  .\examples\serpinsky\triangle.json
 ```
 
 
@@ -50,7 +50,7 @@ cargo run --release  --  driven-damped-pendulum-render  ./examples/ddp_render/de
 cargo run --release  -- barnsley-fern-render  ./examples/barnsley_fern/default.json
 ```
 ```
-cargo run --release  -- serpinksy-render  ./examples/serpinsky/triangle.json
+cargo run --release  -- serpinsky-render  ./examples/serpinsky/triangle.json
 ```
 
 ## Autoformatting:

@@ -1,8 +1,8 @@
 {
     "image_specification": {
         "resolution": [
-            800,
-            600
+            200,
+            150
         ],
         "center": [
             0,

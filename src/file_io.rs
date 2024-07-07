@@ -28,12 +28,13 @@ pub fn date_time_string() -> String {
     use chrono::{Datelike, Local, Timelike};
     let local_time = Local::now();
     format!(
-        "{:04}{:02}{:02}_{:02}{:02}",
+        "{:04}{:02}{:02}_{:02}{:02}{:02}",
         local_time.year(),
         local_time.month(),
         local_time.day(),
         local_time.hour(),
-        local_time.minute()
+        local_time.minute(),
+        local_time.second()
     )
 }
 
