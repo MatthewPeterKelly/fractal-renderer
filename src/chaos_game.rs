@@ -10,7 +10,7 @@ use std::{
 
 use image::Pixel;
 
-use crate::{file_io, render};
+use crate::{file_io, histogram::Histogram, render};
 
 /**
  * Timing data, used for simple analysis logging.
@@ -114,13 +114,16 @@ where
     // Scale back the colors toward the background, based on the subpixel sample data:
     let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
 
+    let mut histogram = Histogram::new(32, 1.5);
+
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let weight_upp =
+        let weight_low =
             antialiasing_scale * (subpixel_mask[(x as usize, y as usize)].count_ones() as f32);
-        let weight_low = 1.0 - weight_upp;
+        let weight_upp = 1.0 - weight_low;
         pixel.apply2(&background_color, |low: u8, upp: u8| -> u8 {
             ((low as f32) * weight_low + (upp as f32) * weight_upp) as u8
         });
+        histogram.insert(weight_upp as f64);
     }
     timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
 
@@ -132,7 +135,9 @@ where
     timer.write_raw_png = render::elapsed_and_reset(&mut stopwatch);
     println!("Wrote image file to: {}", render_path.display());
 
-    timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
+    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
+    timer.display(&mut diagnostics_file)?;
+    histogram.display(&mut diagnostics_file)?;
 
     Ok(())
 }

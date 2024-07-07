@@ -23,6 +23,7 @@ impl Histogram {
     }
 
     // Insert a data point into the histogram
+    // TODO:  template on data type
     pub fn insert(&mut self, data: f64) {
         if data < 0.0 {
             self.bin_count[0] += 1;
