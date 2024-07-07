@@ -6,8 +6,8 @@
         ],
         "padding_scale": 1.1
     },
-    "sample_count": 1000000,
-    "subpixel_antialiasing": 8,
+    "sample_count": 10000000,
+    "subpixel_antialiasing": 2,
     "background_color_rgba": [0, 0, 0, 255],
     "vertex_colors": [
         [255, 0, 0, 255],

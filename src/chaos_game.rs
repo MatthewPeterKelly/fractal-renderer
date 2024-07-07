@@ -89,25 +89,17 @@ where
     let pixel_mapper =
         render::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing as i32);
 
-    let subpixel_samples = image_specification.subpixel_offset_vector(subpixel_antialiasing);
-
     timer.setup = render::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
-        let subpixel_samples = &subpixel_samples; // Capture by reference
+        let index = pixel_mapper.inverse_map(&colored_point.point);
+        let (x, y) = index.pixel;
 
-        for offset in subpixel_samples {
-            let point = offset + colored_point.point;
-
-            let index = pixel_mapper.inverse_map(&point);
-            let (x, y) = index.pixel;
-
-            if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
-                *pixel = colored_point.color;
-                subpixel_mask[(x as usize, y as usize)]
-                    .insert(subpixel_antialiasing as i32, index.subpixel)
-            }
+        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
+            *pixel = colored_point.color;
+            subpixel_mask[(x as usize, y as usize)]
+                .insert(subpixel_antialiasing as i32, index.subpixel)
         }
     }
 
