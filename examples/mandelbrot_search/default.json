@@ -1,27 +1,29 @@
 {
-    "render_image_resolution": [
-        1920,
-        1080
-    ],
-    "render_escape_radius_squared": 4,
-    "render_max_iter_count": 550,
-    "render_refinement_count": 5,
-    "render_view_scale_real": 0.05,
-    "render_histogram_bin_count": 1024,
-    "center": [
-        -0.2,
-        0
-    ],
-    "view_scale": [
-        3.0,
-        2.0
-    ],
-    "search_escape_radius_squared": 4,
-    "search_max_iter_count": 128,
-    "query_resolution": [
-        16,
-        9
-    ],
-    "max_num_renders": 8,
-    "max_search_count": 1024
+    "MandelbrotSearch": {
+        "render_image_resolution": [
+            1920,
+            1080
+        ],
+        "render_escape_radius_squared": 4,
+        "render_max_iter_count": 550,
+        "render_refinement_count": 5,
+        "render_view_scale_real": 0.05,
+        "render_histogram_bin_count": 1024,
+        "center": [
+            -0.2,
+            0
+        ],
+        "view_scale": [
+            3,
+            2
+        ],
+        "search_escape_radius_squared": 4,
+        "search_max_iter_count": 128,
+        "query_resolution": [
+            16,
+            9
+        ],
+        "max_num_renders": 8,
+        "max_search_count": 1024
+    }
 }

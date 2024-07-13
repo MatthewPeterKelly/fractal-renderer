@@ -9,9 +9,6 @@ pub struct FractalRendererArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum CommandsEnum {
-    DrivenDampedPendulumRender(ParameterFilePath),
-    BarnsleyFernRender(ParameterFilePath),
-    SerpinskyRender(ParameterFilePath),
     Render(ParameterFilePath),
 }
 

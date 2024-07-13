@@ -1,20 +1,57 @@
 {
-    "fit_image": {
-        "resolution": [
-            1600,
-            1600
+    "Serpinsky": {
+        "fit_image": {
+            "resolution": [
+                1600,
+                1600
+            ],
+            "padding_scale": 1.05
+        },
+        "sample_count": 50000000,
+        "subpixel_antialiasing": 2,
+        "background_color_rgba": [
+            0,
+            0,
+            0,
+            255
         ],
-        "padding_scale": 1.05
-    },
-    "sample_count": 50000000,
-    "subpixel_antialiasing": 2,
-    "background_color_rgba": [0, 0, 0, 255],
-    "vertex_colors": [
-        [255, 0, 0, 255],
-        [0, 255, 0, 255],
-        [0, 0, 255, 255],
-        [255, 255, 0, 255],
-        [0, 255, 255, 255],
-        [255, 0, 255, 255]
-    ]
+        "vertex_colors": [
+            [
+                255,
+                0,
+                0,
+                255
+            ],
+            [
+                0,
+                255,
+                0,
+                255
+            ],
+            [
+                0,
+                0,
+                255,
+                255
+            ],
+            [
+                255,
+                255,
+                0,
+                255
+            ],
+            [
+                0,
+                255,
+                255,
+                255
+            ],
+            [
+                255,
+                0,
+                255,
+                255
+            ]
+        ]
+    }
 }

@@ -62,63 +62,6 @@ fn main() {
     let datetime = file_io::date_time_string();
 
     match &args.command {
-        Some(CommandsEnum::DrivenDampedPendulumRender(params)) => {
-            crate::ddp_utils::render_driven_damped_pendulum_attractor(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
-                &file_io::FilePrefix {
-                    directory_path: crate::file_io::build_output_path_with_date_time(
-                        params,
-                        "ddp_render",
-                        &datetime,
-                    ),
-                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
-                },
-            )
-            .unwrap();
-        }
-
-        Some(CommandsEnum::BarnsleyFernRender(params)) => {
-            crate::barnsley_fern::render_barnsley_fern(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
-                &file_io::FilePrefix {
-                    directory_path: crate::file_io::build_output_path_with_date_time(
-                        params,
-                        "barnsley_fern",
-                        &datetime,
-                    ),
-                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
-                },
-            )
-            .unwrap();
-        }
-
-        Some(CommandsEnum::SerpinskyRender(params)) => {
-            crate::serpinsky::render_serpinsky(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
-                &file_io::FilePrefix {
-                    directory_path: crate::file_io::build_output_path_with_date_time(
-                        params,
-                        "serpinsky",
-                        &datetime,
-                    ),
-                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
-                },
-            )
-            .unwrap();
-        }
-
         Some(CommandsEnum::Render(params)) => {
             let build_file_prefix = |base_name: &str| -> file_io::FilePrefix {
                 file_io::FilePrefix {
