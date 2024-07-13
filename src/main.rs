@@ -11,6 +11,7 @@ mod render;
 mod serpinsky;
 
 use clap::Parser;
+use cli::RenderParams;
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
@@ -34,6 +35,30 @@ fn build_params(cli_params: &cli::ParameterFilePath) -> mandelbrot_core::Mandelb
     mandel_params
 }
 
+pub fn main_render(
+    // TODO:  fix namespacing
+    params: &RenderParams,
+    file_prefix: &file_io::FilePrefix,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match params {
+        RenderParams::Mandelbrot(inner_params) => {
+            crate::mandelbrot_core::render_mandelbrot_set(inner_params, file_prefix)
+        }
+        RenderParams::MandelbrotSearch(inner_params) => {
+            crate::mandelbrot_search::mandelbrot_search_render(inner_params, file_prefix)
+        }
+        RenderParams::DrivenDampedPendulum(inner_params) => {
+            crate::ddp_utils::render_driven_damped_pendulum_attractor(inner_params, file_prefix)
+        }
+        RenderParams::BarnsleyFern(inner_params) => {
+            crate::barnsley_fern::render_barnsley_fern(inner_params, file_prefix)
+        }
+        RenderParams::Serpinsky(inner_params) => {
+            crate::serpinsky::render_serpinsky(inner_params, file_prefix)
+        }
+    }
+}
+
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
     let datetime = file_io::date_time_string();
@@ -50,22 +75,6 @@ fn main() {
                     ),
                     file_base: file_io::extract_base_name(&params.params_path).to_owned(),
                 },
-            )
-            .unwrap();
-        }
-
-        Some(CommandsEnum::MandelbrotSearch(params)) => {
-            crate::mandelbrot_search::mandelbrot_search_render(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
-                &crate::file_io::build_output_path_with_date_time(
-                    params,
-                    "mandelbrot_search",
-                    &datetime,
-                ),
             )
             .unwrap();
         }
@@ -120,6 +129,23 @@ fn main() {
                         params,
                         "serpinsky",
                         &datetime,
+                    ),
+                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
+                },
+            )
+            .unwrap();
+        }
+
+        Some(CommandsEnum::Render(params)) => {
+            render(
+                &serde_json::from_str(
+                    &std::fs::read_to_string(&params.params_path)
+                        .expect("Unable to read param file"),
+                )
+                .unwrap(),
+                &file_io::FilePrefix {
+                    directory_path: crate::file_io::build_output_path_with_date_time(
+                        params, "render", &datetime, // TODO:  pass correct base name?
                     ),
                     file_base: file_io::extract_base_name(&params.params_path).to_owned(),
                 },

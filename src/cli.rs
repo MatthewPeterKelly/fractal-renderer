@@ -1,4 +1,14 @@
 use clap::{Args, Parser, Subcommand};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RenderParams {
+    Mandelbrot(crate::mandelbrot_core::MandelbrotParams),
+    MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
+    DrivenDampedPendulum(crate::ddp_utils::DrivenDampedPendulumParams),
+    BarnsleyFern(crate::barnsley_fern::BarnsleyFernParams),
+    Serpinsky(crate::serpinsky::SerpinskyParams),
+}
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about)]
@@ -10,10 +20,10 @@ pub struct FractalRendererArgs {
 #[derive(Debug, Subcommand)]
 pub enum CommandsEnum {
     MandelbrotRender(ParameterFilePath),
-    MandelbrotSearch(ParameterFilePath),
     DrivenDampedPendulumRender(ParameterFilePath),
     BarnsleyFernRender(ParameterFilePath),
     SerpinskyRender(ParameterFilePath),
+    Render(ParameterFilePath),
 }
 
 #[derive(Debug, Args)]
