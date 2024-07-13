@@ -1,22 +1,16 @@
 {
-    "DrivenDampedPendulum": {
-        "image_specification": {
-            "resolution": [
-                2560,
-                1600
-            ],
-            "center": [
-                0,
-                0
-            ],
-            "width": 16
-        },
-        "time_phase": {
-            "Snapshot": 0
-        },
-        "n_max_period": 200,
-        "n_steps_per_period": 32,
-        "periodic_state_error_tolerance": 0.002,
-        "subpixel_antialiasing": 7
-    }
+  "DrivenDampedPendulum": {
+    "image_specification": {
+      "resolution": [2560, 1600],
+      "center": [0, 0],
+      "width": 16
+    },
+    "time_phase": {
+      "Snapshot": 0
+    },
+    "n_max_period": 200,
+    "n_steps_per_period": 32,
+    "periodic_state_error_tolerance": 0.002,
+    "subpixel_antialiasing": 7
+  }
 }

@@ -1,19 +1,13 @@
 {
-    "Mandelbrot": {
-        "image_specification": {
-            "resolution": [
-                3000,
-                2000
-            ],
-            "center": [
-                -0.7132532180840316,
-                -0.3017916627758779
-            ],
-            "width": 0.04
-        },
-        "escape_radius_squared": 10,
-        "max_iter_count": 1024,
-        "refinement_count": 6,
-        "histogram_bin_count": 1024
-    }
+  "Mandelbrot": {
+    "image_specification": {
+      "resolution": [3000, 2000],
+      "center": [-0.7132532180840316, -0.3017916627758779],
+      "width": 0.04
+    },
+    "escape_radius_squared": 10,
+    "max_iter_count": 1024,
+    "refinement_count": 6,
+    "histogram_bin_count": 1024
+  }
 }
