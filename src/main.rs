@@ -4,10 +4,10 @@ mod cli;
 mod ddp_utils;
 mod file_io;
 mod histogram;
+mod image_utils;
 mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;
-mod render;
 mod serpinsky;
 
 use clap::Parser;

@@ -10,7 +10,7 @@ use std::{
 
 use image::Pixel;
 
-use crate::{file_io, histogram::Histogram, render};
+use crate::{file_io, histogram::Histogram, image_utils};
 
 /**
  * Timing data, used for simple analysis logging.
@@ -54,7 +54,7 @@ pub fn render<D>(
     distribution_generator: &mut D,
     sample_count: u32,
     subpixel_antialiasing: i32,
-    image_specification: &render::ImageSpecification,
+    image_specification: &image_utils::ImageSpecification,
     file_prefix: &file_io::FilePrefix,
     params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
@@ -78,7 +78,7 @@ where
     let mut subpixel_mask = nalgebra::DMatrix::from_element(
         image_specification.resolution[0] as usize,
         image_specification.resolution[1] as usize,
-        render::SubpixelGridMask::new(),
+        image_utils::SubpixelGridMask::new(),
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
@@ -86,9 +86,9 @@ where
     }
 
     let pixel_mapper =
-        render::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
+        image_utils::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
 
-    timer.setup = render::elapsed_and_reset(&mut stopwatch);
+    timer.setup = image_utils::elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
@@ -101,12 +101,12 @@ where
         }
     }
 
-    timer.sampling = render::elapsed_and_reset(&mut stopwatch);
+    timer.sampling = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
     let raw_render_path = file_prefix.with_suffix("_raw.png");
     imgbuf.save(&raw_render_path).unwrap();
-    timer.write_raw_png = render::elapsed_and_reset(&mut stopwatch);
+    timer.write_raw_png = image_utils::elapsed_and_reset(&mut stopwatch);
     println!("Wrote raw image file to: {}", raw_render_path.display());
 
     // Scale back the colors toward the background, based on the subpixel sample data:
@@ -126,12 +126,12 @@ where
         });
         histogram.insert(weight_background as f64);
     }
-    timer.antialiasing_post_process = render::elapsed_and_reset(&mut stopwatch);
+    timer.antialiasing_post_process = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Save the antialiased image to a file, deducing the type from the file name
     let render_path = file_prefix.with_suffix(".png");
     imgbuf.save(&render_path).unwrap();
-    timer.write_raw_png = render::elapsed_and_reset(&mut stopwatch);
+    timer.write_raw_png = image_utils::elapsed_and_reset(&mut stopwatch);
     println!("Wrote image file to: {}", render_path.display());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");

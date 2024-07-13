@@ -1,4 +1,4 @@
-use crate::{chaos_game, file_io, render};
+use crate::{chaos_game, file_io, image_utils};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ impl DiscreteMapCoeff {
 pub struct Coeffs {
     // x values: from -3 to 3
     // y values: from 0 to 10
-    view_rectangle: render::ViewRectangle,
+    view_rectangle: image_utils::ViewRectangle,
 
     f1_map: DiscreteMapCoeff,
     f2_map: DiscreteMapCoeff,
@@ -58,7 +58,7 @@ impl Coeffs {
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BarnsleyFernParams {
-    pub fit_image: render::FitImage,
+    pub fit_image: image_utils::FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
