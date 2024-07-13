@@ -1,19 +1,13 @@
 {
-    "Mandelbrot": {
-        "image_specification": {
-            "resolution": [
-                1600,
-                1200
-            ],
-            "center": [
-                -0.3,
-                0
-            ],
-            "width": 8
-        },
-        "escape_radius_squared": 4,
-        "max_iter_count": 256,
-        "refinement_count": 5,
-        "histogram_bin_count": 1024
-    }
+  "Mandelbrot": {
+    "image_specification": {
+      "resolution": [1600, 1200],
+      "center": [-0.3, 0],
+      "width": 8
+    },
+    "escape_radius_squared": 4,
+    "max_iter_count": 256,
+    "refinement_count": 5,
+    "histogram_bin_count": 1024
+  }
 }
