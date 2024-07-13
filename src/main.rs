@@ -11,28 +11,17 @@ mod render;
 mod serpinsky;
 
 use clap::Parser;
-use cli::RenderParams;
+use serde::{Deserialize, Serialize};
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
 
-fn build_params(cli_params: &cli::ParameterFilePath) -> mandelbrot_core::MandelbrotParams {
-    let mut mandel_params: mandelbrot_core::MandelbrotParams = serde_json::from_str(
-        &std::fs::read_to_string(&cli_params.params_path).expect("Unable to read param file"),
-    )
-    .unwrap();
-
-    if let Some(trans) = &cli_params.translate {
-        mandel_params.image_specification.center[0] +=
-            trans[0] * mandel_params.image_specification.width;
-        mandel_params.image_specification.center[1] +=
-            trans[1] * mandel_params.image_specification.height();
-    }
-
-    if let Some(alpha) = cli_params.rescale {
-        mandel_params.image_specification.width *= alpha
-    }
-
-    mandel_params
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RenderParams {
+    Mandelbrot(crate::mandelbrot_core::MandelbrotParams),
+    MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
+    DrivenDampedPendulum(crate::ddp_utils::DrivenDampedPendulumParams),
+    BarnsleyFern(crate::barnsley_fern::BarnsleyFernParams),
+    Serpinsky(crate::serpinsky::SerpinskyParams),
 }
 
 pub fn main_render<F>(
@@ -73,21 +62,6 @@ fn main() {
     let datetime = file_io::date_time_string();
 
     match &args.command {
-        Some(CommandsEnum::MandelbrotRender(params)) => {
-            crate::mandelbrot_core::render_mandelbrot_set(
-                &build_params(params),
-                &file_io::FilePrefix {
-                    directory_path: crate::file_io::build_output_path_with_date_time(
-                        params,
-                        "mandelbrot_render",
-                        &datetime,
-                    ),
-                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
-                },
-            )
-            .unwrap();
-        }
-
         Some(CommandsEnum::DrivenDampedPendulumRender(params)) => {
             crate::ddp_utils::render_driven_damped_pendulum_attractor(
                 &serde_json::from_str(
