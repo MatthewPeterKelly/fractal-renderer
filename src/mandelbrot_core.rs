@@ -6,13 +6,13 @@ use std::{
 use crate::{
     file_io,
     histogram::{CumulativeDistributionFunction, Histogram},
-    render,
+    image_utils,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
-    pub image_specification: render::ImageSpecification,
+    pub image_specification: image_utils::ImageSpecification,
     // Convergence criteria
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
@@ -189,7 +189,7 @@ pub fn render_mandelbrot_set(
     let params_path = file_prefix.with_suffix(".json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
-    timer.setup = render::elapsed_and_reset(&mut stopwatch);
+    timer.setup = image_utils::elapsed_and_reset(&mut stopwatch);
 
     let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
         let result = MandelbrotSequence::normalized_escape_count(
@@ -201,9 +201,9 @@ pub fn render_mandelbrot_set(
         result.unwrap_or(0.0)
     };
 
-    let raw_data = render::generate_scalar_image(&params.image_specification, pixel_renderer);
+    let raw_data = image_utils::generate_scalar_image(&params.image_specification, pixel_renderer);
 
-    timer.mandelbrot = render::elapsed_and_reset(&mut stopwatch);
+    timer.mandelbrot = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f64);
@@ -215,12 +215,12 @@ pub fn render_mandelbrot_set(
         });
     });
 
-    timer.histogram = render::elapsed_and_reset(&mut stopwatch);
+    timer.histogram = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
 
-    timer.cdf = render::elapsed_and_reset(&mut stopwatch);
+    timer.cdf = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_color_map_black_blue_white();
@@ -228,11 +228,11 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    timer.color_map = render::elapsed_and_reset(&mut stopwatch);
+    timer.color_map = image_utils::elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
-    timer.write_png = render::elapsed_and_reset(&mut stopwatch);
+    timer.write_png = image_utils::elapsed_and_reset(&mut stopwatch);
 
     println!("Wrote image file to: {}", render_path.display());
 

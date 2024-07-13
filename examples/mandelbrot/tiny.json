@@ -1,0 +1,13 @@
+{
+  "Mandelbrot": {
+    "image_specification": {
+      "resolution": [256, 256],
+      "center": [-0.666259, -0.442306],
+      "width": 0.06
+    },
+    "escape_radius_squared": 4,
+    "max_iter_count": 120,
+    "refinement_count": 2,
+    "histogram_bin_count": 250
+  }
+}

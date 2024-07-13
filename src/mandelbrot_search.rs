@@ -1,4 +1,4 @@
-use crate::{file_io, render};
+use crate::{file_io, image_utils};
 use iter_num_tools::grid_space;
 use nalgebra::Vector2;
 use rand::Rng;
@@ -46,10 +46,10 @@ pub struct QueryResult {
 
 pub fn mandelbrot_search_render(
     params: &MandelbrotSearchParams,
-    directory_path: &std::path::Path,
+    file_prefix: &file_io::FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // write out the parameters too:
-    let params_path = directory_path.join("search_params.json");
+    let params_path = file_prefix.with_suffix("search_params.json");
     std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
 
     let range = Vector2::new(
@@ -119,7 +119,7 @@ pub fn mandelbrot_search_render(
         // Render the best point that we found:
         if let Some(ref query) = best_result {
             let render_params = MandelbrotParams {
-                image_specification: render::ImageSpecification {
+                image_specification: image_utils::ImageSpecification {
                     resolution: params.render_image_resolution,
                     center: query.point,
                     width: params.render_view_scale_real,
@@ -133,8 +133,8 @@ pub fn mandelbrot_search_render(
             let render_result = render_mandelbrot_set(
                 &render_params,
                 &file_io::FilePrefix {
-                    directory_path: directory_path.to_path_buf(),
-                    file_base: format!("render_{}", render_iter),
+                    directory_path: file_prefix.directory_path.to_path_buf(),
+                    file_base: format!("{}_render_{}", file_prefix.file_base, render_iter),
                 },
             );
 

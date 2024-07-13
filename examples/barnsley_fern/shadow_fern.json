@@ -1,87 +1,38 @@
 {
+  "BarnsleyFern": {
     "fit_image": {
-        "resolution": [
-            600,
-            800
-        ],
-        "padding_scale": 1.01
+      "resolution": [600, 800],
+      "padding_scale": 1.01
     },
     "sample_count": 20000000,
     "subpixel_antialiasing": 8,
-    "background_color_rgba": [
-        0,
-        0,
-        0,
-        255
-    ],
-    "fern_color_rgba": [
-        79,
-        121,
-        66,
-        255
-    ],
+    "background_color_rgba": [0, 0, 0, 255],
+    "fern_color_rgba": [79, 121, 66, 255],
     "coeffs": {
-        "view_rectangle": {
-            "center": [
-                0,
-                5
-            ],
-            "dimensions": [
-                6,
-                10
-            ]
-        },
-        "f1_map": {
-            "linear": [
-                0,
-                0,
-                0,
-                0.16
-            ],
-            "offset": [
-                0,
-                0
-            ],
-            "weight": 0.01
-        },
-        "f2_map": {
-            "linear": [
-                0.85,
-                -0.04,
-                0.04,
-                0.85
-            ],
-            "offset": [
-                0,
-                1.6
-            ],
-            "weight": 0.85
-        },
-        "f3_map": {
-            "linear": [
-                0.2,
-                0.23,
-                -0.26,
-                0.22
-            ],
-            "offset": [
-                0,
-                1.6
-            ],
-            "weight": 0.07
-        },
-        "f4_map": {
-            "linear": [
-                -0.15,
-                0.26,
-                0.28,
-                0.24
-            ],
-            "offset": [
-                0,
-                0.44
-            ],
-            "weight": 0.07
-        }
+      "view_rectangle": {
+        "center": [0, 5],
+        "dimensions": [6, 10]
+      },
+      "f1_map": {
+        "linear": [0, 0, 0, 0.16],
+        "offset": [0, 0],
+        "weight": 0.01
+      },
+      "f2_map": {
+        "linear": [0.85, -0.04, 0.04, 0.85],
+        "offset": [0, 1.6],
+        "weight": 0.85
+      },
+      "f3_map": {
+        "linear": [0.2, 0.23, -0.26, 0.22],
+        "offset": [0, 1.6],
+        "weight": 0.07
+      },
+      "f4_map": {
+        "linear": [-0.15, 0.26, 0.28, 0.24],
+        "offset": [0, 0.44],
+        "weight": 0.07
+      }
     }
+  }
 }
