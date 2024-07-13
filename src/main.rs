@@ -24,7 +24,7 @@ pub enum RenderParams {
     Serpinsky(crate::serpinsky::SerpinskyParams),
 }
 
-pub fn main_render<F>(
+pub fn render_fractal<F>(
     // TODO:  fix namespacing
     params: &RenderParams,
     file_prefix: F,
@@ -129,7 +129,7 @@ fn main() {
                 }
             };
 
-            main_render(
+            render_fractal(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
                         .expect("Unable to read param file"),
