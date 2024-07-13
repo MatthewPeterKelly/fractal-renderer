@@ -137,7 +137,7 @@ fn main() {
         }
 
         Some(CommandsEnum::Render(params)) => {
-            render(
+            main_render(
                 &serde_json::from_str(
                     &std::fs::read_to_string(&params.params_path)
                         .expect("Unable to read param file"),
