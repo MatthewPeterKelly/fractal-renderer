@@ -12,7 +12,7 @@ use clap::Parser;
 use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}, serpinsky::{render_serpinsky, SerpinskyParams}};
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{CommandsEnum, FractalRendererArgs};
+use crate::cli::args::{CommandsEnum, FractalRendererArgs};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RenderParams {
