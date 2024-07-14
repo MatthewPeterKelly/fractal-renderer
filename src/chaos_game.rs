@@ -10,7 +10,7 @@ use std::{
 
 use image::Pixel;
 
-use crate::{file_io, histogram::Histogram, image_utils};
+use crate::{file_io, core::histogram::Histogram, image_utils};
 
 /**
  * Timing data, used for simple analysis logging.

@@ -3,7 +3,7 @@ mod chaos_game;
 mod cli;
 mod ddp_utils;
 mod file_io;
-mod histogram;
+mod core;
 mod image_utils;
 mod mandelbrot_core;
 mod mandelbrot_search;

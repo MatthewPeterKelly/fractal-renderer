@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     file_io,
-    histogram::{CumulativeDistributionFunction, Histogram},
+    core::histogram::{CumulativeDistributionFunction, Histogram},
     image_utils,
 };
 use serde::{Deserialize, Serialize};
