@@ -1,4 +1,4 @@
-use crate::chaos_game;
+use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
 use crate::core::file_io::FilePrefix;
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
@@ -128,13 +128,13 @@ pub fn render_barnsley_fern(
 
     let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
-        chaos_game::ColoredPoint {
+        ColoredPoint {
             point: sample_point,
             color: fern_color,
         }
     };
 
-    chaos_game::render(
+    chaos_game_render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,

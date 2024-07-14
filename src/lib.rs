@@ -1,4 +1,3 @@
-pub mod chaos_game;
 pub mod cli;
 pub mod core;
 pub mod fractals;

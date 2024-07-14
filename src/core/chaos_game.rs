@@ -53,7 +53,7 @@ pub struct ColoredPoint {
  * The user sets up the distribution, and this function samples from the distribution and handles all of the
  * file generation and diagnostics.
  */
-pub fn render<D>(
+pub fn chaos_game_render<D>(
     background_color: image::Rgba<u8>,
     distribution_generator: &mut D,
     sample_count: u32,

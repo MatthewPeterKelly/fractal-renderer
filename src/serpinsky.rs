@@ -1,4 +1,4 @@
-use crate::chaos_game;
+use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
 use crate::core::file_io::FilePrefix;
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
@@ -80,12 +80,12 @@ impl SampleGenerator {
         rng: &mut R,
 
         prev_sample: &nalgebra::Vector2<f64>,
-    ) -> chaos_game::ColoredPoint {
+    ) -> ColoredPoint {
         let vertex_index = self.distribution.sample(rng);
         let selected_vertex = self.vertices[vertex_index];
         let next_point = self.ratio * selected_vertex + (1.0 - self.ratio) * prev_sample;
         let next_color = self.colors[vertex_index];
-        chaos_game::ColoredPoint {
+        ColoredPoint {
             point: next_point,
             color: next_color,
         }
@@ -110,7 +110,7 @@ pub fn render_serpinsky(
         next_colored_point
     };
 
-    chaos_game::render(
+    chaos_game_render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,

@@ -1,4 +1,3 @@
-mod chaos_game;
 mod cli;
 mod core;
 mod fractals;
