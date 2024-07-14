@@ -162,11 +162,11 @@ impl CumulativeDistributionFunction {
 }
 
 mod tests {
-    use std::{fs, io};
+    
 
-    use approx::assert_relative_eq;
+    
 
-    use crate::core::histogram::{CumulativeDistributionFunction, Histogram};
+    
 
     #[test]
     fn test_histogram_insert_positive_data() {
