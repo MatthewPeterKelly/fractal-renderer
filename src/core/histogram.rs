@@ -162,10 +162,15 @@ impl CumulativeDistributionFunction {
 }
 
 mod tests {
+    use std::{fs, io};
+
+    use approx::assert_relative_eq;
+
+    use crate::core::histogram::{CumulativeDistributionFunction, Histogram};
 
     #[test]
     fn test_histogram_insert_positive_data() {
-        let mut hist =  crate::core::histogram::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(2.5);
         hist.insert(6.8);
@@ -175,7 +180,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_negative_data() {
-        let mut hist =  crate::core::histogram::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(-3.0);
         hist.insert(-1.5);
@@ -185,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_at_max_val() {
-        let mut hist =  crate::core::histogram::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(10.0);
 
@@ -194,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_greater_than_max_val() {
-        let mut hist =  crate::core::histogram::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(12.5);
 
@@ -204,29 +209,29 @@ mod tests {
     #[test]
     fn test_histogram_insert_with_zero_num_bins() {
         // This should panic due to the assertion in the constructor
-        assert!(std::panic::catch_unwind(||  crate::core::histogram::Histogram::new(0, 10.0)).is_err());
+        assert!(std::panic::catch_unwind(|| Histogram::new(0, 10.0)).is_err());
     }
 
     #[test]
     fn test_histogram_insert_with_zero_max_val() {
         // This should panic due to the assertion in the constructor
-        assert!(std::panic::catch_unwind(||  crate::core::histogram::Histogram::new(5, 0.0)).is_err());
+        assert!(std::panic::catch_unwind(|| Histogram::new(5, 0.0)).is_err());
     }
 
     #[test]
     fn test_histogram_text_display() {
-        let mut hist =  crate::core::histogram::Histogram::new(3, 4.0);
+        let mut hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
-        println!(" crate::core::histogram::Histogram:");
+        println!("Histogram:");
         hist.display(&mut io::stdout())
             .expect("Failed to display on screen");
     }
 
     #[test]
     fn test_histogram_file_display() {
-        let mut hist =  crate::core::histogram::Histogram::new(3, 9.0);
+        let mut hist = Histogram::new(3, 9.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -241,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_histogram_utilities() {
-        let mut hist =  crate::core::histogram::Histogram::new(3, 6.0);
+        let mut hist = Histogram::new(3, 6.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -262,7 +267,7 @@ mod tests {
     #[test]
     fn test_cdf_uniform() {
         let max_value = 6.0;
-        let mut hist =  crate::core::histogram::Histogram::new(3, max_value);
+        let mut hist = Histogram::new(3, max_value);
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
@@ -282,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_cdf_skewed() {
-        let mut hist =  crate::core::histogram::Histogram::new(3, 6.0);
+        let mut hist = Histogram::new(3, 6.0);
         hist.insert(4.7);
         hist.insert(5.2);
         hist.insert(4.2);
@@ -309,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_cdf_interesting() {
-        let mut hist =  crate::core::histogram::Histogram::new(5, 25.0);
+        let mut hist = Histogram::new(5, 25.0);
         for _ in 0..3 {
             hist.insert(3.0);
         }
