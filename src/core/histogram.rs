@@ -161,6 +161,7 @@ impl CumulativeDistributionFunction {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::{fs, io};
 
@@ -253,6 +254,8 @@ mod tests {
         assert_eq!(hist.total_count(), 4);
 
         let tol = 1e-6;
+
+        use approx::assert_relative_eq;
 
         assert_relative_eq!(hist.lower_edge(0), 0.0, epsilon = tol);
         assert_relative_eq!(hist.upper_edge(0), 2.0, epsilon = tol);
