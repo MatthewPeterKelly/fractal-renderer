@@ -2,13 +2,12 @@ mod chaos_game;
 mod cli;
 mod core;
 mod fractals;
-mod mandelbrot;
 mod mandelbrot_search;
 mod serpinsky;
 
-use core::file_io::{
+use core::{file_io::{
     build_output_path_with_date_time, date_time_string, extract_base_name, FilePrefix,
-};
+}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}};
 
 use clap::Parser;
 use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}};
@@ -18,7 +17,7 @@ use crate::cli::{CommandsEnum, FractalRendererArgs};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RenderParams {
-    Mandelbrot(crate::mandelbrot::MandelbrotParams),
+    Mandelbrot(MandelbrotParams),
     MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
     DrivenDampedPendulum(DrivenDampedPendulumParams),
     BarnsleyFern(BarnsleyFernParams),
@@ -35,7 +34,7 @@ where
 {
     match params {
         RenderParams::Mandelbrot(inner_params) => {
-            crate::mandelbrot::render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
+            render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
         }
         RenderParams::MandelbrotSearch(inner_params) => {
             crate::mandelbrot_search::mandelbrot_search_render(
