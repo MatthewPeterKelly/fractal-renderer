@@ -5,12 +5,13 @@ mod fractals;
 mod mandelbrot_search;
 mod serpinsky;
 
-use core::{file_io::{
+use core::file_io::{
     build_output_path_with_date_time, date_time_string, extract_base_name, FilePrefix,
-}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}};
+};
+
 
 use clap::Parser;
-use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}};
+use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
