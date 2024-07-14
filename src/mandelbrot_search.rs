@@ -5,7 +5,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-use crate::mandelbrot_core::{
+use crate::mandelbrot::{
     complex_range, render_mandelbrot_set, MandelbrotParams, MandelbrotSequence,
 };
 

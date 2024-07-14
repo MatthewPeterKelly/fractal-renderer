@@ -3,7 +3,7 @@ mod chaos_game;
 mod cli;
 mod core;
 mod ddp_utils;
-mod mandelbrot_core;
+mod mandelbrot;
 mod mandelbrot_search;
 mod serpinsky;
 
@@ -18,7 +18,7 @@ use crate::cli::{CommandsEnum, FractalRendererArgs};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RenderParams {
-    Mandelbrot(crate::mandelbrot_core::MandelbrotParams),
+    Mandelbrot(crate::mandelbrot::MandelbrotParams),
     MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
     DrivenDampedPendulum(crate::ddp_utils::DrivenDampedPendulumParams),
     BarnsleyFern(crate::barnsley_fern::BarnsleyFernParams),
@@ -35,7 +35,7 @@ where
 {
     match params {
         RenderParams::Mandelbrot(inner_params) => {
-            crate::mandelbrot_core::render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
+            crate::mandelbrot::render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
         }
         RenderParams::MandelbrotSearch(inner_params) => {
             crate::mandelbrot_search::mandelbrot_search_render(
