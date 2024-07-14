@@ -15,7 +15,6 @@ pub enum RenderParams {
 }
 
 pub fn render_fractal<F>(
-    // TODO:  fix namespacing
     params: &RenderParams,
     file_prefix: F,
 ) -> Result<(), Box<dyn std::error::Error>>

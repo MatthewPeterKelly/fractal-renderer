@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use crate::cli::args::ParameterFilePath;  // TODO:  bad dep; fix.
-
 pub fn extract_base_name(path: &str) -> &str {
     std::path::Path::new(path)
         .file_stem() // Get the base name component of the path
@@ -10,13 +8,13 @@ pub fn extract_base_name(path: &str) -> &str {
 }
 
 pub fn build_output_path_with_date_time(
-    params: &ParameterFilePath,
+    params_path: &str,
     project: &str,
-    datetime: &str,
+    datetime: &Option<String>,
 ) -> std::path::PathBuf {
-    let mut dirs = vec!["out", project, extract_base_name(&params.params_path)];
-    if params.date_time_out {
-        dirs.push(datetime);
+    let mut dirs = vec!["out", project, extract_base_name(params_path)];
+    if let Some(inner_datetime_str) = datetime {
+        dirs.push(inner_datetime_str);
     }
 
     let directory_path: PathBuf = dirs.iter().collect();
@@ -36,6 +34,14 @@ pub fn date_time_string() -> String {
         local_time.minute(),
         local_time.second()
     )
+}
+
+pub fn maybe_date_time_string(enable: bool) ->Option<String> {
+    if enable {
+        Option::Some(date_time_string())
+    } else {
+        Option::None
+    }
 }
 
 /**
