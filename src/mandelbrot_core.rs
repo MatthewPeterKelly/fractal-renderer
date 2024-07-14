@@ -261,3 +261,4 @@ fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
         }
     }
 }
+
