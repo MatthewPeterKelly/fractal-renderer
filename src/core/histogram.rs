@@ -162,11 +162,8 @@ impl CumulativeDistributionFunction {
 }
 
 mod tests {
-    
+    use crate::core::histogram::Histogram;
 
-    
-
-    
 
     #[test]
     fn test_histogram_insert_positive_data() {
