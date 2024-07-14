@@ -125,8 +125,9 @@ pub fn render_serpinsky(
 
 #[cfg(test)]
 mod tests {
-    use crate::serpinsky::optimal_contraction_ratio;
     use approx::assert_relative_eq;
+
+    use super::optimal_contraction_ratio;
 
     #[test]
     fn test_optimal_packing_ratio() {

@@ -2,7 +2,6 @@ mod cli;
 mod core;
 mod fractals;
 mod mandelbrot_search;
-mod serpinsky;
 
 use core::file_io::{
     build_output_path_with_date_time, date_time_string, extract_base_name, FilePrefix,
@@ -10,7 +9,7 @@ use core::file_io::{
 
 
 use clap::Parser;
-use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}};
+use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}, serpinsky::{render_serpinsky, SerpinskyParams}};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
@@ -21,7 +20,7 @@ pub enum RenderParams {
     MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
     DrivenDampedPendulum(DrivenDampedPendulumParams),
     BarnsleyFern(BarnsleyFernParams),
-    Serpinsky(crate::serpinsky::SerpinskyParams),
+    Serpinsky(SerpinskyParams),
 }
 
 pub fn render_fractal<F>(
@@ -52,7 +51,7 @@ where
             render_barnsley_fern(inner_params, &file_prefix("barnsley_fern"))
         }
         RenderParams::Serpinsky(inner_params) => {
-            crate::serpinsky::render_serpinsky(inner_params, &file_prefix("serpinsky"))
+            render_serpinsky(inner_params, &file_prefix("serpinsky"))
         }
     }
 }
