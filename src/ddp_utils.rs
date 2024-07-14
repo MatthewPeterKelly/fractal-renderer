@@ -3,7 +3,7 @@ use crate::{
         file_io::FilePrefix,
         image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
     },
-    ode_solvers::rk4_simulate,
+    core::ode_solvers::rk4_simulate,
 };
 use serde::{Deserialize, Serialize};
 use std::{

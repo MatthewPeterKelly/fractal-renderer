@@ -5,7 +5,6 @@ mod core;
 mod ddp_utils;
 mod mandelbrot_core;
 mod mandelbrot_search;
-mod ode_solvers;
 mod serpinsky;
 
 use core::file_io::{

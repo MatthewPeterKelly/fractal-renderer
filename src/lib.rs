@@ -5,5 +5,4 @@ pub mod core;
 pub mod ddp_utils;
 pub mod mandelbrot_core;
 pub mod mandelbrot_search;
-pub mod ode_solvers;
 pub mod serpinsky;
