@@ -1,11 +1,15 @@
-use crate::{file_io, ode_solvers::rk4_simulate};
+use crate::{
+    core::ode_solvers::rk4_simulate,
+    core::{
+        file_io::FilePrefix,
+        image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+    },
+};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
     time::{Duration, Instant},
 };
-
-use crate::image_utils;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TimePhaseSpecification {
@@ -15,7 +19,7 @@ pub enum TimePhaseSpecification {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
-    pub image_specification: image_utils::ImageSpecification,
+    pub image_specification: ImageSpecification,
     pub time_phase: TimePhaseSpecification, // See above.
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
@@ -87,7 +91,13 @@ pub fn compute_basin_of_attraction(
     let mut x = x_begin;
     for _ in 0..n_max_period {
         let x_prev = x;
-        x = rk4_simulate(t_begin, t_final, n_steps_per_period, x_prev);
+        x = rk4_simulate(
+            t_begin,
+            t_final,
+            n_steps_per_period,
+            x_prev,
+            &driven_damped_pendulum_dynamics,
+        );
         let x_idx = driven_damped_pendulum_attractor(x, x_prev, periodic_state_error_tolerance);
         if let Some(i) = x_idx {
             return Some(i);
@@ -116,7 +126,7 @@ impl MeasuredElapsedTime {
 
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
@@ -135,18 +145,18 @@ pub fn render_driven_damped_pendulum_attractor(
             let inner_directory_path = file_prefix.directory_path.join("series");
             std::fs::create_dir_all(&inner_directory_path).unwrap();
 
-            timer.setup = image_utils::elapsed_and_reset(&mut stopwatch);
+            timer.setup = elapsed_and_reset(&mut stopwatch);
             for idx in 0..count {
                 let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
                 inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
-                let inner_file_prefix = file_io::FilePrefix {
+                let inner_file_prefix = FilePrefix {
                     directory_path: inner_directory_path.clone(),
                     file_base: format!("{}_{}", file_prefix.file_base, idx),
                 };
                 render_driven_damped_pendulum_attractor(&inner_params, &inner_file_prefix)?;
             }
-            timer.simulation = image_utils::elapsed_and_reset(&mut stopwatch);
+            timer.simulation = elapsed_and_reset(&mut stopwatch);
             timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
             return Ok(());
         }
@@ -160,7 +170,7 @@ pub fn render_driven_damped_pendulum_attractor(
         params.image_specification.resolution[1],
     );
 
-    timer.setup = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.setup = elapsed_and_reset(&mut stopwatch);
 
     let subpixel_samples = params
         .image_specification
@@ -188,9 +198,9 @@ pub fn render_driven_damped_pendulum_attractor(
         }
     };
 
-    let raw_data = image_utils::generate_scalar_image(&params.image_specification, pixel_renderer);
+    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
-    timer.simulation = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.simulation = elapsed_and_reset(&mut stopwatch);
 
     // Iterate over the coordinates and pixels of the image
     let color_map = greyscale_color_map();
@@ -200,7 +210,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     // Save the image to a file, deducing the type from the file name
     imgbuf.save(&render_path).unwrap();
-    timer.write_png = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.write_png = elapsed_and_reset(&mut stopwatch);
 
     println!("Wrote image file to: {}", render_path.display());
 

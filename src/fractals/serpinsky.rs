@@ -1,4 +1,6 @@
-use crate::{chaos_game, file_io, image_utils};
+use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
+use crate::core::file_io::FilePrefix;
+use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -9,7 +11,7 @@ use serde::{Deserialize, Serialize};
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SerpinskyParams {
-    pub fit_image: image_utils::FitImage,
+    pub fit_image: FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
@@ -73,17 +75,12 @@ impl SampleGenerator {
         }
     }
 
-    pub fn next<R: Rng>(
-        &self,
-        rng: &mut R,
-
-        prev_sample: &nalgebra::Vector2<f64>,
-    ) -> chaos_game::ColoredPoint {
+    pub fn next<R: Rng>(&self, rng: &mut R, prev_sample: &nalgebra::Vector2<f64>) -> ColoredPoint {
         let vertex_index = self.distribution.sample(rng);
         let selected_vertex = self.vertices[vertex_index];
         let next_point = self.ratio * selected_vertex + (1.0 - self.ratio) * prev_sample;
         let next_color = self.colors[vertex_index];
-        chaos_game::ColoredPoint {
+        ColoredPoint {
             point: next_point,
             color: next_color,
         }
@@ -95,7 +92,7 @@ impl SampleGenerator {
  */
 pub fn render_serpinsky(
     params: &SerpinskyParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let vertices = polygon_verticies(params.vertex_colors.len());
     let mut sample_point = vertices[0];
@@ -108,14 +105,14 @@ pub fn render_serpinsky(
         next_colored_point
     };
 
-    chaos_game::render(
+    chaos_game_render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,
         params.subpixel_antialiasing,
         &params
             .fit_image
-            .image_specification(&image_utils::ViewRectangle::from_vertices(&vertices)),
+            .image_specification(&ViewRectangle::from_vertices(&vertices)),
         file_prefix,
         &serde_json::to_string(params)?,
     )
@@ -123,8 +120,9 @@ pub fn render_serpinsky(
 
 #[cfg(test)]
 mod tests {
-    use crate::serpinsky::optimal_contraction_ratio;
     use approx::assert_relative_eq;
+
+    use super::optimal_contraction_ratio;
 
     #[test]
     fn test_optimal_packing_ratio() {

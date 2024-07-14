@@ -10,7 +10,11 @@ use std::{
 
 use image::Pixel;
 
-use crate::{file_io, histogram::Histogram, image_utils};
+use crate::core::{
+    file_io::FilePrefix,
+    histogram::Histogram,
+    image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
+};
 
 /**
  * Timing data, used for simple analysis logging.
@@ -49,13 +53,13 @@ pub struct ColoredPoint {
  * The user sets up the distribution, and this function samples from the distribution and handles all of the
  * file generation and diagnostics.
  */
-pub fn render<D>(
+pub fn chaos_game_render<D>(
     background_color: image::Rgba<u8>,
     distribution_generator: &mut D,
     sample_count: u32,
     subpixel_antialiasing: i32,
-    image_specification: &image_utils::ImageSpecification,
-    file_prefix: &file_io::FilePrefix,
+    image_specification: &ImageSpecification,
+    file_prefix: &FilePrefix,
     params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -78,17 +82,16 @@ where
     let mut subpixel_mask = nalgebra::DMatrix::from_element(
         image_specification.resolution[0] as usize,
         image_specification.resolution[1] as usize,
-        image_utils::SubpixelGridMask::new(),
+        SubpixelGridMask::new(),
     );
 
     for (_, _, pixel) in imgbuf.enumerate_pixels_mut() {
         *pixel = background_color;
     }
 
-    let pixel_mapper =
-        image_utils::UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
+    let pixel_mapper = UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
 
-    timer.setup = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.setup = elapsed_and_reset(&mut stopwatch);
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
@@ -101,12 +104,12 @@ where
         }
     }
 
-    timer.sampling = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.sampling = elapsed_and_reset(&mut stopwatch);
 
     // Save the image to a file, deducing the type from the file name
     let raw_render_path = file_prefix.with_suffix("_raw.png");
     imgbuf.save(&raw_render_path).unwrap();
-    timer.write_raw_png = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
     println!("Wrote raw image file to: {}", raw_render_path.display());
 
     // Scale back the colors toward the background, based on the subpixel sample data:
@@ -126,12 +129,12 @@ where
         });
         histogram.insert(weight_background as f64);
     }
-    timer.antialiasing_post_process = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.antialiasing_post_process = elapsed_and_reset(&mut stopwatch);
 
     // Save the antialiased image to a file, deducing the type from the file name
     let render_path = file_prefix.with_suffix(".png");
     imgbuf.save(&render_path).unwrap();
-    timer.write_raw_png = image_utils::elapsed_and_reset(&mut stopwatch);
+    timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
     println!("Wrote image file to: {}", render_path.display());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");

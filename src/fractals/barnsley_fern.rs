@@ -1,4 +1,6 @@
-use crate::{chaos_game, file_io, image_utils};
+use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
+use crate::core::file_io::FilePrefix;
+use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -33,7 +35,7 @@ impl DiscreteMapCoeff {
 pub struct Coeffs {
     // x values: from -3 to 3
     // y values: from 0 to 10
-    view_rectangle: image_utils::ViewRectangle,
+    view_rectangle: ViewRectangle,
 
     f1_map: DiscreteMapCoeff,
     f2_map: DiscreteMapCoeff,
@@ -58,7 +60,7 @@ impl Coeffs {
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BarnsleyFernParams {
-    pub fit_image: image_utils::FitImage,
+    pub fit_image: FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
@@ -116,7 +118,7 @@ impl SampleGenerator {
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
@@ -126,13 +128,13 @@ pub fn render_barnsley_fern(
 
     let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
-        chaos_game::ColoredPoint {
+        ColoredPoint {
             point: sample_point,
             color: fern_color,
         }
     };
 
-    chaos_game::render(
+    chaos_game_render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
         params.sample_count,

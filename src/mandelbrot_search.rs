@@ -1,11 +1,11 @@
-use crate::{file_io, image_utils};
+use crate::core::{file_io::FilePrefix, image_utils::ImageSpecification};
 use iter_num_tools::grid_space;
 use nalgebra::Vector2;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-use crate::mandelbrot_core::{
+use crate::fractals::mandelbrot::{
     complex_range, render_mandelbrot_set, MandelbrotParams, MandelbrotSequence,
 };
 
@@ -46,7 +46,7 @@ pub struct QueryResult {
 
 pub fn mandelbrot_search_render(
     params: &MandelbrotSearchParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // write out the parameters too:
     let params_path = file_prefix.with_suffix("search_params.json");
@@ -119,7 +119,7 @@ pub fn mandelbrot_search_render(
         // Render the best point that we found:
         if let Some(ref query) = best_result {
             let render_params = MandelbrotParams {
-                image_specification: image_utils::ImageSpecification {
+                image_specification: ImageSpecification {
                     resolution: params.render_image_resolution,
                     center: query.point,
                     width: params.render_view_scale_real,
@@ -132,7 +132,7 @@ pub fn mandelbrot_search_render(
 
             let render_result = render_mandelbrot_set(
                 &render_params,
-                &file_io::FilePrefix {
+                &FilePrefix {
                     directory_path: file_prefix.directory_path.to_path_buf(),
                     file_base: format!("{}_render_{}", file_prefix.file_base, render_iter),
                 },

@@ -1,11 +1,4 @@
-pub mod barnsley_fern;
-pub mod chaos_game;
 pub mod cli;
-pub mod ddp_utils;
-pub mod file_io;
-pub mod histogram;
-pub mod image_utils;
-pub mod mandelbrot_core;
+pub mod core;
+pub mod fractals;
 pub mod mandelbrot_search;
-pub mod ode_solvers;
-pub mod serpinsky;
