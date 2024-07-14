@@ -1,4 +1,5 @@
-use crate::{chaos_game, file_io, image_utils};
+use crate::core::image_utils::{FitImage, ViewRectangle};
+use crate::{chaos_game, file_io};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SerpinskyParams {
-    pub fit_image: image_utils::FitImage,
+    pub fit_image: FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
@@ -115,7 +116,7 @@ pub fn render_serpinsky(
         params.subpixel_antialiasing,
         &params
             .fit_image
-            .image_specification(&image_utils::ViewRectangle::from_vertices(&vertices)),
+            .image_specification(&ViewRectangle::from_vertices(&vertices)),
         file_prefix,
         &serde_json::to_string(params)?,
     )

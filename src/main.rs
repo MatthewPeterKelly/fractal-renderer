@@ -4,7 +4,6 @@ mod cli;
 mod ddp_utils;
 mod file_io;
 mod core;
-mod image_utils;
 mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;
