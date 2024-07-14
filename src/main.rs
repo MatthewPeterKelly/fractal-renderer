@@ -1,4 +1,3 @@
-mod barnsley_fern;
 mod chaos_game;
 mod cli;
 mod core;
@@ -12,7 +11,7 @@ use core::file_io::{
 };
 
 use clap::Parser;
-use fractals::driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams};
+use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
@@ -22,7 +21,7 @@ pub enum RenderParams {
     Mandelbrot(crate::mandelbrot::MandelbrotParams),
     MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
     DrivenDampedPendulum(DrivenDampedPendulumParams),
-    BarnsleyFern(crate::barnsley_fern::BarnsleyFernParams),
+    BarnsleyFern(BarnsleyFernParams),
     Serpinsky(crate::serpinsky::SerpinskyParams),
 }
 
@@ -51,7 +50,7 @@ where
             )
         }
         RenderParams::BarnsleyFern(inner_params) => {
-            crate::barnsley_fern::render_barnsley_fern(inner_params, &file_prefix("barnsley_fern"))
+            render_barnsley_fern(inner_params, &file_prefix("barnsley_fern"))
         }
         RenderParams::Serpinsky(inner_params) => {
             crate::serpinsky::render_serpinsky(inner_params, &file_prefix("serpinsky"))
