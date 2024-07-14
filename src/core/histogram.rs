@@ -161,7 +161,6 @@ impl CumulativeDistributionFunction {
     }
 }
 
-
 mod tests {
     use std::{fs, io};
 
@@ -341,5 +340,4 @@ mod tests {
         assert_eq!(cdf.percentile(17.0), 0.5);
         assert_eq!(cdf.percentile(20.0), 0.5);
     }
-
 }

@@ -10,7 +10,15 @@ use std::{
 
 use image::Pixel;
 
-use crate::{core::{histogram::Histogram, image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper}}, file_io};
+use crate::{
+    core::{
+        histogram::Histogram,
+        image_utils::{
+            elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper,
+        },
+    },
+    file_io,
+};
 
 /**
  * Timing data, used for simple analysis logging.
@@ -85,8 +93,7 @@ where
         *pixel = background_color;
     }
 
-    let pixel_mapper =
-        UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
+    let pixel_mapper = UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
 
     timer.setup = elapsed_and_reset(&mut stopwatch);
 

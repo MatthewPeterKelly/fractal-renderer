@@ -4,7 +4,11 @@ use std::{
 };
 
 use crate::{
-    core::{histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification}}, file_io
+    core::{
+        histogram::{CumulativeDistributionFunction, Histogram},
+        image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+    },
+    file_io,
 };
 use serde::{Deserialize, Serialize};
 
@@ -259,4 +263,3 @@ fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
         }
     }
 }
-

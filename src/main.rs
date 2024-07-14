@@ -1,9 +1,9 @@
 mod barnsley_fern;
 mod chaos_game;
 mod cli;
+mod core;
 mod ddp_utils;
 mod file_io;
-mod core;
 mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;

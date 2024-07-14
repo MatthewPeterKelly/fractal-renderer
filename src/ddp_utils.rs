@@ -1,10 +1,13 @@
-use crate::{core::image_utils::{elapsed_and_reset, ImageSpecification, generate_scalar_image}, file_io, ode_solvers::rk4_simulate};
+use crate::{
+    core::image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+    file_io,
+    ode_solvers::rk4_simulate,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, Write},
     time::{Duration, Instant},
 };
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TimePhaseSpecification {
