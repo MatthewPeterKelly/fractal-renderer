@@ -2,7 +2,7 @@ mod barnsley_fern;
 mod chaos_game;
 mod cli;
 mod core;
-mod ddp_utils;
+mod fractals;
 mod mandelbrot;
 mod mandelbrot_search;
 mod serpinsky;
@@ -12,6 +12,7 @@ use core::file_io::{
 };
 
 use clap::Parser;
+use fractals::driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::{CommandsEnum, FractalRendererArgs};
@@ -20,7 +21,7 @@ use crate::cli::{CommandsEnum, FractalRendererArgs};
 pub enum RenderParams {
     Mandelbrot(crate::mandelbrot::MandelbrotParams),
     MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
-    DrivenDampedPendulum(crate::ddp_utils::DrivenDampedPendulumParams),
+    DrivenDampedPendulum(DrivenDampedPendulumParams),
     BarnsleyFern(crate::barnsley_fern::BarnsleyFernParams),
     Serpinsky(crate::serpinsky::SerpinskyParams),
 }
@@ -44,9 +45,9 @@ where
             )
         }
         RenderParams::DrivenDampedPendulum(inner_params) => {
-            crate::ddp_utils::render_driven_damped_pendulum_attractor(
+            render_driven_damped_pendulum_attractor(
                 inner_params,
-                &file_prefix("DDP"),
+                &file_prefix("driven_damped_pendulum"),
             )
         }
         RenderParams::BarnsleyFern(inner_params) => {
