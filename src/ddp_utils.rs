@@ -1,6 +1,8 @@
 use crate::{
-    core::image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
-    file_io,
+    core::{
+        file_io::FilePrefix,
+        image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+    },
     ode_solvers::rk4_simulate,
 };
 use serde::{Deserialize, Serialize};
@@ -118,7 +120,7 @@ impl MeasuredElapsedTime {
 
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
@@ -142,7 +144,7 @@ pub fn render_driven_damped_pendulum_attractor(
                 let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
                 inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
-                let inner_file_prefix = file_io::FilePrefix {
+                let inner_file_prefix = FilePrefix {
                     directory_path: inner_directory_path.clone(),
                     file_base: format!("{}_{}", file_prefix.file_base, idx),
                 };

@@ -1,4 +1,4 @@
-use crate::{core::image_utils::ImageSpecification, file_io};
+use crate::core::{file_io::FilePrefix, image_utils::ImageSpecification};
 use iter_num_tools::grid_space;
 use nalgebra::Vector2;
 use rand::Rng;
@@ -46,7 +46,7 @@ pub struct QueryResult {
 
 pub fn mandelbrot_search_render(
     params: &MandelbrotSearchParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // write out the parameters too:
     let params_path = file_prefix.with_suffix("search_params.json");
@@ -132,7 +132,7 @@ pub fn mandelbrot_search_render(
 
             let render_result = render_mandelbrot_set(
                 &render_params,
-                &file_io::FilePrefix {
+                &FilePrefix {
                     directory_path: file_prefix.directory_path.to_path_buf(),
                     file_base: format!("{}_render_{}", file_prefix.file_base, render_iter),
                 },

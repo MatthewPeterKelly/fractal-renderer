@@ -3,12 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    core::{
-        histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
-    },
-    file_io,
+use crate::core::{
+    file_io::FilePrefix,
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
 };
 use serde::{Deserialize, Serialize};
 
@@ -174,7 +172,7 @@ impl MeasuredElapsedTime {
 
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();

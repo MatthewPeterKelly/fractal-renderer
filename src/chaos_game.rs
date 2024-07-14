@@ -10,14 +10,10 @@ use std::{
 
 use image::Pixel;
 
-use crate::{
-    core::{
-        histogram::Histogram,
-        image_utils::{
-            elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper,
-        },
-    },
-    file_io,
+use crate::core::{
+    file_io::FilePrefix,
+    histogram::Histogram,
+    image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
 };
 
 /**
@@ -63,7 +59,7 @@ pub fn render<D>(
     sample_count: u32,
     subpixel_antialiasing: i32,
     image_specification: &ImageSpecification,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
     params_str: &str, // For diagnostics only --> written to a file
 ) -> Result<(), Box<dyn std::error::Error>>
 where

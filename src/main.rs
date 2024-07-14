@@ -3,11 +3,14 @@ mod chaos_game;
 mod cli;
 mod core;
 mod ddp_utils;
-mod file_io;
 mod mandelbrot_core;
 mod mandelbrot_search;
 mod ode_solvers;
 mod serpinsky;
+
+use core::file_io::{
+    build_output_path_with_date_time, date_time_string, extract_base_name, FilePrefix,
+};
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -29,7 +32,7 @@ pub fn render_fractal<F>(
     file_prefix: F,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    F: Fn(&str) -> file_io::FilePrefix,
+    F: Fn(&str) -> FilePrefix,
 {
     match params {
         RenderParams::Mandelbrot(inner_params) => {
@@ -58,16 +61,14 @@ where
 
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
-    let datetime = file_io::date_time_string();
+    let datetime = date_time_string();
 
     match &args.command {
         Some(CommandsEnum::Render(params)) => {
-            let build_file_prefix = |base_name: &str| -> file_io::FilePrefix {
-                file_io::FilePrefix {
-                    directory_path: crate::file_io::build_output_path_with_date_time(
-                        params, base_name, &datetime,
-                    ),
-                    file_base: file_io::extract_base_name(&params.params_path).to_owned(),
+            let build_file_prefix = |base_name: &str| -> FilePrefix {
+                FilePrefix {
+                    directory_path: build_output_path_with_date_time(params, base_name, &datetime),
+                    file_base: extract_base_name(&params.params_path).to_owned(),
                 }
             };
 

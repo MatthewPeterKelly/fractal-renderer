@@ -1,5 +1,6 @@
+use crate::chaos_game;
+use crate::core::file_io::FilePrefix;
 use crate::core::image_utils::{FitImage, ViewRectangle};
-use crate::{chaos_game, file_io};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -96,7 +97,7 @@ impl SampleGenerator {
  */
 pub fn render_serpinsky(
     params: &SerpinskyParams,
-    file_prefix: &file_io::FilePrefix,
+    file_prefix: &FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let vertices = polygon_verticies(params.vertex_colors.len());
     let mut sample_point = vertices[0];
