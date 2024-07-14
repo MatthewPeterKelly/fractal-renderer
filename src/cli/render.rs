@@ -1,6 +1,9 @@
-
-
-use fractals::{barnsley_fern::{render_barnsley_fern, BarnsleyFernParams}, driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams}, mandelbrot::{render_mandelbrot_set, MandelbrotParams}, serpinsky::{render_serpinsky, SerpinskyParams}};
+use fractals::{
+    barnsley_fern::{render_barnsley_fern, BarnsleyFernParams},
+    driven_damped_pendulum::{render_driven_damped_pendulum_attractor, DrivenDampedPendulumParams},
+    mandelbrot::{render_mandelbrot_set, MandelbrotParams},
+    serpinsky::{render_serpinsky, SerpinskyParams},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{core::file_io::FilePrefix, fractals};

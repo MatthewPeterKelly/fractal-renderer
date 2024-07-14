@@ -36,7 +36,7 @@ pub fn date_time_string() -> String {
     )
 }
 
-pub fn maybe_date_time_string(enable: bool) ->Option<String> {
+pub fn maybe_date_time_string(enable: bool) -> Option<String> {
     if enable {
         Option::Some(date_time_string())
     } else {

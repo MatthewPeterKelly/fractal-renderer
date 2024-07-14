@@ -75,12 +75,7 @@ impl SampleGenerator {
         }
     }
 
-    pub fn next<R: Rng>(
-        &self,
-        rng: &mut R,
-
-        prev_sample: &nalgebra::Vector2<f64>,
-    ) -> ColoredPoint {
+    pub fn next<R: Rng>(&self, rng: &mut R, prev_sample: &nalgebra::Vector2<f64>) -> ColoredPoint {
         let vertex_index = self.distribution.sample(rng);
         let selected_vertex = self.vertices[vertex_index];
         let next_point = self.ratio * selected_vertex + (1.0 - self.ratio) * prev_sample;
