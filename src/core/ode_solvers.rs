@@ -21,10 +21,12 @@ pub fn rk4_simulate<F>(
     t_begin: f64,
     t_final: f64,
     n_steps: u32,
-    x0: na::Vector2<f64>, dynamics:& F
+    x0: na::Vector2<f64>,
+    dynamics: &F,
 ) -> na::Vector2<f64>
 where
-    F: Fn(f64, na::Vector2<f64>) -> na::Vector2<f64>,{
+    F: Fn(f64, na::Vector2<f64>) -> na::Vector2<f64>,
+{
     let dt = (t_final - t_begin) / (n_steps as f64);
     let mut x = x0;
     for i_step in 0..n_steps {

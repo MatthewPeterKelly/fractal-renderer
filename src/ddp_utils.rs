@@ -1,9 +1,9 @@
 use crate::{
+    core::ode_solvers::rk4_simulate,
     core::{
         file_io::FilePrefix,
         image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
     },
-    core::ode_solvers::rk4_simulate,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -91,7 +91,13 @@ pub fn compute_basin_of_attraction(
     let mut x = x_begin;
     for _ in 0..n_max_period {
         let x_prev = x;
-        x = rk4_simulate(t_begin, t_final, n_steps_per_period, x_prev, &driven_damped_pendulum_dynamics);
+        x = rk4_simulate(
+            t_begin,
+            t_final,
+            n_steps_per_period,
+            x_prev,
+            &driven_damped_pendulum_dynamics,
+        );
         let x_idx = driven_damped_pendulum_attractor(x, x_prev, periodic_state_error_tolerance);
         if let Some(i) = x_idx {
             return Some(i);
