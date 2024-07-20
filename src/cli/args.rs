@@ -10,6 +10,12 @@ pub struct FractalRendererArgs {
 #[derive(Debug, Subcommand)]
 pub enum CommandsEnum {
     Render(ParameterFilePath),
+    Explore(ParameterFilePath),
+}
+
+#[derive(Debug, Args)]
+pub struct FilePath {
+    pub file_path: String,
 }
 
 #[derive(Debug, Args)]

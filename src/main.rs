@@ -4,7 +4,9 @@ use core::file_io::{
 
 use clap::Parser;
 use cli::args::{CommandsEnum, FractalRendererArgs};
+use cli::explore::explore_fractal;
 use cli::render::render_fractal;
+use fractals::common::FractalParams;
 
 mod cli;
 mod core;
@@ -12,6 +14,11 @@ mod fractals;
 
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
+
+    let fractal_params = |path: &str| -> FractalParams {
+        serde_json::from_str(&std::fs::read_to_string(path).expect("Unable to read param file"))
+            .unwrap()
+    };
 
     match &args.command {
         Some(CommandsEnum::Render(params)) => {
@@ -26,15 +33,11 @@ fn main() {
                 }
             };
 
-            render_fractal(
-                &serde_json::from_str(
-                    &std::fs::read_to_string(&params.params_path)
-                        .expect("Unable to read param file"),
-                )
-                .unwrap(),
-                build_file_prefix,
-            )
-            .unwrap();
+            render_fractal(&fractal_params(&params.params_path), build_file_prefix).unwrap();
+        }
+
+        Some(CommandsEnum::Explore(params)) => {
+            explore_fractal(&fractal_params(&params.params_path)).unwrap();
         }
 
         None => {

@@ -2,8 +2,8 @@ use std::io::{self, Write};
 
 pub struct Histogram {
     pub bin_count: Vec<u32>,
-    pub data_to_index_scale: f64,
-    pub bin_width: f64,
+    pub data_to_index_scale: f32,
+    pub bin_width: f32,
 }
 
 /**
@@ -11,10 +11,10 @@ pub struct Histogram {
  */
 impl Histogram {
     // Constructor
-    pub fn new(num_bins: usize, max_val: f64) -> Self {
+    pub fn new(num_bins: usize, max_val: f32) -> Self {
         assert!(num_bins > 0, "`num_bins` must be positive!");
         assert!(max_val > 0.0, "`max_val` must be positive!");
-        let data_to_index_scale = (num_bins as f64) / max_val;
+        let data_to_index_scale = (num_bins as f32) / max_val;
         Histogram {
             bin_count: vec![0; num_bins],
             data_to_index_scale,
@@ -24,7 +24,7 @@ impl Histogram {
 
     // Insert a data point into the histogram
     // TODO:  template on data type
-    pub fn insert(&mut self, data: f64) {
+    pub fn insert(&mut self, data: f32) {
         if data < 0.0 {
             self.bin_count[0] += 1;
             return;
@@ -37,6 +37,12 @@ impl Histogram {
         }
     }
 
+    pub fn clear(&mut self) {
+        for bin in &mut self.bin_count {
+            *bin = 0;
+        }
+    }
+
     pub fn total_count(&self) -> u32 {
         self.bin_count.iter().sum()
     }
@@ -44,15 +50,15 @@ impl Histogram {
     /**
      * @return: the lower edge of the specified bin (inclusive)
      */
-    pub fn lower_edge(&self, bin_index: usize) -> f64 {
-        self.bin_width * (bin_index as f64)
+    pub fn lower_edge(&self, bin_index: usize) -> f32 {
+        self.bin_width * (bin_index as f32)
     }
 
     /**
      * @return: the upper edge of the specified bin (exclusive)
      */
-    pub fn upper_edge(&self, bin_index: usize) -> f64 {
-        self.bin_width * ((bin_index + 1) as f64)
+    pub fn upper_edge(&self, bin_index: usize) -> f32 {
+        self.bin_width * ((bin_index + 1) as f32)
     }
 
     /**
@@ -61,11 +67,11 @@ impl Histogram {
     pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(writer, "Histogram:")?;
         let total = self.total_count();
-        let percent_scale = 100.0 / (total as f64);
+        let percent_scale = 100.0 / (total as f32);
         writeln!(writer, "  total count: {}", total)?;
         for i in 0..self.bin_count.len() {
             let count = self.bin_count[i];
-            let percent = (count as f64) * percent_scale;
+            let percent = (count as f32) * percent_scale;
             writeln!(
                 writer,
                 "  bins[{}]:  [{:.2}, {:.2}) --> {}  ({:.2}%)",
@@ -83,20 +89,20 @@ impl Histogram {
 
 #[derive(Debug)]
 pub struct CumulativeDistributionFunction {
-    pub offset: Vec<f64>, // n_bins
-    pub scale: Vec<f64>,  // n_bins
-    pub data_to_index_scale: f64,
-    pub min_data: f64, // --> maps to 0.0
-    pub max_data: f64, // --> maps to 1.0
+    pub offset: Vec<f32>, // n_bins
+    pub scale: Vec<f32>,  // n_bins
+    pub data_to_index_scale: f32,
+    pub min_data: f32, // --> maps to 0.0
+    pub max_data: f32, // --> maps to 1.0
 }
 
 impl CumulativeDistributionFunction {
     pub fn new(histogram: &Histogram) -> CumulativeDistributionFunction {
-        let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f64);
+        let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f32);
 
         let n_bins = histogram.bin_count.len();
-        let mut offset: Vec<f64> = Vec::with_capacity(n_bins);
-        let mut scale: Vec<f64> = Vec::with_capacity(n_bins);
+        let mut offset: Vec<f32> = Vec::with_capacity(n_bins);
+        let mut scale: Vec<f32> = Vec::with_capacity(n_bins);
         let mut accumulated_count = 0;
 
         // x = data (input)
@@ -104,7 +110,7 @@ impl CumulativeDistributionFunction {
         let mut y_low = 0.0;
         for i in 0..histogram.bin_count.len() {
             accumulated_count += histogram.bin_count[i];
-            let y_upp = (accumulated_count as f64) * scale_bin_count_to_fraction;
+            let y_upp = (accumulated_count as f32) * scale_bin_count_to_fraction;
             let x_low = histogram.lower_edge(i);
             let dy_dx = (y_upp - y_low) * histogram.data_to_index_scale;
 
@@ -127,7 +133,7 @@ impl CumulativeDistributionFunction {
      * @param value: data point, same units as would be used in the histogram
      * @return: fractional position within the population of the histogram
      */
-    pub fn percentile(&self, data: f64) -> f64 {
+    pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {
             return 0.0;
         }
@@ -153,7 +159,7 @@ impl CumulativeDistributionFunction {
         )?;
         let scale = 1.0 / self.data_to_index_scale;
         for i in 0..(n_bins + 1) {
-            let data = (i as f64) * scale;
+            let data = (i as f32) * scale;
             writeln!(writer, "  {:.1}  -->  {:.4}", data, self.percentile(data))?;
         }
         writeln!(writer)?;
