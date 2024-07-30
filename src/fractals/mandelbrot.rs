@@ -5,7 +5,7 @@ use std::{
 
 use crate::core::{
     file_io::FilePrefix,
-    histogram::{CumulativeDistributionFunction, Histogram},
+    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
 };
 use serde::{Deserialize, Serialize};
@@ -173,16 +173,6 @@ pub fn mandelbrot_pixel_renderer(
         );
         result.unwrap_or(0.0)
     }
-}
-
-pub fn insert_buffer_into_histogram(raw_data: &[Vec<f32>], histogram: &mut Histogram) {
-    raw_data.iter().for_each(|row| {
-        row.iter().for_each(|&val| {
-            if val > 0.0 {
-                histogram.insert(val);
-            }
-        });
-    });
 }
 
 pub fn render_mandelbrot_set(

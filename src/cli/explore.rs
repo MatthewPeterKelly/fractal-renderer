@@ -10,7 +10,7 @@ use winit_input_helper::WinitInputHelper;
 use crate::{
     core::{
         file_io::{build_output_path_with_date_time, date_time_string, FilePrefix},
-        histogram::{CumulativeDistributionFunction, Histogram},
+        histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
         image_utils::{
             create_buffer, generate_scalar_image_in_place, ImageSpecification, PixelMapper,
         },
@@ -18,7 +18,7 @@ use crate::{
     fractals::{
         common::FractalParams,
         mandelbrot::{
-            create_color_map_black_blue_white, insert_buffer_into_histogram,
+            create_color_map_black_blue_white,
             mandelbrot_pixel_renderer,
         },
     },

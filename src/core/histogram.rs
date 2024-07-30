@@ -87,6 +87,16 @@ impl Histogram {
     }
 }
 
+pub fn insert_buffer_into_histogram(raw_data: &[Vec<f32>], histogram: &mut Histogram) {
+    raw_data.iter().for_each(|row| {
+        row.iter().for_each(|&val| {
+            if val > 0.0 {
+                histogram.insert(val);
+            }
+        });
+    });
+}
+
 #[derive(Debug)]
 pub struct CumulativeDistributionFunction {
     pub offset: Vec<f32>, // n_bins
