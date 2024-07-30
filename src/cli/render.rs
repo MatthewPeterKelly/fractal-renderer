@@ -10,10 +10,10 @@ use crate::{core::file_io::FilePrefix, fractals};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RenderParams {
-    Mandelbrot(MandelbrotParams),
-    DrivenDampedPendulum(DrivenDampedPendulumParams),
-    BarnsleyFern(BarnsleyFernParams),
-    Serpinsky(SerpinskyParams),
+    Mandelbrot(Box<MandelbrotParams>),
+    DrivenDampedPendulum(Box<DrivenDampedPendulumParams>),
+    BarnsleyFern(Box<BarnsleyFernParams>),
+    Serpinsky(Box<SerpinskyParams>),
 }
 
 pub fn render_fractal<F>(
