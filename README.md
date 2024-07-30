@@ -29,7 +29,7 @@ cargo run --release -- render .\examples\serpinsky\triangle.json
 ```
 
 ```
-cargo run --release -- explore .\out\mandelbrot_render\complete\complete.png
+cargo run --release -- explore .\examples\mandelbrot\default.json
 ```
 
 ## Autoformatting:
@@ -53,8 +53,13 @@ Use the Prettier extension for VSCode.
 Example, run the histogram test with outputs:
 
 ```
-cargo test --test histogram
-cargo test --test mandelbrot_core
+cargo test --lib histogram
+```
+
+To run all tests in the library:
+
+```
+cargo test --lib
 ```
 
 ## Windows Rust Dummy Notes

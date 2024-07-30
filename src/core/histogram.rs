@@ -98,35 +98,40 @@ pub struct CumulativeDistributionFunction {
 
 impl CumulativeDistributionFunction {
     pub fn new(histogram: &Histogram) -> CumulativeDistributionFunction {
-        let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f32);
-
         let n_bins = histogram.bin_count.len();
-        let mut offset: Vec<f32> = Vec::with_capacity(n_bins);
-        let mut scale: Vec<f32> = Vec::with_capacity(n_bins);
+        let mut cdf = CumulativeDistributionFunction {
+            offset: Vec::with_capacity(n_bins),
+            scale: Vec::with_capacity(n_bins),
+            data_to_index_scale: histogram.data_to_index_scale,
+            min_data: histogram.lower_edge(0),
+            max_data: histogram.upper_edge(n_bins - 1),
+        };
+        cdf.reset(histogram);
+        cdf
+    }
+
+    pub fn reset(&mut self, histogram: &Histogram) {
+        let n_bins = histogram.bin_count.len();
+        self.offset.resize(n_bins, 0.0f32);
+        self.scale.resize(n_bins, 0.0f32);
         let mut accumulated_count = 0;
 
         // x = data (input)
         // y = value (output, fraction within population)
         let mut y_low = 0.0;
-        for i in 0..histogram.bin_count.len() {
+        let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f32);
+        for i in 0..n_bins {
             accumulated_count += histogram.bin_count[i];
             let y_upp = (accumulated_count as f32) * scale_bin_count_to_fraction;
             let x_low = histogram.lower_edge(i);
             let dy_dx = (y_upp - y_low) * histogram.data_to_index_scale;
-
-            offset.push(y_low - x_low * dy_dx);
-            scale.push(dy_dx);
-
+            self.offset[i] = y_low - x_low * dy_dx;
+            self.scale[i] = dy_dx;
             y_low = y_upp; // for the next iteration
         }
-
-        CumulativeDistributionFunction {
-            offset,
-            scale,
-            data_to_index_scale: histogram.data_to_index_scale,
-            min_data: histogram.lower_edge(0),
-            max_data: histogram.upper_edge(n_bins - 1),
-        }
+        self.data_to_index_scale = histogram.data_to_index_scale;
+        self.min_data = histogram.lower_edge(0);
+        self.max_data = histogram.upper_edge(n_bins - 1);
     }
 
     /**

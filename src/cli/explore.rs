@@ -59,6 +59,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             panic!();
         }
     };
+    let mut cdf = CumulativeDistributionFunction::new(&histogram);
 
     let window = {
         let logical_size = LogicalSize::new(
@@ -95,7 +96,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(&color_map, &mut histogram, pixels.frame_mut());
+            pixel_grid.draw(&color_map, &mut histogram, &mut cdf, pixels.frame_mut());
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -183,13 +184,13 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                 }
             }
 
-            if (pixel_grid.update_required) {
+            if pixel_grid.update_required {
                 pixel_grid.update(&pixel_renderer);
                 window.request_redraw();
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file(&color_map, &mut histogram);
+                pixel_grid.render_to_file(&color_map, &mut histogram, &mut cdf);
             }
         }
     });
@@ -256,13 +257,18 @@ impl PixelGrid {
     /**
      *  Renders data from the double buffer to the screen.
      */
-    fn draw<F>(&self, color_map: &F, histogram: &mut Histogram, screen: &mut [u8])
-    where
+    fn draw<F>(
+        &self,
+        color_map: &F,
+        histogram: &mut Histogram,
+        cdf: &mut CumulativeDistributionFunction,
+        screen: &mut [u8],
+    ) where
         F: Fn(f32) -> image::Rgb<u8>,
     {
         histogram.clear();
         insert_buffer_into_histogram(&self.display_buffer, histogram);
-        let cdf = CumulativeDistributionFunction::new(histogram); // TODO: rework this to not allocate
+        cdf.reset(histogram);
 
         // The screen buffer should be 4x the size of our buffer because it has RGBA channels
         // where as we only have a scalar channel that is mapped through a color map.
@@ -281,8 +287,12 @@ impl PixelGrid {
         }
     }
 
-    fn render_to_file<F>(&self, color_map: &F, histogram: &mut Histogram)
-    where
+    fn render_to_file<F>(
+        &self,
+        color_map: &F,
+        histogram: &mut Histogram,
+        cdf: &mut CumulativeDistributionFunction,
+    ) where
         F: Fn(f32) -> image::Rgb<u8>,
     {
         let file_prefix = FilePrefix {
@@ -299,8 +309,7 @@ impl PixelGrid {
         )
         .expect("Unable to write file");
 
-        // TODO:  cache this?
-        let cdf = CumulativeDistributionFunction::new(histogram);
+        cdf.reset(histogram);
 
         // Save the image to a file, deducing the type from the file name
         // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
