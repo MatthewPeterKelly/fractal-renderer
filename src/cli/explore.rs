@@ -1,8 +1,6 @@
 #![deny(clippy::all)]
 #![forbid(unsafe_code)]
 
-use error_iter::ErrorIter as _;
-use log::{error};
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -38,7 +36,6 @@ const KEY_PRESS_JUMP_MODIFIER_SCALE: f32 = 1.2;
 // Minimal rendering window example. Modulo index as color.
 
 pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
-    env_logger::init();
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
@@ -100,8 +97,8 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
             pixel_grid.draw(&color_map, &mut histogram, pixels.frame_mut());
-            if let Err(err) = pixels.render() {
-                log_error("pixels.render", err);
+            if  pixels.render().is_err() {
+                println!("INFO:  ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -119,11 +116,11 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             // Action modifier --> A and D keys
             if input.key_pressed(VirtualKeyCode::A) {
                 keyboard_action_effect_modifier /= KEY_PRESS_JUMP_MODIFIER_SCALE;
-                println!("Action modified: {:?}", keyboard_action_effect_modifier);
+                println!("INFO:  Action modified: {:?}", keyboard_action_effect_modifier);
             }
             if input.key_pressed(VirtualKeyCode::D) {
                 keyboard_action_effect_modifier *= KEY_PRESS_JUMP_MODIFIER_SCALE;
-                println!("Action modified: {:?}", keyboard_action_effect_modifier);
+                println!("INFO:  Action modified: {:?}", keyboard_action_effect_modifier);
             }
 
             // Zoom control --> W and S keys
@@ -189,7 +186,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             // TODO:  this one only kind of works...
             if input.mouse_pressed(0) {
                 let point = pixel_grid.pixel_mapper.map(&mouse_cell);
-                // println!("Mouse left-click at {mouse_cell:?} -->  {point:?}");
+                // println!("INFO:  Mouse left-click at {mouse_cell:?} -->  {point:?}");
                 pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
 
                 // TODO:  these following lines keep showing up...
@@ -201,8 +198,8 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
 
             // Resize the window
             if let Some(size) = input.window_resized() {
-                if let Err(err) = pixels.resize_surface(size.width, size.height) {
-                    log_error("pixels.resize_surface", err);
+                if pixels.resize_surface(size.width, size.height).is_err() {
+                println!("INFO:  ERROR:  unable to resize surface. Aborting.");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -214,13 +211,6 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             }
         }
     });
-}
-
-fn log_error<E: std::error::Error + 'static>(method_name: &str, err: E) {
-    error!("{method_name}() failed: {err}");
-    for source in err.sources().skip(1) {
-        error!("  Caused by: {source}");
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -250,7 +240,7 @@ impl PixelGrid {
     fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
         self.image_specification.center = *center;
         self.pixel_mapper = PixelMapper::new(&self.image_specification);
-        println!("Recenter: {center:?}");
+        println!("INFO:  Recenter: {center:?}");
     }
 
     /**
@@ -266,7 +256,7 @@ impl PixelGrid {
             &mut self.scratch_buffer,
         );
         std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-        println!("UPDATE CALLED!");
+        println!("INFO:  UPDATE CALLED!");
     }
 
     /**
@@ -295,7 +285,7 @@ impl PixelGrid {
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
-        println!("Draw called!");
+        println!("INFO:  Draw called!");
     }
 
     fn render_to_file<F>(&self, color_map: &F, histogram: &mut Histogram)
@@ -333,7 +323,7 @@ impl PixelGrid {
 
         let render_path = file_prefix.with_suffix(".png");
         imgbuf.save(&render_path).unwrap();
-        println!("Wrote image file to: {}", render_path.display());
+        println!("INFO:  Wrote image file to: {}", render_path.display());
     }
 
     fn pan_view(&mut self, view_fraction: &nalgebra::Vector2<f32>) {
@@ -351,6 +341,6 @@ impl PixelGrid {
         // Opens us up to bugs!
         // Lets make a method to collect things and avoid doing it wrong.
         self.pixel_mapper = PixelMapper::new(&self.image_specification);
-        println!("Zoom rescale: {:?}", scale);
+        println!("INFO:  Zoom rescale: {:?}", scale);
     }
 }
