@@ -1,6 +1,3 @@
-#![deny(clippy::all)]
-#![forbid(unsafe_code)]
-
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -303,6 +300,8 @@ impl PixelGrid {
             ),
             file_base: "foobar".to_owned(),
         };
+        // TODO:  eventually generalize this to write the entire parameter struct:
+        // https://github.com/MatthewPeterKelly/fractal-renderer/issues/68
         std::fs::write(
             file_prefix.with_suffix(".json"),
             serde_json::to_string(&self.image_specification).unwrap(),

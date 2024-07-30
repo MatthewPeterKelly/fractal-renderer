@@ -14,11 +14,6 @@ pub enum CommandsEnum {
 }
 
 #[derive(Debug, Args)]
-pub struct FilePath {
-    pub file_path: String,
-}
-
-#[derive(Debug, Args)]
 pub struct ParameterFilePath {
     pub params_path: String,
 

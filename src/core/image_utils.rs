@@ -4,8 +4,10 @@ use std::time::{Duration, Instant};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageSpecification {
-    pub resolution: nalgebra::Vector2<u32>, // TODO:  `(usize, usize)`` instead?
-    pub center: nalgebra::Vector2<f64>,     // here too?
+    // TODO:  consider using `(usize, usize)`` for data here. We don't need the vector.
+    // https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
+    pub resolution: nalgebra::Vector2<u32>,
+    pub center: nalgebra::Vector2<f64>,
     pub width: f64,
 }
 

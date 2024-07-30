@@ -86,6 +86,6 @@ ffmpeg -i out/default_series.mp4 out/default_series.gif
 
 ## Acknowledgements
 
-Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels)
+Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels), which was really helpful in getting the GUI working.
 
 https://github.com/parasyte/pixels/tree/39e84aacbe117347e7b8e7201c48184344aed9cc/examples/conway
