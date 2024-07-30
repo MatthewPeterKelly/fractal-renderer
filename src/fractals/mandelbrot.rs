@@ -21,19 +21,6 @@ pub struct MandelbrotParams {
 }
 
 /**
- * @param dimensions: local "width" and "height" of the retangle in imaginary space
- * @param center: location of the center of that rectangle
- */
-pub fn complex_range(
-    dimensions: nalgebra::Vector2<f64>,
-    center: nalgebra::Vector2<f64>,
-) -> nalgebra::Vector2<std::ops::Range<f64>> {
-    let real_range = (center[0] - 0.5 * dimensions[0])..(center[0] + 0.5 * dimensions[0]);
-    let imag_range = (center[1] - 0.5 * dimensions[1])..(center[1] + 0.5 * dimensions[1]);
-    nalgebra::Vector2::<std::ops::Range<f64>>::new(real_range, imag_range)
-}
-
-/**
  * Data structure for storing the internal state of the mandelbrot sequence calculation.
  * Highly optimized version of the equation to reduce floating point operation count.
  */
