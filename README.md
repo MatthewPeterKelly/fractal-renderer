@@ -28,6 +28,10 @@ cargo run --release -- render .\examples\barnsley_fern\default.json
 cargo run --release -- render .\examples\serpinsky\triangle.json
 ```
 
+```
+cargo run --release -- explore .\examples\mandelbrot\default.json
+```
+
 ## Autoformatting:
 
 ### Rust Code:
@@ -49,8 +53,13 @@ Use the Prettier extension for VSCode.
 Example, run the histogram test with outputs:
 
 ```
-cargo test --test histogram
-cargo test --test mandelbrot_core
+cargo test --lib histogram
+```
+
+To run all tests in the library:
+
+```
+cargo test --lib
 ```
 
 ## Windows Rust Dummy Notes
@@ -74,3 +83,9 @@ Then to go one step furher and make it into a looping gif:
 ```
 ffmpeg -i out/default_series.mp4 out/default_series.gif
 ```
+
+## Acknowledgements
+
+Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels), which was really helpful in getting the GUI working.
+
+https://github.com/parasyte/pixels/tree/39e84aacbe117347e7b8e7201c48184344aed9cc/examples/conway

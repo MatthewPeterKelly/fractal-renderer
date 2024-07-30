@@ -1,9 +1,11 @@
-use rayon::prelude::{IntoParallelIterator, ParallelExtend, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageSpecification {
+    // TODO:  consider using `(usize, usize)`` for data here. We don't need the vector.
+    // https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
     pub resolution: nalgebra::Vector2<u32>,
     pub center: nalgebra::Vector2<f64>,
     pub width: f64,
@@ -57,6 +59,10 @@ impl ImageSpecification {
             width: self.width,
         }
     }
+}
+
+pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) -> Vec<Vec<T>> {
+    vec![vec![value; resolution[1] as usize]; resolution[0] as usize]
 }
 
 /**
@@ -122,6 +128,7 @@ impl FitImage {
     }
 }
 
+#[derive(Clone, Debug)]
 /**
  * Used to map from image space into the "regular" domain used to generate the fractals.
  */
@@ -159,6 +166,7 @@ impl LinearPixelMap {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct PixelMapper {
     width: LinearPixelMap,
     height: LinearPixelMap,
@@ -189,6 +197,11 @@ impl PixelMapper {
             self.width.inverse_map(point[0]),
             self.height.inverse_map(point[1]),
         )
+    }
+
+    pub fn map(&self, point: &(u32, u32)) -> (f64, f64) {
+        let (x, y) = point;
+        (self.width.map(*x), self.height.map(*y))
     }
 }
 
@@ -286,10 +299,31 @@ pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) -> Vec<Vec<f64>>
+pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) -> Vec<Vec<f32>>
 where
-    F: Fn(&nalgebra::Vector2<f64>) -> f64 + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
 {
+    let mut raw_data: Vec<Vec<_>> = create_buffer(0f32, &spec.resolution);
+    generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
+    raw_data
+}
+
+/**
+ * In-place version of the above function.
+ */
+pub fn generate_scalar_image_in_place<F>(
+    spec: &ImageSpecification,
+    pixel_renderer: F,
+    raw_data: &mut Vec<Vec<f32>>,
+) where
+    F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+{
+    assert_eq!(
+        raw_data.len(),
+        spec.resolution[0] as usize,
+        "Outer dimension mismatch"
+    );
+
     let pixel_map_width =
         LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
 
@@ -298,19 +332,19 @@ where
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
     );
+    raw_data.par_iter_mut().enumerate().for_each(|(x, row)| {
+        let re = pixel_map_width.map(x as u32);
 
-    let mut raw_data: Vec<Vec<f64>> = Vec::with_capacity(spec.resolution[0] as usize);
-    raw_data.par_extend((0..spec.resolution[0]).into_par_iter().map(|x| {
-        let re = pixel_map_width.map(x);
-        (0..spec.resolution[1])
-            .map(|y| {
-                let im = pixel_map_height.map(y);
-                pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im))
-            })
-            .collect()
-    }));
-
-    raw_data
+        assert_eq!(
+            row.len(),
+            spec.resolution[1] as usize,
+            "Inner dimension mismatch"
+        ); // rm?
+        row.iter_mut().enumerate().for_each(|(y, elem)| {
+            let im = pixel_map_height.map(y as u32);
+            *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
+        });
+    });
 }
 
 #[cfg(test)]

@@ -127,7 +127,7 @@ where
         pixel.apply2(&background_color, |background: u8, pixel: u8| -> u8 {
             ((background as f32) * weight_background + (pixel as f32) * weight_pixel) as u8
         });
-        histogram.insert(weight_background as f64);
+        histogram.insert(weight_background);
     }
     timer.antialiasing_post_process = elapsed_and_reset(&mut stopwatch);
 

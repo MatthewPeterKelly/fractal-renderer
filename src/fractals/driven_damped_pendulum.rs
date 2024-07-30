@@ -175,12 +175,12 @@ pub fn render_driven_damped_pendulum_attractor(
     let subpixel_samples = params
         .image_specification
         .subpixel_offset_vector(params.subpixel_antialiasing);
-    let subpixel_scale = 1.0 / (subpixel_samples.len() as f64);
+    let subpixel_scale = 1.0 / (subpixel_samples.len() as f32);
 
     let pixel_renderer = {
         let subpixel_samples = &subpixel_samples; // Capture by reference
         move |point: &nalgebra::Vector2<f64>| {
-            let mut sum = 0.0;
+            let mut sum: f32 = 0.0;
 
             for sample in subpixel_samples {
                 let result = compute_basin_of_attraction(
@@ -219,8 +219,8 @@ pub fn render_driven_damped_pendulum_attractor(
     Ok(())
 }
 
-fn greyscale_color_map() -> impl Fn(f64) -> image::Rgb<u8> {
-    move |input: f64| {
+fn greyscale_color_map() -> impl Fn(f32) -> image::Rgb<u8> {
+    move |input: f32| {
         let value = (input * 255.0) as u8;
         image::Rgb([value, value, value])
     }

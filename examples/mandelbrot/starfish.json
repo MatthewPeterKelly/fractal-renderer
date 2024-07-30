@@ -1,7 +1,7 @@
 {
   "Mandelbrot": {
     "image_specification": {
-      "resolution": [600, 400],
+      "resolution": [800, 800],
       "center": [-0.6754990000000001, -0.45850599999999997],
       "width": 0.018
     },

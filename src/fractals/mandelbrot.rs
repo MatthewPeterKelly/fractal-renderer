@@ -5,7 +5,7 @@ use std::{
 
 use crate::core::{
     file_io::FilePrefix,
-    histogram::{CumulativeDistributionFunction, Histogram},
+    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
 };
 use serde::{Deserialize, Serialize};
@@ -72,10 +72,10 @@ impl MandelbrotSequence {
         &mut self,
         max_iter_count: u32,
         max_radius_squared: f64,
-    ) -> Option<f64> {
+    ) -> Option<f32> {
         while self.iter_count < max_iter_count {
             if self.radius_squared() > max_radius_squared {
-                return Some(self.iter_count as f64);
+                return Some(self.iter_count as f32);
             }
             self.step();
         }
@@ -90,7 +90,7 @@ impl MandelbrotSequence {
         max_iter_count: u32,
         max_radius_squared: f64,
         refinement_count: u32,
-    ) -> Option<f64> {
+    ) -> Option<f32> {
         use std::f64;
         let _ = self.step_until_condition(max_iter_count, max_radius_squared);
         for _ in 0..refinement_count {
@@ -101,7 +101,7 @@ impl MandelbrotSequence {
             (self.iter_count as f64) - f64::ln(f64::ln(self.radius())) * SCALE;
 
         if normalized_iteration_count < max_iter_count as f64 {
-            Some(normalized_iteration_count)
+            Some(normalized_iteration_count as f32)
         } else {
             None
         }
@@ -118,7 +118,7 @@ impl MandelbrotSequence {
         escape_radius_squared: f64,
         max_iter_count: u32,
         refinement_count: u32,
-    ) -> Option<f64> {
+    ) -> Option<f32> {
         let mut escape_sequence = MandelbrotSequence::new(test_point);
 
         if refinement_count == 0 {
@@ -157,6 +157,24 @@ impl MeasuredElapsedTime {
     }
 }
 
+pub fn mandelbrot_pixel_renderer(
+    params: &MandelbrotParams,
+) -> impl Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync {
+    let escape_radius_squared = params.escape_radius_squared;
+    let max_iter_count = params.max_iter_count;
+    let refinement_count = params.refinement_count;
+
+    move |point: &nalgebra::Vector2<f64>| {
+        let result = MandelbrotSequence::normalized_escape_count(
+            point,
+            escape_radius_squared,
+            max_iter_count,
+            refinement_count,
+        );
+        result.unwrap_or(0.0)
+    }
+}
+
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
     file_prefix: &FilePrefix,
@@ -178,30 +196,15 @@ pub fn render_mandelbrot_set(
 
     timer.setup = elapsed_and_reset(&mut stopwatch);
 
-    let pixel_renderer = |point: &nalgebra::Vector2<f64>| {
-        let result = MandelbrotSequence::normalized_escape_count(
-            point,
-            params.escape_radius_squared,
-            params.max_iter_count,
-            params.refinement_count,
-        );
-        result.unwrap_or(0.0)
-    };
+    let pixel_renderer = mandelbrot_pixel_renderer(params);
 
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
     timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
 
     // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f64);
-    raw_data.iter().for_each(|row| {
-        row.iter().for_each(|&val| {
-            if val > 0.0 {
-                hist.insert(val);
-            }
-        });
-    });
-
+    let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
+    insert_buffer_into_histogram(&raw_data, &mut hist);
     timer.histogram = elapsed_and_reset(&mut stopwatch);
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
@@ -232,16 +235,16 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
-fn create_color_map_black_blue_white() -> impl Fn(f64) -> image::Rgb<u8> {
-    move |input: f64| {
-        const THRESHOLD: f64 = 0.7;
+pub fn create_color_map_black_blue_white() -> impl Fn(f32) -> image::Rgb<u8> {
+    move |input: f32| {
+        const THRESHOLD: f32 = 0.7;
         if input > THRESHOLD {
             let alpha = input - THRESHOLD;
-            const SCALE: f64 = 255.0 / (1.0 - THRESHOLD);
+            const SCALE: f32 = 255.0 / (1.0 - THRESHOLD);
             let x = (alpha * SCALE) as u8;
             image::Rgb([x, x, 255])
         } else {
-            const SCALE: f64 = 255.0 / THRESHOLD;
+            const SCALE: f32 = 255.0 / THRESHOLD;
             let alpha = input * SCALE;
             let x = alpha as u8;
             image::Rgb([0, 0, x])
