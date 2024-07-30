@@ -31,6 +31,7 @@ use crate::{
 };
 
 // TODO:  docs
+// TOOD:  move this to a parameter file of sorts?
 const VIEW_FRACTION_STEP_PER_KEY_PRESS: f32 = 0.05;
 const ZOOM_SCALE_FACTOR_PER_KEY_PRESS: f32 = 0.05;
 const KEY_PRESS_JUMP_MODIFIER_SCALE: f32 = 1.2;
@@ -120,7 +121,6 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             if input.key_pressed(VirtualKeyCode::A) {
                 keyboard_action_effect_modifier /= KEY_PRESS_JUMP_MODIFIER_SCALE;
                 println!("Action modified: {:?}", keyboard_action_effect_modifier);
-
             }
             if input.key_pressed(VirtualKeyCode::D) {
                 keyboard_action_effect_modifier *= KEY_PRESS_JUMP_MODIFIER_SCALE;
@@ -129,16 +129,14 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
 
             // Zoom control --> W and S keys
             if input.key_pressed(VirtualKeyCode::W) {
-                pixel_grid.zoom(
-                    1.0 - keyboard_action_effect_modifier*ZOOM_SCALE_FACTOR_PER_KEY_PRESS,
-                );
+                pixel_grid
+                    .zoom(1.0 - keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
                 pixel_grid.update(&pixel_renderer);
                 window.request_redraw();
             }
             if input.key_pressed(VirtualKeyCode::S) {
-                pixel_grid.zoom(
-                    1.0 + keyboard_action_effect_modifier*ZOOM_SCALE_FACTOR_PER_KEY_PRESS,
-                );
+                pixel_grid
+                    .zoom(1.0 + keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
                 pixel_grid.update(&pixel_renderer);
                 window.request_redraw();
             }
@@ -177,7 +175,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                 window.request_redraw();
             }
 
-            // Just print the mouse click location for now:
+            // Figure out where the mouse click happened.
             let mouse_cell = input
                 .mouse()
                 .map(|(mx, my)| {
@@ -188,6 +186,8 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                     (mx_i as u32, my_i as u32)
                 })
                 .unwrap_or_default();
+
+            // TODO:  this one only kind of works...
             if input.mouse_pressed(0) {
                 let point = pixel_grid.pixel_mapper.map(&mouse_cell);
                 // println!("Mouse left-click at {mouse_cell:?} -->  {point:?}");
@@ -195,6 +195,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                 pixel_grid.update(&pixel_renderer);
                 window.request_redraw();
             }
+
             // Resize the window
             if let Some(size) = input.window_resized() {
                 if let Err(err) = pixels.resize_surface(size.width, size.height) {
@@ -203,7 +204,9 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                     return;
                 }
             }
+
             if input.key_pressed_os(VirtualKeyCode::Space) {
+                // TODO:  need the full params file here.
                 pixel_grid.render_to_file(&color_map, &mut histogram);
             }
         }
