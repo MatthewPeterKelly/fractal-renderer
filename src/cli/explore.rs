@@ -27,19 +27,24 @@ use crate::{
     },
 };
 
-// TODO:  docs
-// TOOD:  move this to a parameter file of sorts?
+// Parameters for GUI key-press interactions
 const VIEW_FRACTION_STEP_PER_KEY_PRESS: f32 = 0.05;
 const ZOOM_SCALE_FACTOR_PER_KEY_PRESS: f32 = 0.05;
-const KEY_PRESS_JUMP_MODIFIER_SCALE: f32 = 1.2;
+const KEY_PRESS_SENSITIVITY_MODIFIER: f32 = 1.2;
 
-// Minimal rendering window example. Modulo index as color.
-
+/**
+ * Create a simple GUI window that can be used to explore a fractal.
+ * Supported features:
+ * -- arrow keys for pan control
+ * -- W/S keys for zoom control
+ * -- mouse left click to recenter the image
+ * -- A/D keys to adjust pan/zoom sensitivity
+ */
 pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
-    // Read the parameters file here
+    // Read the parameters file here. For now, only support Mandelbrot set.
     let (pixel_renderer, image_spec, mut histogram) = match params {
         FractalParams::Mandelbrot(inner_params) => (
             mandelbrot_pixel_renderer(inner_params),
@@ -50,26 +55,20 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
             ),
         ),
         _ => {
-            panic!(); // TODO:   proper error handling
+            println!("ERROR:  Unsupported fractal parameter type. Aborting.");
+            panic!();
         }
     };
 
-    // TODO:  consider dropping the resolution if it is larger than the smallest screen size?
-
     let window = {
-        let size = LogicalSize::new(
-            image_spec.resolution[0] as f64,
-            image_spec.resolution[1] as f64,
-        );
-        // Suspicious:
-        let scaled_size = LogicalSize::new(
+        let logical_size = LogicalSize::new(
             image_spec.resolution[0] as f64,
             image_spec.resolution[1] as f64,
         );
         WindowBuilder::new()
             .with_title("Fractal Explorer")
-            .with_inner_size(scaled_size)
-            .with_min_inner_size(size)
+            .with_inner_size(logical_size)
+            .with_min_inner_size(logical_size)
             .build(&event_loop)
             .unwrap()
     };
@@ -97,8 +96,8 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
             pixel_grid.draw(&color_map, &mut histogram, pixels.frame_mut());
-            if  pixels.render().is_err() {
-                println!("INFO:  ERROR:  unable to render pixels. Aborting.");
+            if pixels.render().is_err() {
+                println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -113,28 +112,14 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                 return;
             }
 
-            // Action modifier --> A and D keys
-            if input.key_pressed(VirtualKeyCode::A) {
-                keyboard_action_effect_modifier /= KEY_PRESS_JUMP_MODIFIER_SCALE;
-                println!("INFO:  Action modified: {:?}", keyboard_action_effect_modifier);
-            }
-            if input.key_pressed(VirtualKeyCode::D) {
-                keyboard_action_effect_modifier *= KEY_PRESS_JUMP_MODIFIER_SCALE;
-                println!("INFO:  Action modified: {:?}", keyboard_action_effect_modifier);
-            }
-
             // Zoom control --> W and S keys
             if input.key_pressed(VirtualKeyCode::W) {
                 pixel_grid
                     .zoom(1.0 - keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
             if input.key_pressed(VirtualKeyCode::S) {
                 pixel_grid
                     .zoom(1.0 + keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
 
             // Pan control --> arrow keys
@@ -143,71 +128,67 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                     0f32,
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
             if input.key_pressed(VirtualKeyCode::Down) {
                 pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
                     0f32,
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
             if input.key_pressed(VirtualKeyCode::Left) {
                 pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
             if input.key_pressed(VirtualKeyCode::Right) {
                 pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
+            }
+
+            // Pan/Zoom sensitivity --> A and D keys
+            if input.key_pressed(VirtualKeyCode::A) {
+                keyboard_action_effect_modifier /= KEY_PRESS_SENSITIVITY_MODIFIER;
+            }
+            if input.key_pressed(VirtualKeyCode::D) {
+                keyboard_action_effect_modifier *= KEY_PRESS_SENSITIVITY_MODIFIER;
             }
 
             // Figure out where the mouse click happened.
-            let mouse_cell = input
+            let mouse_click_coordinates = input
                 .mouse()
                 .map(|(mx, my)| {
                     let (mx_i, my_i) = pixels
                         .window_pos_to_pixel((mx, my))
                         .unwrap_or_else(|pos| pixels.clamp_pixel_pos(pos));
-
                     (mx_i as u32, my_i as u32)
                 })
                 .unwrap_or_default();
 
-            // TODO:  this one only kind of works...
+            // Recenter the window on the mouse click location.
             if input.mouse_pressed(0) {
                 let pixel_mapper = PixelMapper::new(&pixel_grid.image_specification);
-                let point = pixel_mapper.map(&mouse_cell);
-                // println!("INFO:  Mouse left-click at {mouse_cell:?} -->  {point:?}");
+                let point = pixel_mapper.map(&mouse_click_coordinates);
                 pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
-
-                // TODO:  these following lines keep showing up...
-                // Make an easier way to do this -- basically some "cache is dirty" flag on any method
-                // that touches the parameters.
-                pixel_grid.update(&pixel_renderer);
-                window.request_redraw();
             }
 
             // Resize the window
             if let Some(size) = input.window_resized() {
                 if pixels.resize_surface(size.width, size.height).is_err() {
-                println!("INFO:  ERROR:  unable to resize surface. Aborting.");
+                    println!("ERROR:  unable to resize surface. Aborting.");
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
             }
 
+            if (pixel_grid.update_required) {
+                pixel_grid.update(&pixel_renderer);
+                window.request_redraw();
+            }
+
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                // TODO:  need the full params file here.
                 pixel_grid.render_to_file(&color_map, &mut histogram);
             }
         }
@@ -219,6 +200,7 @@ struct PixelGrid {
     image_specification: ImageSpecification,
     display_buffer: Vec<Vec<f32>>, // rendered to the screen on `draw()`
     scratch_buffer: Vec<Vec<f32>>, // updated in-place on `update()`
+    update_required: bool,         // used to mark when the image_specification has changed.
 }
 
 impl PixelGrid {
@@ -230,15 +212,29 @@ impl PixelGrid {
             image_specification: image_specification.clone(),
             display_buffer: create_buffer(0f32, &image_specification.resolution),
             scratch_buffer: create_buffer(0f32, &image_specification.resolution),
+            update_required: true,
         };
-        grid.update(&pixel_renderer);
         grid.update(&pixel_renderer);
         grid
     }
 
     fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
         self.image_specification.center = *center;
-        println!("INFO:  Recenter: {center:?}");
+        self.update_required = true;
+    }
+
+    fn pan_view(&mut self, view_fraction: &nalgebra::Vector2<f32>) {
+        let x_delta = view_fraction[0] as f64 * self.image_specification.width;
+        let y_delta = view_fraction[1] as f64 * self.image_specification.height();
+        self.recenter(&nalgebra::Vector2::new(
+            self.image_specification.center[0] + x_delta,
+            self.image_specification.center[1] + y_delta,
+        ));
+    }
+
+    fn zoom(&mut self, scale: f32) {
+        self.image_specification.width *= scale as f64;
+        self.update_required = true;
     }
 
     /**
@@ -254,7 +250,7 @@ impl PixelGrid {
             &mut self.scratch_buffer,
         );
         std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-        println!("INFO:  UPDATE CALLED!");
+        self.update_required = false;
     }
 
     /**
@@ -283,7 +279,6 @@ impl PixelGrid {
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
-        println!("INFO:  Draw called!");
     }
 
     fn render_to_file<F>(&self, color_map: &F, histogram: &mut Histogram)
@@ -322,22 +317,5 @@ impl PixelGrid {
         let render_path = file_prefix.with_suffix(".png");
         imgbuf.save(&render_path).unwrap();
         println!("INFO:  Wrote image file to: {}", render_path.display());
-    }
-
-    fn pan_view(&mut self, view_fraction: &nalgebra::Vector2<f32>) {
-        let x_delta = view_fraction[0] as f64 * self.image_specification.width;
-        let y_delta = view_fraction[1] as f64 * self.image_specification.height();
-        self.recenter(&nalgebra::Vector2::new(
-            self.image_specification.center[0] + x_delta,
-            self.image_specification.center[1] + y_delta,
-        ));
-    }
-
-    fn zoom(&mut self, scale: f32) {
-        self.image_specification.width *= scale as f64;
-        // TODO: no good -- we need to manually remember to call this...
-        // Opens us up to bugs!
-        // Lets make a method to collect things and avoid doing it wrong.
-        println!("INFO:  Zoom rescale: {:?}", scale);
     }
 }
