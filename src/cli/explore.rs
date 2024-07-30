@@ -17,10 +17,7 @@ use crate::{
     },
     fractals::{
         common::FractalParams,
-        mandelbrot::{
-            create_color_map_black_blue_white,
-            mandelbrot_pixel_renderer,
-        },
+        mandelbrot::{create_color_map_black_blue_white, mandelbrot_pixel_renderer},
     },
 };
 
