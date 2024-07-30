@@ -185,7 +185,8 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
 
             // TODO:  this one only kind of works...
             if input.mouse_pressed(0) {
-                let point = pixel_grid.pixel_mapper.map(&mouse_cell);
+                let pixel_mapper = PixelMapper::new(&pixel_grid.image_specification);
+                let point = pixel_mapper.map(&mouse_cell);
                 // println!("INFO:  Mouse left-click at {mouse_cell:?} -->  {point:?}");
                 pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
 
@@ -216,7 +217,6 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
 #[derive(Clone, Debug)]
 struct PixelGrid {
     image_specification: ImageSpecification,
-    pixel_mapper: PixelMapper,
     display_buffer: Vec<Vec<f32>>, // rendered to the screen on `draw()`
     scratch_buffer: Vec<Vec<f32>>, // updated in-place on `update()`
 }
@@ -228,7 +228,6 @@ impl PixelGrid {
     {
         let mut grid = Self {
             image_specification: image_specification.clone(),
-            pixel_mapper: PixelMapper::new(image_specification),
             display_buffer: create_buffer(0f32, &image_specification.resolution),
             scratch_buffer: create_buffer(0f32, &image_specification.resolution),
         };
@@ -239,7 +238,6 @@ impl PixelGrid {
 
     fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
         self.image_specification.center = *center;
-        self.pixel_mapper = PixelMapper::new(&self.image_specification);
         println!("INFO:  Recenter: {center:?}");
     }
 
@@ -340,7 +338,6 @@ impl PixelGrid {
         // TODO: no good -- we need to manually remember to call this...
         // Opens us up to bugs!
         // Lets make a method to collect things and avoid doing it wrong.
-        self.pixel_mapper = PixelMapper::new(&self.image_specification);
         println!("INFO:  Zoom rescale: {:?}", scale);
     }
 }
