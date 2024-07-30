@@ -2,8 +2,7 @@
 #![forbid(unsafe_code)]
 
 use error_iter::ErrorIter as _;
-use image::error;
-use log::{debug, error};
+use log::{error};
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -343,7 +342,7 @@ impl PixelGrid {
     }
 
     fn zoom(&mut self, scale: f32) {
-        self.image_specification.width *= (scale as f64);
+        self.image_specification.width *= scale as f64;
         println!("Zoom rescale: {:?}", scale);
     }
 }
