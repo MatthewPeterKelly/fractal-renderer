@@ -191,6 +191,10 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
                 let point = pixel_grid.pixel_mapper.map(&mouse_cell);
                 // println!("Mouse left-click at {mouse_cell:?} -->  {point:?}");
                 pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
+
+                // TODO:  these following lines keep showing up...
+                // Make an easier way to do this -- basically some "cache is dirty" flag on any method
+                // that touches the parameters.
                 pixel_grid.update(&pixel_renderer);
                 window.request_redraw();
             }
@@ -343,6 +347,10 @@ impl PixelGrid {
 
     fn zoom(&mut self, scale: f32) {
         self.image_specification.width *= scale as f64;
+        // TODO: no good -- we need to manually remember to call this...
+        // Opens us up to bugs!
+        // Lets make a method to collect things and avoid doing it wrong.
+        self.pixel_mapper = PixelMapper::new(&self.image_specification);
         println!("Zoom rescale: {:?}", scale);
     }
 }
