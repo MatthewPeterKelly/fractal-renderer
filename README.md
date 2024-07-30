@@ -13,10 +13,6 @@ cargo run --release -- render .\examples\mandelbrot\default.json
 ```
 
 ```
-cargo run --release -- render .\examples\mandelbrot_search\default.json
-```
-
-```
 cargo run --release -- render .\examples\driven_damped_pendulum\default.json
 ```
 

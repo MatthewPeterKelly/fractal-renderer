@@ -9,7 +9,6 @@ use cli::render::render_fractal;
 mod cli;
 mod core;
 mod fractals;
-mod mandelbrot_search;
 
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();

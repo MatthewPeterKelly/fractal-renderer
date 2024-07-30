@@ -11,7 +11,6 @@ use crate::{core::file_io::FilePrefix, fractals};
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RenderParams {
     Mandelbrot(MandelbrotParams),
-    MandelbrotSearch(crate::mandelbrot_search::MandelbrotSearchParams),
     DrivenDampedPendulum(DrivenDampedPendulumParams),
     BarnsleyFern(BarnsleyFernParams),
     Serpinsky(SerpinskyParams),
@@ -27,12 +26,6 @@ where
     match params {
         RenderParams::Mandelbrot(inner_params) => {
             render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
-        }
-        RenderParams::MandelbrotSearch(inner_params) => {
-            crate::mandelbrot_search::mandelbrot_search_render(
-                inner_params,
-                &file_prefix("mandelbrot_search"),
-            )
         }
         RenderParams::DrivenDampedPendulum(inner_params) => {
             render_driven_damped_pendulum_attractor(
