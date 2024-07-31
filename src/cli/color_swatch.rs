@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{ColorMapKeyFrame, PiecewiseLinearColorMap},
-    file_io::{build_output_path_with_date_time, date_time_string, FilePrefix},
+    file_io::{build_output_path_with_date_time, FilePrefix},
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -21,7 +21,7 @@ pub fn generate_color_swatch(params_path: &str)  {
         directory_path: build_output_path_with_date_time(
             "color_swatch",
             "debug",
-            &Some(date_time_string()),
+            &None,
         ),
         file_base: "colors".to_owned(), // HACK!!!!
     };
@@ -38,9 +38,11 @@ pub fn generate_color_swatch(params_path: &str)  {
 
     let colormap = PiecewiseLinearColorMap::new(params.keyframes);
 
+
+    let scale = 1.0 / ((params.resolution.0 * params.resolution.1) as f32);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let query = 0.5;
-        *pixel = image::Rgb(colormap.compute(query));
+        let linear_index = x*params.resolution.1 + y;
+        *pixel = image::Rgb(colormap.compute(scale * (linear_index as f32)));
     }
 
     let render_path = file_prefix.with_suffix(".png");
