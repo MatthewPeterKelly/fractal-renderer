@@ -41,7 +41,7 @@ fn main() {
             explore_fractal(&fractal_params(&params.params_path)).unwrap();
         }
 
-        Some(CommandsEnum::ColorMap(params)) => {
+        Some(CommandsEnum::ColorSwatch(params)) => {
             generate_color_swatch(&params.params_path);
         }
         None => {

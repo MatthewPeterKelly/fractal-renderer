@@ -32,6 +32,10 @@ cargo run --release -- render .\examples\serpinsky\triangle.json
 cargo run --release -- explore .\examples\mandelbrot\default.json
 ```
 
+```
+cargo run color-swatch -- examples\color_swatch\wikipedia.json
+```
+
 ## Autoformatting:
 
 ### Rust Code:

@@ -8,7 +8,7 @@ use crate::core::{
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorSwatchParams {
     pub resolution: (u32, u32),
-    keyframes: Vec<ColorMapKeyFrame>,
+   pub  keyframes: Vec<ColorMapKeyFrame>,
 }
 
 pub fn generate_color_swatch(params_path: &str)  {
