@@ -11,7 +11,7 @@ pub struct ColorSwatchParams {
     keyframes: Vec<ColorMapKeyFrame>,
 }
 
-fn generate_color_swatch(params_path: &str) -> _ {
+pub fn generate_color_swatch(params_path: &str)  {
     let params: ColorSwatchParams = serde_json::from_str(
         &std::fs::read_to_string(params_path).expect("Unable to read param file"),
     )
