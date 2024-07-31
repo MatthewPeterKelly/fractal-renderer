@@ -295,7 +295,7 @@ impl PixelGrid {
                 "debug",
                 &Some(date_time_string()),
             ),
-            file_base: "foobar".to_owned(),
+            file_base: "foobar".to_owned(), // HACK!!
         };
         // TODO:  eventually generalize this to write the entire parameter struct:
         // https://github.com/MatthewPeterKelly/fractal-renderer/issues/68

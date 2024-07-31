@@ -1,5 +1,5 @@
 use palette::{Mix, Srgb};
-
+use serde::{Deserialize, Serialize};
 
 /**
 
@@ -39,6 +39,7 @@ To convert these to RGB, we'll decode each hex color value into its respective
 /**
  * TODO:  docs
  */
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
     pub query: f32,       // specify location of this color within the map; on [0,1]
     pub rgb_raw: [u8; 3], // [R, G, B]
@@ -87,7 +88,11 @@ impl PiecewiseLinearColorMap {
             let (i, j) = self.linear_index_search(query);
             let alpha = (query - self.keyframes[i].query)
                 / (self.keyframes[j].query - self.keyframes[i].query);
-            Self::srgb_interpolate(&self.keyframes[i].rgb_raw, &self.keyframes[j].rgb_raw, alpha)
+            Self::srgb_interpolate(
+                &self.keyframes[i].rgb_raw,
+                &self.keyframes[j].rgb_raw,
+                alpha,
+            )
         }
     }
     fn linear_index_search(&self, query: f32) -> (usize, usize) {
