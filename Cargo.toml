@@ -17,6 +17,7 @@ more-asserts = "0.2"
 nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
 num-traits =  "0.2"
 ordered-float = "3.0"
+palette = "0.7.6"
 pixels = "0.13"
 rand = "0"
 rayon = "1.8.1"
