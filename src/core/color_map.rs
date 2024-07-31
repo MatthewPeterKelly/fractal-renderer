@@ -127,4 +127,14 @@ impl PiecewiseLinearColorMap {
         // Convert back to [u8; 3] using into_format
         interp_srgb.into_format().into()
     }
+
+    fn direct_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let beta = 1.0 - alpha;
+        [
+            ((low[0] as f32) * beta + (upp[0] as f32) * alpha) as u8,
+            ((low[1] as f32) * beta + (upp[1] as f32) * alpha) as u8,
+            ((low[2] as f32) * beta + (upp[2] as f32) * alpha) as u8,
+        ]
+    }
+
 }
