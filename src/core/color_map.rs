@@ -1,4 +1,4 @@
-use palette::{FromColor, Hsl, Mix, Srgb};
+use palette::{FromColor, Hsl, Hsv, Mix, Srgb};
 use serde::{Deserialize, Serialize};
 
 /**
@@ -178,8 +178,8 @@ impl PiecewiseLinearColorMap {
         let low_srgb_lin = low_rgb.into_linear();
         let upp_srgb_lin = upp_rgb.into_linear();
 
-        let low_hsl = Hsl::from_color(low_srgb_lin);
-        let upp_hsl = Hsl::from_color(upp_srgb_lin);
+        let low_hsl = Hsv::from_color(low_srgb_lin);
+        let upp_hsl = Hsv::from_color(upp_srgb_lin);
 
         // Interpolate between the two colors in the sRGB color space
         let interp_srgb = low_hsl.mix(upp_hsl, alpha);
