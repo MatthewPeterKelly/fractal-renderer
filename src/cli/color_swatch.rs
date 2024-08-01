@@ -8,6 +8,8 @@ use crate::core::{
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorSwatchParams {
     pub resolution: (u32, u32),
+    pub border_padding: u32,
+    pub border_rgb: [u8; 3],
    pub  keyframes: Vec<ColorMapKeyFrame>,
 }
 
@@ -38,6 +40,8 @@ pub fn generate_color_swatch(params_path: &str)  {
 
     let colormap = PiecewiseLinearColorMap::new(params.keyframes);
 
+    // TODO:  color map for each interpolation style
+    // TOOD: padding
 
     let scale = 1.0 / ((params.resolution.0 * params.resolution.1) as f32);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {

@@ -46,16 +46,27 @@ pub struct ColorMapKeyFrame {
 }
 
 /**
+ * The keyframes are all in "raw RGB" data, but we can convert to alternate
+ * representations behind the scenes to achieve different interpolation styles.
+ */
+#[derive(Serialize, Deserialize, Debug)]
+pub enum InterpolationMode {
+    Direct,
+    Srgb,
+}
+
+/**
  * TODO:  docs
  */
 pub struct PiecewiseLinearColorMap {
     keyframes: Vec<ColorMapKeyFrame>,
+    interpolation_mode: InterpolationMode,
 }
 
 impl PiecewiseLinearColorMap {
     // TODO:  docs
     // TODO:  better error messages
-    pub fn new(keyframes: Vec<ColorMapKeyFrame>) -> PiecewiseLinearColorMap {
+    pub fn new(keyframes: Vec<ColorMapKeyFrame>, interpolation_mode: InterpolationMode) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
@@ -76,7 +87,7 @@ impl PiecewiseLinearColorMap {
                 panic!();
             }
         }
-        PiecewiseLinearColorMap { keyframes }
+        PiecewiseLinearColorMap { keyframes, interpolation_mode }
     }
 
     pub fn compute(&self, query: f32) -> [u8; 3] {
@@ -88,7 +99,7 @@ impl PiecewiseLinearColorMap {
             let (i, j) = self.linear_index_search(query);
             let alpha = (query - self.keyframes[i].query)
                 / (self.keyframes[j].query - self.keyframes[i].query);
-            Self::srgb_interpolate(
+           self.interpolate(
                 &self.keyframes[i].rgb_raw,
                 &self.keyframes[j].rgb_raw,
                 alpha,
@@ -114,6 +125,21 @@ impl PiecewiseLinearColorMap {
 
         println!("ERROR:  Linear keyframe search failed!");
         panic!();
+    }
+
+
+    fn interpolate(&self, low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
+        match self.interpolation_mode {
+
+            InterpolationMode::Direct => {
+                PiecewiseLinearColorMap::direct_interpolate(low, upp, alpha)
+            }
+
+            InterpolationMode::Srgb => {
+                PiecewiseLinearColorMap::srgb_interpolate(low, upp, alpha)
+            }
+
+        }
     }
 
     fn srgb_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
