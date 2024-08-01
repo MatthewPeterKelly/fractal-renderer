@@ -1,5 +1,7 @@
 {
-  "resolution": [1920, 1080],
+  "swatch_resolution": [1920, 100],
+  "border_padding": 50,
+  "border_rgb": [0, 0, 0],
   "keyframes": [
     {
       "query": 0.0,

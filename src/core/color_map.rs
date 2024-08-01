@@ -49,7 +49,7 @@ pub struct ColorMapKeyFrame {
  * The keyframes are all in "raw RGB" data, but we can convert to alternate
  * representations behind the scenes to achieve different interpolation styles.
  */
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum InterpolationMode {
     Direct,
     Srgb,
@@ -60,13 +60,12 @@ pub enum InterpolationMode {
  */
 pub struct PiecewiseLinearColorMap {
     keyframes: Vec<ColorMapKeyFrame>,
-    interpolation_mode: InterpolationMode,
 }
 
 impl PiecewiseLinearColorMap {
     // TODO:  docs
     // TODO:  better error messages
-    pub fn new(keyframes: Vec<ColorMapKeyFrame>, interpolation_mode: InterpolationMode) -> PiecewiseLinearColorMap {
+    pub fn new(keyframes: Vec<ColorMapKeyFrame>) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
@@ -87,10 +86,10 @@ impl PiecewiseLinearColorMap {
                 panic!();
             }
         }
-        PiecewiseLinearColorMap { keyframes, interpolation_mode }
+        PiecewiseLinearColorMap { keyframes }
     }
 
-    pub fn compute(&self, query: f32) -> [u8; 3] {
+    pub fn compute(&self, query: f32, interpolation_mode: InterpolationMode) -> [u8; 3] {
         if query <= 0.0f32 {
             self.keyframes.first().unwrap().rgb_raw
         } else if query >= 1.0f32 {
@@ -99,10 +98,11 @@ impl PiecewiseLinearColorMap {
             let (i, j) = self.linear_index_search(query);
             let alpha = (query - self.keyframes[i].query)
                 / (self.keyframes[j].query - self.keyframes[i].query);
-           self.interpolate(
+            PiecewiseLinearColorMap::interpolate(
                 &self.keyframes[i].rgb_raw,
                 &self.keyframes[j].rgb_raw,
                 alpha,
+                interpolation_mode,
             )
         }
     }
@@ -127,28 +127,30 @@ impl PiecewiseLinearColorMap {
         panic!();
     }
 
-
-    fn interpolate(&self, low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        match self.interpolation_mode {
-
+    fn interpolate(
+        low: &[u8; 3],
+        upp: &[u8; 3],
+        alpha: f32,
+        interpolation_mode: InterpolationMode,
+    ) -> [u8; 3] {
+        match interpolation_mode {
             InterpolationMode::Direct => {
                 PiecewiseLinearColorMap::direct_interpolate(low, upp, alpha)
             }
 
-            InterpolationMode::Srgb => {
-                PiecewiseLinearColorMap::srgb_interpolate(low, upp, alpha)
-            }
-
+            InterpolationMode::Srgb => PiecewiseLinearColorMap::srgb_interpolate(low, upp, alpha),
         }
     }
 
     fn srgb_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        // Convert low and upp from [u8; 3] to Srgb using from_format
-        let low_srgb = Srgb::from_format((*low).into());
-        let upp_srgb = Srgb::from_format((*upp).into());
+        let low_rgb = Srgb::new(low[0], low[1], low[2]);
+        let upp_rgb = Srgb::new(upp[0], upp[1], upp[2]);
+
+        let low_srgb_lin = low_rgb.into_linear();
+        let upp_srgb_lin = upp_rgb.into_linear();
 
         // Interpolate between the two colors in the sRGB color space
-        let interp_srgb = low_srgb.mix(upp_srgb, alpha);
+        let interp_srgb = low_srgb_lin.mix(upp_srgb_lin, alpha);
 
         // Convert back to [u8; 3] using into_format
         interp_srgb.into_format().into()
@@ -162,5 +164,4 @@ impl PiecewiseLinearColorMap {
             ((low[2] as f32) * beta + (upp[2] as f32) * alpha) as u8,
         ]
     }
-
 }
