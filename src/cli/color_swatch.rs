@@ -31,7 +31,7 @@ pub fn generate_color_swatch(params_path: &str) {
     .expect("Unable to write file");
 
     // We'll visualize each of these in the same image output file
-    let interpolation_modes = vec![InterpolationMode::Direct, InterpolationMode::Srgb];
+    let interpolation_modes = vec![InterpolationMode::Direct, InterpolationMode::Srgb, InterpolationMode::Hsl];
 
     // Save the image to a file, deducing the type from the file name
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
