@@ -1,4 +1,4 @@
-use palette::{encoding::Srgb, FromColor, Hsl, Hsv, Mix, Srgb};
+use palette::{FromColor, Hsl, Mix, Srgb};
 use serde::{Deserialize, Serialize};
 
 /**
@@ -158,30 +158,28 @@ impl PiecewiseLinearColorMap {
 
 
     fn srgb_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let low_srgb = Srgb::from_format((*low).into());
-        let upp_srgb = Srgb::from_format((*upp).into());
+        let low_rgb = Srgb::new(low[0], low[1], low[2]);
+        let upp_rgb = Srgb::new(upp[0], upp[1], upp[2]);
 
         let low_srgb_lin = low_rgb.into_linear();
         let upp_srgb_lin = upp_rgb.into_linear();
 
         // Interpolate between the two colors in the sRGB color space
-        let interp_srgb_lin = low_srgb_lin.mix(upp_srgb_lin, alpha);
-        // let interp_srgb = Srgb::from_color(interp_srgb_lin);
-        let srgb: Srgb = interp_srgb_lin.into_color();
+        let interp_srgb = low_srgb_lin.mix(upp_srgb_lin, alpha);
 
         // Convert back to [u8; 3] using into_format
-        srgb.into_format().into()
+        interp_srgb.into_format().into()
     }
 
     fn hsl_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let low_srgb = Srgb::from_format((*low).into());
-        let upp_srgb = Srgb::from_format((*upp).into());
+        let low_rgb = Srgb::new(low[0] as f32 / 255.0, low[1] as f32 / 255.0, low[2] as f32 / 255.0);
+        let upp_rgb = Srgb::new(upp[0] as f32 / 255.0, upp[1] as f32 / 255.0, upp[2] as f32 / 255.0);
 
         let low_srgb_lin = low_rgb.into_linear();
         let upp_srgb_lin = upp_rgb.into_linear();
 
-        let low_hsl = Hsv::from_color(low_srgb_lin);
-        let upp_hsl = Hsv::from_color(upp_srgb_lin);
+        let low_hsl = Hsl::from_color(low_srgb_lin);
+        let upp_hsl = Hsl::from_color(upp_srgb_lin);
 
         // Interpolate between the two colors in the sRGB color space
         let interp_srgb = low_hsl.mix(upp_hsl, alpha);
