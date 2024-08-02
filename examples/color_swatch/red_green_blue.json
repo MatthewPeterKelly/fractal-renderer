@@ -5,15 +5,15 @@
   "keyframes": [
     {
       "query": 0.0,
-      "rgb_raw": [255, 0, 0]
+      "rgb_raw": [245, 5, 5]
     },
     {
       "query": 0.5,
-      "rgb_raw": [0, 255, 0]
+      "rgb_raw": [5, 245, 5]
     },
     {
       "query": 1.0,
-      "rgb_raw": [0, 0, 255]
+      "rgb_raw": [5, 5, 245]
     }
   ]
 }

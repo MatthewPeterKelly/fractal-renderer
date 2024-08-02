@@ -54,6 +54,7 @@ pub enum InterpolationMode {
     Direct,
     Srgb,
     Hsl,
+    Hsv,
 }
 
 /**
@@ -139,8 +140,9 @@ impl PiecewiseLinearColorMap {
                 PiecewiseLinearColorMap::direct_interpolate(low, upp, alpha)
             }
 
-            InterpolationMode::Srgb => PiecewiseLinearColorMap::srgb_interpolate(low, upp, alpha),
+            InterpolationMode::Srgb => PiecewiseLinearColorMap::lin_srgb_interpolate(low, upp, alpha),
             InterpolationMode::Hsl => PiecewiseLinearColorMap::hsl_interpolate(low, upp, alpha),
+            InterpolationMode::Hsv => PiecewiseLinearColorMap::hsv_interpolate(low, upp, alpha),
         }
     }
 
@@ -156,7 +158,7 @@ impl PiecewiseLinearColorMap {
         interp_srgb.into_format().into()
     }
 
-    fn srgb_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
+    fn lin_srgb_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
         let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
         let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
         let low_lin_srgb = low_srgb.into_linear();
@@ -175,6 +177,20 @@ impl PiecewiseLinearColorMap {
         let upp_hsl = Hsl::from_color(upp_lin_srgb);
         let interp_hsl = low_hsl.mix(upp_hsl, alpha);
         let interp_lin_srgb = LinSrgb::from_color(interp_hsl);
+        let srgb: Srgb = interp_lin_srgb.into_color();
+        srgb.into_format().into()
+    }
+
+
+    fn hsv_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
+        let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
+        let low_lin_srgb = low_srgb.into_linear();
+        let upp_lin_srgb = upp_srgb.into_linear();
+        let low_hsv = Hsl::from_color(low_lin_srgb);
+        let upp_hsv = Hsl::from_color(upp_lin_srgb);
+        let interp_hsv = low_hsv.mix(upp_hsv, alpha);
+        let interp_lin_srgb = LinSrgb::from_color(interp_hsv);
         let srgb: Srgb = interp_lin_srgb.into_color();
         srgb.into_format().into()
     }

@@ -35,6 +35,7 @@ pub fn generate_color_swatch(params_path: &str) {
         InterpolationMode::Direct,
         InterpolationMode::Srgb,
         InterpolationMode::Hsl,
+        InterpolationMode::Hsv,
     ];
 
     // Save the image to a file, deducing the type from the file name
