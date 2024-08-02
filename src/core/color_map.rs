@@ -227,3 +227,36 @@ impl PiecewiseLinearColorMap {
     }
 
 }
+
+/**
+ * Evaluates a cubic solving the boundary conditions:
+ * f(0) = f'(0) = f'(1) == 0
+ * f(1) = 1
+ */
+pub fn cubic_interpolation_map(x: f32) -> f32 {
+    // Efficient calculation using Horner's method for polynomial evaluation
+  x * (x * (-2.0 * x + 3.0))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+
+    use crate::core::color_map::cubic_interpolation_map;
+
+    #[test]
+    fn test_cubic_interpolation_map() {
+        let h = 1e-3;
+        let tol_y = 1e-6;
+        let tol_dy = 5e-3;
+        let y0 = cubic_interpolation_map(0.0);
+        let dy0 = (cubic_interpolation_map(0.0 + h) - y0) / h;
+        let y1 = cubic_interpolation_map(1.0);
+        let dy1 = (y1 -cubic_interpolation_map(1.0 + h)) / h;
+        assert_relative_eq!(y0, 0.0, epsilon  = tol_y);
+        assert_relative_eq!(dy0, 0.0, epsilon = tol_dy);
+        assert_relative_eq!(y1, 1.0, epsilon = tol_y);
+        assert_relative_eq!(dy1, 0.0, epsilon = tol_dy);
+    }
+}
