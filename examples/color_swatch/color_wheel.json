@@ -2,6 +2,7 @@
   "swatch_resolution": [2400, 200],
   "border_padding": 50,
   "border_rgb": [0, 0, 0],
+  "use_cubic_interpolation": true,
   "keyframes": [
     {
       "query": 0.0,

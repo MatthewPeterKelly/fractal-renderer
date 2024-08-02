@@ -93,15 +93,18 @@ impl PiecewiseLinearColorMap {
         PiecewiseLinearColorMap { keyframes }
     }
 
-    pub fn compute(&self, query: f32, interpolation_mode: InterpolationMode) -> [u8; 3] {
+    pub fn compute(&self, query: f32, interpolation_mode: InterpolationMode, use_cubic: bool) -> [u8; 3] {
         if query <= 0.0f32 {
             self.keyframes.first().unwrap().rgb_raw
         } else if query >= 1.0f32 {
             self.keyframes.last().unwrap().rgb_raw
         } else {
             let (i, j) = self.linear_index_search(query);
-            let alpha = (query - self.keyframes[i].query)
+            let mut alpha = (query - self.keyframes[i].query)
                 / (self.keyframes[j].query - self.keyframes[i].query);
+                if use_cubic {
+                    alpha = cubic_interpolation_map(alpha);
+                }
             PiecewiseLinearColorMap::interpolate(
                 &self.keyframes[i].rgb_raw,
                 &self.keyframes[j].rgb_raw,

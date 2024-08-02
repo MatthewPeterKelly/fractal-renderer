@@ -11,6 +11,7 @@ pub struct ColorSwatchParams {
     pub border_padding: u32,
     pub border_rgb: [u8; 3],
     pub keyframes: Vec<ColorMapKeyFrame>,
+    pub use_cubic_interpolation: bool,
 }
 
 pub fn generate_color_swatch(params_path: &str) {
@@ -63,7 +64,7 @@ pub fn generate_color_swatch(params_path: &str) {
 
                 // TODO:  bug -- we're putting something bad into the top here.
                 *imgbuf.get_pixel_mut(x_idx, y_idx) =
-                    image::Rgb(colormap.compute(scale * (linear_index as f32), interpolation_mode));
+                    image::Rgb(colormap.compute(scale * (linear_index as f32), interpolation_mode, params.use_cubic_interpolation));
             }
         }
         y_offset += params.border_padding + params.swatch_resolution.1;
