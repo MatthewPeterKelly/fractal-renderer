@@ -1,4 +1,4 @@
-use palette::{FromColor, Hsl, IntoColor, LinSrgb, Mix, Srgb};
+use palette::{rgb::Rgb, FromColor, Hsl, IntoColor, LinSrgb, Mix, Srgb};
 use serde::{Deserialize, Serialize};
 
 /**
@@ -144,10 +144,10 @@ impl PiecewiseLinearColorMap {
         }
     }
 
-    fn direct_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
+    fn direct_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
         // Convert low and upp from [u8; 3] to Srgb using from_format
-        let low_srgb = Srgb::from_format((*low).into());
-        let upp_srgb = Srgb::from_format((*upp).into());
+        let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
+        let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
 
         // Interpolate between the two colors in the sRGB color space
         let interp_srgb = low_srgb.mix(upp_srgb, alpha);
@@ -156,41 +156,26 @@ impl PiecewiseLinearColorMap {
         interp_srgb.into_format().into()
     }
 
-
-    fn srgb_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let low_rgb = Srgb::new(low[0], low[1], low[2]);
-        let upp_rgb = Srgb::new(upp[0], upp[1], upp[2]);
-
-        let low_srgb_lin = low_rgb.into_linear();
-        let upp_srgb_lin = upp_rgb.into_linear();
-
-         // Interpolate between the two colors in the sRGB color space
-         let interp_srgb_lin = low_srgb_lin.mix(upp_srgb_lin, alpha);
-         // let interp_srgb = Srgb::from_color(interp_srgb_lin);
-         let srgb: Srgb = interp_srgb_lin.into_color();
-
-         // Convert back to [u8; 3] using into_format
-         srgb.into_format().into()
+    fn srgb_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
+        let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
+        let low_lin_srgb = low_srgb.into_linear();
+        let upp_lin_srgb = upp_srgb.into_linear();
+        let interp_srgb_lin = low_lin_srgb.mix(upp_lin_srgb, alpha);
+        let srgb: Srgb = interp_srgb_lin.into_color();
+        srgb.into_format().into()
     }
 
-    fn hsl_interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let low_rgb = Srgb::new(low[0] as f32 / 255.0, low[1] as f32 / 255.0, low[2] as f32 / 255.0);
-        let upp_rgb = Srgb::new(upp[0] as f32 / 255.0, upp[1] as f32 / 255.0, upp[2] as f32 / 255.0);
-
-        let low_srgb_lin = low_rgb.into_linear();
-        let upp_srgb_lin = upp_rgb.into_linear();
-
-        let low_hsl = Hsl::from_color(low_srgb_lin);
-        let upp_hsl = Hsl::from_color(upp_srgb_lin);
-
-        // Interpolate between the two colors in the sRGB color space
+    fn hsl_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
+        let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
+        let low_lin_srgb = low_srgb.into_linear();
+        let upp_lin_srgb = upp_srgb.into_linear();
+        let low_hsl = Hsl::from_color(low_lin_srgb);
+        let upp_hsl = Hsl::from_color(upp_lin_srgb);
         let interp_hsl = low_hsl.mix(upp_hsl, alpha);
-
-       let lin_srgb = LinSrgb::from_color(interp_hsl);
-
-       let srgb: Srgb = lin_srgb.into_color();
-
-       // Convert back to [u8; 3] using into_format
-       srgb.into_format().into()
+        let interp_lin_srgb = LinSrgb::from_color(interp_hsl);
+        let srgb: Srgb = interp_lin_srgb.into_color();
+        srgb.into_format().into()
     }
 }
