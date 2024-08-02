@@ -56,6 +56,7 @@ pub enum InterpolationMode {
     Hsl,
     Hsv,
     Lch,
+    Lab,
 }
 
 /**
@@ -145,6 +146,7 @@ impl PiecewiseLinearColorMap {
             InterpolationMode::Hsl => PiecewiseLinearColorMap::hsl_interpolate(low, upp, alpha),
             InterpolationMode::Hsv => PiecewiseLinearColorMap::hsv_interpolate(low, upp, alpha),
             InterpolationMode::Lch => PiecewiseLinearColorMap::lch_interpolate(low, upp, alpha),
+            InterpolationMode::Lab => PiecewiseLinearColorMap::lab_interpolate(low, upp, alpha),
         }
     }
 
@@ -211,5 +213,17 @@ impl PiecewiseLinearColorMap {
         srgb.into_format().into()
     }
 
+    fn lab_interpolate(low_raw: &[u8; 3], upp_raw: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let low_srgb: Rgb = Srgb::from_format((*low_raw).into());
+        let upp_srgb: Rgb = Srgb::from_format((*upp_raw).into());
+        let low_lin_srgb = low_srgb.into_linear();
+        let upp_lin_srgb = upp_srgb.into_linear();
+        let low_lab = Hsl::from_color(low_lin_srgb);
+        let upp_lab = Hsl::from_color(upp_lin_srgb);
+        let interp_lab = low_lab.mix(upp_lab, alpha);
+        let interp_lin_srgb = LinSrgb::from_color(interp_lab);
+        let srgb: Srgb = interp_lin_srgb.into_color();
+        srgb.into_format().into()
+    }
 
 }
