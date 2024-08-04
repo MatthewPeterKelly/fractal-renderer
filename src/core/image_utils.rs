@@ -1,3 +1,4 @@
+use image::{ImageBuffer, Rgb, Rgba};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -345,6 +346,27 @@ pub fn generate_scalar_image_in_place<F>(
             *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
         });
     });
+}
+
+pub fn write_rgb_image_to_file_or_panic(
+    filename: std::path::PathBuf,
+    imgbuf: &ImageBuffer<Rgb<u8>, Vec<u8>>,
+) {
+    imgbuf
+        .save(&filename)
+        .unwrap_or_else(|_| panic!("ERROR:  Unable to write image file: {}", filename.display()));
+    println!("INFO:  Wrote image file to: {}", filename.display());
+}
+
+// TODO:  figure out how to use a common implementation with `write_rgb_image_to_file_or_panic`.
+pub fn write_rgba_image_to_file_or_panic(
+    filename: std::path::PathBuf,
+    imgbuf: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+) {
+    imgbuf
+        .save(&filename)
+        .unwrap_or_else(|_| panic!("ERROR:  Unable to write image file: {}", filename.display()));
+    println!("INFO:  Wrote image file to: {}", filename.display());
 }
 
 #[cfg(test)]

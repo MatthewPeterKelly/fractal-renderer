@@ -1,5 +1,5 @@
 use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
-use crate::core::file_io::FilePrefix;
+use crate::core::file_io::{serialize_to_json_or_panic, FilePrefix};
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
@@ -118,7 +118,7 @@ impl SampleGenerator {
  */
 pub fn render_barnsley_fern(
     params: &BarnsleyFernParams,
-    file_prefix: &FilePrefix,
+    file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
@@ -134,6 +134,8 @@ pub fn render_barnsley_fern(
         }
     };
 
+    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
+
     chaos_game_render(
         image::Rgba(params.background_color_rgba),
         &mut distribution,
@@ -143,6 +145,5 @@ pub fn render_barnsley_fern(
             .fit_image
             .image_specification(&params.coeffs.view_rectangle),
         file_prefix,
-        &serde_json::to_string(params)?,
     )
 }

@@ -4,9 +4,12 @@ use std::{
 };
 
 use crate::core::{
-    file_io::FilePrefix,
+    file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
-    image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+    image_utils::{
+        elapsed_and_reset, generate_scalar_image, write_rgb_image_to_file_or_panic,
+        ImageSpecification,
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -177,12 +180,10 @@ pub fn mandelbrot_pixel_renderer(
 
 pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
-    file_prefix: &FilePrefix,
+    file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
-
-    let render_path = file_prefix.with_suffix(".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
@@ -190,9 +191,7 @@ pub fn render_mandelbrot_set(
         params.image_specification.resolution[1],
     );
 
-    // write out the parameters too:
-    let params_path = file_prefix.with_suffix(".json");
-    std::fs::write(params_path, serde_json::to_string(params)?).expect("Unable to write file");
+    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     timer.setup = elapsed_and_reset(&mut stopwatch);
 
@@ -219,12 +218,8 @@ pub fn render_mandelbrot_set(
     }
 
     timer.color_map = elapsed_and_reset(&mut stopwatch);
-
-    // Save the image to a file, deducing the type from the file name
-    imgbuf.save(&render_path).unwrap();
+    write_rgb_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
     timer.write_png = elapsed_and_reset(&mut stopwatch);
-
-    println!("Wrote image file to: {}", render_path.display());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
 

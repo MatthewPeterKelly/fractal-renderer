@@ -1,5 +1,5 @@
 use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
-use crate::core::file_io::FilePrefix;
+use crate::core::file_io::{serialize_to_json_or_panic, FilePrefix};
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
 use rand::Rng;
@@ -15,7 +15,7 @@ pub struct SerpinskyParams {
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
     pub background_color_rgba: [u8; 4],
-    pub vertex_colors: Vec<[u8; 4]>,
+    pub vertex_colors_rgba: Vec<[u8; 4]>,
 }
 
 /**
@@ -59,19 +59,19 @@ struct SampleGenerator {
 
 impl SampleGenerator {
     pub fn regular_polygon(
-        vertex_colors: &[[u8; 4]],
+        vertex_colors_rgba: &[[u8; 4]],
         vertices: &[nalgebra::Vector2<f64>],
     ) -> SampleGenerator {
         assert!(!vertices.is_empty());
-        assert_eq!(vertex_colors.len(), vertices.len());
+        assert_eq!(vertex_colors_rgba.len(), vertices.len());
         SampleGenerator {
-            distribution: Uniform::from(0..vertex_colors.len()),
+            distribution: Uniform::from(0..vertex_colors_rgba.len()),
             vertices: vertices.to_vec(),
-            colors: vertex_colors
+            colors: vertex_colors_rgba
                 .iter()
                 .map(|&color| image::Rgba(color))
                 .collect(),
-            ratio: optimal_contraction_ratio(vertex_colors.len()),
+            ratio: optimal_contraction_ratio(vertex_colors_rgba.len()),
         }
     }
 
@@ -92,18 +92,20 @@ impl SampleGenerator {
  */
 pub fn render_serpinsky(
     params: &SerpinskyParams,
-    file_prefix: &FilePrefix,
+    file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let vertices = polygon_verticies(params.vertex_colors.len());
+    let vertices = polygon_verticies(params.vertex_colors_rgba.len());
     let mut sample_point = vertices[0];
     let mut rng = rand::thread_rng();
-    let generator = SampleGenerator::regular_polygon(&params.vertex_colors, &vertices);
+    let generator = SampleGenerator::regular_polygon(&params.vertex_colors_rgba, &vertices);
 
     let mut distribution = || {
         let next_colored_point = generator.next(&mut rng, &sample_point);
         sample_point = next_colored_point.point;
         next_colored_point
     };
+
+    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     chaos_game_render(
         image::Rgba(params.background_color_rgba),
@@ -114,7 +116,6 @@ pub fn render_serpinsky(
             .fit_image
             .image_specification(&ViewRectangle::from_vertices(&vertices)),
         file_prefix,
-        &serde_json::to_string(params)?,
     )
 }
 

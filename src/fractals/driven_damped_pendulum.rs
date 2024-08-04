@@ -1,9 +1,10 @@
-use crate::{
-    core::ode_solvers::rk4_simulate,
-    core::{
-        file_io::FilePrefix,
-        image_utils::{elapsed_and_reset, generate_scalar_image, ImageSpecification},
+use crate::core::{
+    file_io::{serialize_to_json_or_panic, FilePrefix},
+    image_utils::{
+        elapsed_and_reset, generate_scalar_image, write_rgb_image_to_file_or_panic,
+        ImageSpecification,
     },
+    ode_solvers::rk4_simulate,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -126,15 +127,12 @@ impl MeasuredElapsedTime {
 
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
-    file_prefix: &FilePrefix,
+    file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
 
-    // write out the parameters to a file:
-    let params_path = file_prefix.with_suffix(".json");
-    let params_str = serde_json::to_string(params)?;
-    std::fs::write(params_path, params_str).expect("Unable to write params file.");
+    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     // decide whether to split out to create multiple images, or just continue with a snapshot:
     let time_phase_fraction = match params.time_phase {
@@ -142,9 +140,8 @@ pub fn render_driven_damped_pendulum_attractor(
         TimePhaseSpecification::Series { low, upp, count } => {
             more_asserts::assert_gt!(count, 0);
             let scale = (upp - low) / (count as f64);
-            let inner_directory_path = file_prefix.directory_path.join("series");
+            let inner_directory_path = file_prefix.full_path_with_suffix("");
             std::fs::create_dir_all(&inner_directory_path).unwrap();
-
             timer.setup = elapsed_and_reset(&mut stopwatch);
             for idx in 0..count {
                 let time = low + (idx as f64) * scale;
@@ -154,15 +151,13 @@ pub fn render_driven_damped_pendulum_attractor(
                     directory_path: inner_directory_path.clone(),
                     file_base: format!("{}_{}", file_prefix.file_base, idx),
                 };
-                render_driven_damped_pendulum_attractor(&inner_params, &inner_file_prefix)?;
+                render_driven_damped_pendulum_attractor(&inner_params, inner_file_prefix)?;
             }
             timer.simulation = elapsed_and_reset(&mut stopwatch);
             timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
             return Ok(());
         }
     };
-
-    let render_path = file_prefix.with_suffix(".png");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
@@ -208,11 +203,8 @@ pub fn render_driven_damped_pendulum_attractor(
         *pixel = color_map(raw_data[x as usize][y as usize]);
     }
 
-    // Save the image to a file, deducing the type from the file name
-    imgbuf.save(&render_path).unwrap();
+    write_rgb_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
     timer.write_png = elapsed_and_reset(&mut stopwatch);
-
-    println!("Wrote image file to: {}", render_path.display());
 
     timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
