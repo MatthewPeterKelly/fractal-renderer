@@ -11,6 +11,7 @@ pub struct FractalRendererArgs {
 pub enum CommandsEnum {
     Render(ParameterFilePath),
     Explore(ParameterFilePath),
+    ColorSwatch(ParameterFilePath),
 }
 
 #[derive(Debug, Args)]

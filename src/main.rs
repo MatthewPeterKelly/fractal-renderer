@@ -4,6 +4,7 @@ use core::file_io::{
 
 use clap::Parser;
 use cli::args::{CommandsEnum, FractalRendererArgs, ParameterFilePath};
+use cli::color_swatch::generate_color_swatch;
 use cli::explore::explore_fractal;
 use cli::render::render_fractal;
 use fractals::common::FractalParams;
@@ -47,6 +48,12 @@ fn main() {
             .unwrap();
         }
 
+        Some(CommandsEnum::ColorSwatch(params)) => {
+            generate_color_swatch(
+                &params.params_path,
+                build_file_prefix(params, "color_swatch"),
+            );
+        }
         None => {
             println!("Default command (nothing specified!)");
         }
