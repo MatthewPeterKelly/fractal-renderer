@@ -3,7 +3,7 @@ use core::file_io::{
 };
 
 use clap::Parser;
-use cli::args::{CommandsEnum, FractalRendererArgs};
+use cli::args::{CommandsEnum, FractalRendererArgs, ParameterFilePath};
 use cli::explore::explore_fractal;
 use cli::render::render_fractal;
 use fractals::common::FractalParams;
@@ -11,6 +11,16 @@ use fractals::common::FractalParams;
 mod cli;
 mod core;
 mod fractals;
+
+fn build_file_prefix(params: &ParameterFilePath, command_name: &str) -> FilePrefix {
+    FilePrefix {
+        directory_path: build_output_path_with_date_time(
+            command_name,
+            &maybe_date_time_string(params.date_time_out),
+        ),
+        file_base: extract_base_name(&params.params_path).to_owned(),
+    }
+}
 
 fn main() {
     let args: FractalRendererArgs = FractalRendererArgs::parse();
@@ -22,22 +32,19 @@ fn main() {
 
     match &args.command {
         Some(CommandsEnum::Render(params)) => {
-            let build_file_prefix = |base_name: &str| -> FilePrefix {
-                FilePrefix {
-                    directory_path: build_output_path_with_date_time(
-                        &params.params_path,
-                        base_name,
-                        &maybe_date_time_string(params.date_time_out),
-                    ),
-                    file_base: extract_base_name(&params.params_path).to_owned(),
-                }
-            };
-
-            render_fractal(&fractal_params(&params.params_path), build_file_prefix).unwrap();
+            render_fractal(
+                &fractal_params(&params.params_path),
+                build_file_prefix(params, "render"),
+            )
+            .unwrap();
         }
 
         Some(CommandsEnum::Explore(params)) => {
-            explore_fractal(&fractal_params(&params.params_path)).unwrap();
+            explore_fractal(
+                &fractal_params(&params.params_path),
+                build_file_prefix(params, "explore"),
+            )
+            .unwrap();
         }
 
         None => {

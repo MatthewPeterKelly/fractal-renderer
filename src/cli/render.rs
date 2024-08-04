@@ -6,28 +6,26 @@ use crate::fractals::{
 
 use crate::core::file_io::FilePrefix;
 
-pub fn render_fractal<F>(
+pub fn render_fractal(
     params: &FractalParams,
-    file_prefix: F,
-) -> Result<(), Box<dyn std::error::Error>>
-where
-    F: Fn(&str) -> FilePrefix,
-{
+    mut file_prefix: FilePrefix,
+) -> Result<(), Box<dyn std::error::Error>> {
     match params {
         FractalParams::Mandelbrot(inner_params) => {
-            render_mandelbrot_set(inner_params, &file_prefix("mendelbrot"))
+            file_prefix.create_and_step_into_sub_directory("mandelbrot");
+            render_mandelbrot_set(inner_params, file_prefix)
         }
         FractalParams::DrivenDampedPendulum(inner_params) => {
-            render_driven_damped_pendulum_attractor(
-                inner_params,
-                &file_prefix("driven_damped_pendulum"),
-            )
+            file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
+            render_driven_damped_pendulum_attractor(inner_params, file_prefix)
         }
         FractalParams::BarnsleyFern(inner_params) => {
-            render_barnsley_fern(inner_params, &file_prefix("barnsley_fern"))
+            file_prefix.create_and_step_into_sub_directory("barnsley_fern");
+            render_barnsley_fern(inner_params, file_prefix)
         }
         FractalParams::Serpinsky(inner_params) => {
-            render_serpinsky(inner_params, &file_prefix("serpinsky"))
+            file_prefix.create_and_step_into_sub_directory("serpinsky");
+            render_serpinsky(inner_params, file_prefix)
         }
     }
 }

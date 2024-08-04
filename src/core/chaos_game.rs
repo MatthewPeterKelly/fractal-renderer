@@ -16,6 +16,8 @@ use crate::core::{
     image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
 };
 
+use super::image_utils::write_rgba_image_to_file_or_panic;
+
 /**
  * Timing data, used for simple analysis logging.
  */
@@ -59,18 +61,13 @@ pub fn chaos_game_render<D>(
     sample_count: u32,
     subpixel_antialiasing: i32,
     image_specification: &ImageSpecification,
-    file_prefix: &FilePrefix,
-    params_str: &str, // For diagnostics only --> written to a file
+    file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     D: FnMut() -> ColoredPoint,
 {
     let mut stopwatch: Instant = Instant::now();
     let mut timer = MeasuredElapsedTime::default();
-
-    // write out the parameters to a file:
-    let params_path = file_prefix.with_suffix(".json");
-    std::fs::write(params_path, params_str).expect("Unable to write params file.");
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
@@ -106,11 +103,8 @@ where
 
     timer.sampling = elapsed_and_reset(&mut stopwatch);
 
-    // Save the image to a file, deducing the type from the file name
-    let raw_render_path = file_prefix.with_suffix("_raw.png");
-    imgbuf.save(&raw_render_path).unwrap();
+    write_rgba_image_to_file_or_panic(file_prefix.full_path_with_suffix("_raw.png"), &imgbuf);
     timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
-    println!("Wrote raw image file to: {}", raw_render_path.display());
 
     // Scale back the colors toward the background, based on the subpixel sample data:
     let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
@@ -131,11 +125,8 @@ where
     }
     timer.antialiasing_post_process = elapsed_and_reset(&mut stopwatch);
 
-    // Save the antialiased image to a file, deducing the type from the file name
-    let render_path = file_prefix.with_suffix(".png");
-    imgbuf.save(&render_path).unwrap();
+    write_rgba_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
     timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
-    println!("Wrote image file to: {}", render_path.display());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
     timer.display(&mut diagnostics_file)?;

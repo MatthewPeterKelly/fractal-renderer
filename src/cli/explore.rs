@@ -9,10 +9,11 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     core::{
-        file_io::{build_output_path_with_date_time, date_time_string, FilePrefix},
+        file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
         image_utils::{
-            create_buffer, generate_scalar_image_in_place, ImageSpecification, PixelMapper,
+            create_buffer, generate_scalar_image_in_place, write_rgb_image_to_file_or_panic,
+            ImageSpecification, PixelMapper,
         },
     },
     fractals::{
@@ -34,20 +35,23 @@ const KEY_PRESS_SENSITIVITY_MODIFIER: f32 = 1.2;
  * -- mouse left click to recenter the image
  * -- A/D keys to adjust pan/zoom sensitivity
  */
-pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
+pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> Result<(), Error> {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
     let (pixel_renderer, image_spec, mut histogram) = match params {
-        FractalParams::Mandelbrot(inner_params) => (
-            mandelbrot_pixel_renderer(inner_params),
-            inner_params.image_specification.clone(),
-            Histogram::new(
-                inner_params.histogram_bin_count,
-                inner_params.max_iter_count as f32,
-            ),
-        ),
+        FractalParams::Mandelbrot(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("mandelbrot");
+            (
+                mandelbrot_pixel_renderer(inner_params),
+                inner_params.image_specification.clone(),
+                Histogram::new(
+                    inner_params.histogram_bin_count,
+                    inner_params.max_iter_count as f32,
+                ),
+            )
+        }
         _ => {
             println!("ERROR:  Unsupported fractal parameter type. Aborting.");
             panic!();
@@ -81,7 +85,7 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
     let mut keyboard_action_effect_modifier = 1.0f32;
 
     // Then properly set up the image resolution here
-    let mut pixel_grid = PixelGrid::new(&image_spec, &pixel_renderer);
+    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
 
     // Allocate memory for color mapping:
     let color_map = create_color_map_black_blue_white();
@@ -192,22 +196,28 @@ pub fn explore_fractal(params: &FractalParams) -> Result<(), Error> {
 
 #[derive(Clone, Debug)]
 struct PixelGrid {
-    image_specification: ImageSpecification,
     display_buffer: Vec<Vec<f32>>, // rendered to the screen on `draw()`
     scratch_buffer: Vec<Vec<f32>>, // updated in-place on `update()`
-    update_required: bool,         // used to mark when the image_specification has changed.
+    image_specification: ImageSpecification,
+    update_required: bool, // used to mark when the image_specification has changed.
+    file_prefix: FilePrefix, // used for writing intermediate image frames to file
 }
 
 impl PixelGrid {
-    fn new<F>(image_specification: &ImageSpecification, pixel_renderer: F) -> Self
+    fn new<F>(
+        file_prefix: FilePrefix,
+        image_specification: ImageSpecification,
+        pixel_renderer: F,
+    ) -> Self
     where
         F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
     {
         let mut grid = Self {
-            image_specification: image_specification.clone(),
             display_buffer: create_buffer(0f32, &image_specification.resolution),
             scratch_buffer: create_buffer(0f32, &image_specification.resolution),
+            image_specification,
             update_required: true,
+            file_prefix,
         };
         grid.update(&pixel_renderer);
         grid
@@ -289,21 +299,15 @@ impl PixelGrid {
     ) where
         F: Fn(f32) -> image::Rgb<u8>,
     {
-        let file_prefix = FilePrefix {
-            directory_path: build_output_path_with_date_time(
-                "explore",
-                "debug",
-                &Some(date_time_string()),
-            ),
-            file_base: "foobar".to_owned(),
-        };
+        let datetime = date_time_string();
+
         // TODO:  eventually generalize this to write the entire parameter struct:
         // https://github.com/MatthewPeterKelly/fractal-renderer/issues/68
-        std::fs::write(
-            file_prefix.with_suffix(".json"),
-            serde_json::to_string(&self.image_specification).unwrap(),
-        )
-        .expect("Unable to write file");
+        serialize_to_json_or_panic(
+            self.file_prefix
+                .full_path_with_suffix(&format!("_{}.json", datetime)),
+            &self.image_specification,
+        );
 
         cdf.reset(histogram);
 
@@ -319,8 +323,10 @@ impl PixelGrid {
             *pixel = color_map(cdf.percentile(self.display_buffer[x as usize][y as usize]));
         }
 
-        let render_path = file_prefix.with_suffix(".png");
-        imgbuf.save(&render_path).unwrap();
-        println!("INFO:  Wrote image file to: {}", render_path.display());
+        write_rgb_image_to_file_or_panic(
+            self.file_prefix
+                .full_path_with_suffix(&format!("_{}.png", datetime)),
+            &imgbuf,
+        );
     }
 }
