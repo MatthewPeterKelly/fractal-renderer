@@ -1,7 +1,9 @@
-use image::{ImageBuffer, Rgb, Rgba};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageSpecification {
@@ -348,23 +350,11 @@ pub fn generate_scalar_image_in_place<F>(
     });
 }
 
-pub fn write_rgb_image_to_file_or_panic(
-    filename: std::path::PathBuf,
-    imgbuf: &ImageBuffer<Rgb<u8>, Vec<u8>>,
-) {
-    imgbuf
-        .save(&filename)
-        .unwrap_or_else(|_| panic!("ERROR:  Unable to write image file: {}", filename.display()));
-    println!("INFO:  Wrote image file to: {}", filename.display());
-}
-
-// TODO:  figure out how to use a common implementation with `write_rgb_image_to_file_or_panic`.
-pub fn write_rgba_image_to_file_or_panic(
-    filename: std::path::PathBuf,
-    imgbuf: &ImageBuffer<Rgba<u8>, Vec<u8>>,
-) {
-    imgbuf
-        .save(&filename)
+pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
+where
+    F: FnOnce(&PathBuf) -> Result<T, E>,
+{
+    save_lambda(&filename)
         .unwrap_or_else(|_| panic!("ERROR:  Unable to write image file: {}", filename.display()));
     println!("INFO:  Wrote image file to: {}", filename.display());
 }

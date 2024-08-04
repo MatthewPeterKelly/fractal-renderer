@@ -12,7 +12,7 @@ use crate::{
         file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
         image_utils::{
-            create_buffer, generate_scalar_image_in_place, write_rgb_image_to_file_or_panic,
+            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
             ImageSpecification, PixelMapper,
         },
     },
@@ -323,10 +323,10 @@ impl PixelGrid {
             *pixel = color_map(cdf.percentile(self.display_buffer[x as usize][y as usize]));
         }
 
-        write_rgb_image_to_file_or_panic(
+        write_image_to_file_or_panic(
             self.file_prefix
                 .full_path_with_suffix(&format!("_{}.png", datetime)),
-            &imgbuf,
+            |f| imgbuf.save(f),
         );
     }
 }

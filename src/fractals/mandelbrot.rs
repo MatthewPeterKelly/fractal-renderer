@@ -7,8 +7,7 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{
-        elapsed_and_reset, generate_scalar_image, write_rgb_image_to_file_or_panic,
-        ImageSpecification,
+        elapsed_and_reset, generate_scalar_image, write_image_to_file_or_panic, ImageSpecification,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -218,7 +217,9 @@ pub fn render_mandelbrot_set(
     }
 
     timer.color_map = elapsed_and_reset(&mut stopwatch);
-    write_rgb_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
+        imgbuf.save(f)
+    });
     timer.write_png = elapsed_and_reset(&mut stopwatch);
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
