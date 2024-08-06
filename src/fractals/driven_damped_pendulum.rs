@@ -1,8 +1,7 @@
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{
-        elapsed_and_reset, generate_scalar_image, write_rgb_image_to_file_or_panic,
-        ImageSpecification,
+        elapsed_and_reset, generate_scalar_image, write_image_to_file_or_panic, ImageSpecification,
     },
     ode_solvers::rk4_simulate,
 };
@@ -203,7 +202,9 @@ pub fn render_driven_damped_pendulum_attractor(
         *pixel = color_map(raw_data[x as usize][y as usize]);
     }
 
-    write_rgb_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
+        imgbuf.save(f)
+    });
     timer.write_png = elapsed_and_reset(&mut stopwatch);
 
     timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;

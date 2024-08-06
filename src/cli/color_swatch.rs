@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::{
     color_map::{ColorMapKeyFrame, PiecewiseLinearColorMap},
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    image_utils::write_rgb_image_to_file_or_panic,
+    image_utils::write_image_to_file_or_panic,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,5 +59,7 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         }
     }
 
-    write_rgb_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
+        imgbuf.save(f)
+    });
 }

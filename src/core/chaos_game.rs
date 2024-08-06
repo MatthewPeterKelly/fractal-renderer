@@ -16,7 +16,7 @@ use crate::core::{
     image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
 };
 
-use super::image_utils::write_rgba_image_to_file_or_panic;
+use super::image_utils::write_image_to_file_or_panic;
 
 /**
  * Timing data, used for simple analysis logging.
@@ -103,7 +103,9 @@ where
 
     timer.sampling = elapsed_and_reset(&mut stopwatch);
 
-    write_rgba_image_to_file_or_panic(file_prefix.full_path_with_suffix("_raw.png"), &imgbuf);
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix("_raw.png"), |f| {
+        imgbuf.save(f)
+    });
     timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
 
     // Scale back the colors toward the background, based on the subpixel sample data:
@@ -125,7 +127,9 @@ where
     }
     timer.antialiasing_post_process = elapsed_and_reset(&mut stopwatch);
 
-    write_rgba_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), &imgbuf);
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
+        imgbuf.save(f)
+    });
     timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
