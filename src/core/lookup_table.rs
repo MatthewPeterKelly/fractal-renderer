@@ -16,8 +16,7 @@ impl<T: Clone> LookupTable<T> {
         assert_gt!(entry_count, 0);
 
         let queries = lin_space(query_domain[0]..=query_domain[1], entry_count);
-        let mut table_entries: Vec<T> = Vec::new();
-        // TODO:  reserve correct size?
+        let mut table_entries: Vec<T> = Vec::with_capacity(entry_count);
         for query in queries {
             table_entries.push(query_to_data(query));
         }

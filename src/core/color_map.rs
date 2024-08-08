@@ -61,8 +61,7 @@ impl PiecewiseLinearColorMap {
      */
     pub fn with_uniform_spacing(&self) -> PiecewiseLinearColorMap {
         let queries = lin_space(0.0..=1.0, self.keyframes.len());
-        let mut keyframes: Vec<ColorMapKeyFrame> = Vec::new();
-        // TODO:  reserve correct size?
+        let mut keyframes: Vec<ColorMapKeyFrame> = Vec::with_capacity(self.keyframes.len());
         for (old_keyframe, query) in self.keyframes.iter().zip(queries) {
             keyframes.push(ColorMapKeyFrame {
                 query,
