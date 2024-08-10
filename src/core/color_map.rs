@@ -1,5 +1,6 @@
 use iter_num_tools::lin_space;
 use serde::{Deserialize, Serialize};
+use splines::{Interpolation, Key, Spline};
 
 /**
  * Represents a single "keyframe" of the color map, pairing a
@@ -7,8 +8,8 @@ use serde::{Deserialize, Serialize};
  */
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
-    pub query: f32,       // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [u8; 3], // [R, G, B]
+    pub query: f32,        // specify location of this color within the map; on [0,1]
+    pub rgb_raw: [f32; 3], // [R, G, B], defined on [0.0, 1.0]
 }
 
 /**
@@ -20,7 +21,7 @@ pub struct ColorMapKeyFrame {
  * - https://docs.rs/palette/latest/palette/
  */
 pub struct PiecewiseLinearColorMap {
-    keyframes: Vec<ColorMapKeyFrame>,
+    spline: Spline<f32, [f32; 3]>,
 }
 
 impl PiecewiseLinearColorMap {
@@ -30,12 +31,14 @@ impl PiecewiseLinearColorMap {
      * and the last keyframe query must be one. Colors are specified in RGB
      * space as `u8` values on [0,255].
      */
-    pub fn new(keyframes: Vec<ColorMapKeyFrame>) -> PiecewiseLinearColorMap {
+    pub fn new(
+        keyframes: Vec<ColorMapKeyFrame>,
+        interpolation: Interpolation,
+    ) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
         }
-
         if keyframes.first().unwrap().query != 0.0 {
             println!("ERROR:  initial keyframe query point must be 0.0!");
             panic!();
@@ -44,14 +47,22 @@ impl PiecewiseLinearColorMap {
             println!("ERROR:  final keyframe query point must be 1.0!");
             panic!();
         }
-
         for i in 0..(keyframes.len() - 1) {
             if keyframes[i].query >= keyframes[i + 1].query {
                 println!("ERROR:  keyframes should be monotonic, but are not!");
                 panic!();
             }
         }
-        PiecewiseLinearColorMap { keyframes }
+
+        let mut spline_keys = Vec::with_capacity(keyframes.len());
+
+        for key in keyframes {
+            spline_keys.push(Key::new(key.query, key.rgb_raw, interpolation));
+        }
+
+        PiecewiseLinearColorMap {
+            spline: Spline::from_vec(spline_keys),
+        }
     }
 
     /**
