@@ -1,6 +1,7 @@
 use iter_num_tools::lin_space;
 use serde::{Deserialize, Serialize};
 use splines::{Interpolation, Key, Spline};
+use nalgebra::Vector3;
 
 /**
  * Represents a single "keyframe" of the color map, pairing a
@@ -9,7 +10,7 @@ use splines::{Interpolation, Key, Spline};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
     pub query: f32,        // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [f32; 3], // [R, G, B], defined on [0.0, 1.0]
+    pub rgb_raw: Vector3<f32>, // [R, G, B], defined on [0.0, 1.0]
 }
 
 /**
@@ -22,7 +23,7 @@ pub struct ColorMapKeyFrame {
  */
 #[derive(Clone)]
 pub struct PiecewiseLinearColorMap {
-    spline: Spline<f32, [f32; 3]>,
+    spline: Spline<f32, Vector3<f32>>,
 }
 
 impl PiecewiseLinearColorMap {
@@ -34,7 +35,7 @@ impl PiecewiseLinearColorMap {
      */
     pub fn new(
         keyframes: Vec<ColorMapKeyFrame>,
-        interpolation: Interpolation<f32, [f32; 3]>,
+        interpolation: Interpolation<f32, Vector3<f32>>,
     ) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
@@ -84,7 +85,7 @@ impl PiecewiseLinearColorMap {
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
      */
-    pub fn sample(&self, query: f32) -> [f32; 3] {
+    pub fn sample(&self, query: f32) -> Vector3<f32> {
         let first = self.spline.keys().first().unwrap();
         if query <= first.t {
            return first.value;
@@ -95,7 +96,7 @@ impl PiecewiseLinearColorMap {
            return last.value;
         }
 
-        self.spline.sample(query).unwrap();
+        self.spline.sample(query).unwrap()
     }
 
     /**
