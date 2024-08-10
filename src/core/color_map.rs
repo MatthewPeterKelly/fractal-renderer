@@ -20,6 +20,7 @@ pub struct ColorMapKeyFrame {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
+#[derive(Clone)]
 pub struct PiecewiseLinearColorMap {
     spline: Spline<f32, [f32; 3]>,
 }
@@ -33,7 +34,7 @@ impl PiecewiseLinearColorMap {
      */
     pub fn new(
         keyframes: Vec<ColorMapKeyFrame>,
-        interpolation: Interpolation,
+        interpolation: Interpolation<f32, [f32; 3]>,
     ) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
@@ -54,14 +55,12 @@ impl PiecewiseLinearColorMap {
             }
         }
 
-        let mut spline_keys = Vec::with_capacity(keyframes.len());
-
-        for key in keyframes {
-            spline_keys.push(Key::new(key.query, key.rgb_raw, interpolation));
-        }
-
         PiecewiseLinearColorMap {
-            spline: Spline::from_vec(spline_keys),
+            spline: Spline::from_iter(
+                keyframes
+                    .into_iter()
+                    .map(|key| Key::new(key.query, key.rgb_raw, interpolation)),
+            ),
         }
     }
 
@@ -71,39 +70,32 @@ impl PiecewiseLinearColorMap {
      * for visualizing the "color swatch".
      */
     pub fn with_uniform_spacing(&self) -> PiecewiseLinearColorMap {
-        let queries = lin_space(0.0..=1.0, self.keyframes.len());
-        let mut keyframes: Vec<ColorMapKeyFrame> = Vec::new();
-        for (old_keyframe, query) in self.keyframes.iter().zip(queries) {
-            keyframes.push(ColorMapKeyFrame {
-                query,
-                rgb_raw: old_keyframe.rgb_raw,
+        let queries = lin_space(0.0..=1.0, self.spline.keys().len());
+        let mut colormap = self.clone();
+        for (index, query) in queries.enumerate() {
+            colormap.spline.replace(index, |old_key| {
+                Key::new(query, old_key.value, old_key.interpolation)
             });
         }
-        PiecewiseLinearColorMap::new(keyframes)
+        colormap
     }
 
     /**
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
      */
-    pub fn compute(&self, query: f32, clamp_to_nearest: bool) -> [u8; 3] {
-        if query <= 0.0f32 {
-            self.keyframes.first().unwrap().rgb_raw
-        } else if query >= 1.0f32 {
-            self.keyframes.last().unwrap().rgb_raw
-        } else {
-            let (i, j) = self.linear_index_search(query);
-            let mut alpha = (query - self.keyframes[i].query)
-                / (self.keyframes[j].query - self.keyframes[i].query);
-            if clamp_to_nearest {
-                alpha = PiecewiseLinearColorMap::clamp_alpha_nearest(alpha);
-            }
-            Self::interpolate(
-                &self.keyframes[i].rgb_raw,
-                &self.keyframes[j].rgb_raw,
-                alpha,
-            )
+    pub fn sample(&self, query: f32) -> [f32; 3] {
+        let first = self.spline.keys().first().unwrap();
+        if query <= first.t {
+           return first.value;
         }
+
+        let last = self.spline.keys().last().unwrap();
+        if query >= last.t {
+           return last.value;
+        }
+
+        self.spline.sample(query).unwrap();
     }
 
     /**
