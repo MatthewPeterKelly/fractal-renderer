@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
     pub query: f32,        // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [f32; 3], // [R, G, B], defined on [0, 1]
+    pub rgb_raw: [u8; 3], // [R, G, B]
 }
 
 /**
@@ -22,7 +22,7 @@ pub struct ColorMapKeyFrame {
  */
 pub struct PiecewiseLinearColorMap {
     queries: Vec<f32>,
-    rgb_colors: Vec<Vector3<f32>>,
+    rgb_colors: Vec<Vector3<f32>>,  // [0,255], but as f32
 }
 
 impl PiecewiseLinearColorMap {
@@ -52,14 +52,12 @@ impl PiecewiseLinearColorMap {
             }
         }
 
-        // TODO: check valid colors...
-
         let mut queries = Vec::with_capacity(keyframes.len());
         let mut rgb_colors = Vec::with_capacity(keyframes.len());
 
         for keyframe in keyframes {
             queries.push(keyframe.query);
-            rgb_colors.push(Vector3::from(keyframe.rgb_raw));
+            rgb_colors.push(Vector3::new(keyframe.rgb_raw[0] as f32, keyframe.rgb_raw[1] as f32, keyframe.rgb_raw[2] as f32));
         }
 
         PiecewiseLinearColorMap {
@@ -104,15 +102,14 @@ impl PiecewiseLinearColorMap {
             } else {
                 let alpha = (query - self.queries[idx_low])
                     / (self.queries[idx_upp] - self.queries[idx_low]);
-                alpha * self.rgb_colors[idx_low] + (1.0 - alpha) * self.rgb_colors[idx_upp]
+                    (1.0 - alpha) * self.rgb_colors[idx_low] +  alpha* self.rgb_colors[idx_upp]
             }
         }
     }
 
     pub fn compute_pixel(&self, query: f32, clamp_to_nearest: bool) -> image::Rgb<u8> {
         let color_rgb = self.compute_raw(query, clamp_to_nearest);
-        let rgb = 255.0 * color_rgb;
-        image::Rgb([rgb[0] as u8, rgb[1] as u8, rgb[2] as u8])
+        image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
     }
 }
 
@@ -132,7 +129,7 @@ impl PiecewiseLinearColorMap {
  *
  * @return: `idx_low` S.T. keys[idx_low] < query < keys[idx_upp]
  */
-fn linear_index_search(keys: &Vec<f32>, query: f32) -> usize {
+fn linear_index_search(keys: &[f32], query: f32) -> usize {
     let mut idx_low = keys.len() / 2;
 
     // hard limit on upper iteration, to catch bugs
