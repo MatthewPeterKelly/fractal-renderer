@@ -1,35 +1,35 @@
 {
   "swatch_resolution": [1920, 100],
   "border_padding": 50,
-  "border_color_rgb": [0, 0, 0],
+  "border_color_rgb": [0.0, 0.0, 0.0],
   "keyframes": [
     {
       "query": 0.0,
-      "rgb_raw": [255, 0, 0]
+      "rgb_raw": [1.0, 0.0, 0.0]
     },
     {
       "query": 0.17,
-      "rgb_raw": [255, 127, 0]
+      "rgb_raw": [1.0, 0.5, 0.0]
     },
     {
       "query": 0.33,
-      "rgb_raw": [255, 255, 0]
+      "rgb_raw": [1.0, 1.0, 0.0]
     },
     {
       "query": 0.5,
-      "rgb_raw": [0, 255, 0]
+      "rgb_raw": [0.0, 1.0, 0.0]
     },
     {
       "query": 0.67,
-      "rgb_raw": [0, 0, 255]
+      "rgb_raw": [0.0, 0.0, 1.0]
     },
     {
       "query": 0.83,
-      "rgb_raw": [75, 0, 130]
+      "rgb_raw": [0.3, 0.0, 0.5]
     },
     {
       "query": 1.0,
-      "rgb_raw": [143, 0, 255]
+      "rgb_raw": [0.6, 0.0, 1.0]
     }
   ]
 }

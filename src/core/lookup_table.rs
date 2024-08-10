@@ -40,11 +40,10 @@ impl<T: Clone> LookupTable<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
-use super::LookupTable;
+    use super::LookupTable;
 
     #[test]
     fn test_lookup_table() {
@@ -67,5 +66,4 @@ use super::LookupTable;
         assert_eq!(lookup_table.lookup(-2.5), 4);
         assert_eq!(lookup_table.lookup(15.0), 24);
     }
-
 }

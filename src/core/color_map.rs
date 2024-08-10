@@ -1,4 +1,5 @@
 use iter_num_tools::lin_space;
+use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
 /**
@@ -7,8 +8,8 @@ use serde::{Deserialize, Serialize};
  */
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
-    pub query: f32,       // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [u8; 3], // [R, G, B]
+    pub query: f32,        // specify location of this color within the map; on [0,1]
+    pub rgb_raw: [f32; 3], // [R, G, B], defined on [0, 1]
 }
 
 /**
@@ -20,7 +21,8 @@ pub struct ColorMapKeyFrame {
  * - https://docs.rs/palette/latest/palette/
  */
 pub struct PiecewiseLinearColorMap {
-    keyframes: Vec<ColorMapKeyFrame>,
+    queries: Vec<f32>,
+    rgb_colors: Vec<Vector3<f32>>,
 }
 
 impl PiecewiseLinearColorMap {
@@ -35,7 +37,6 @@ impl PiecewiseLinearColorMap {
             println!("ERROR:  keyframes are empty!");
             panic!();
         }
-
         if keyframes.first().unwrap().query != 0.0 {
             println!("ERROR:  initial keyframe query point must be 0.0!");
             panic!();
@@ -44,14 +45,27 @@ impl PiecewiseLinearColorMap {
             println!("ERROR:  final keyframe query point must be 1.0!");
             panic!();
         }
-
         for i in 0..(keyframes.len() - 1) {
             if keyframes[i].query >= keyframes[i + 1].query {
                 println!("ERROR:  keyframes should be monotonic, but are not!");
                 panic!();
             }
         }
-        PiecewiseLinearColorMap { keyframes }
+
+        // TODO: check valid colors...
+
+        let mut queries = Vec::with_capacity(keyframes.len());
+        let mut rgb_colors = Vec::with_capacity(keyframes.len());
+
+        for keyframe in keyframes {
+            queries.push(keyframe.query);
+            rgb_colors.push(Vector3::from(keyframe.rgb_raw));
+        }
+
+        PiecewiseLinearColorMap {
+            queries,
+            rgb_colors,
+        }
     }
 
     /**
@@ -60,98 +74,81 @@ impl PiecewiseLinearColorMap {
      * for visualizing the "color swatch".
      */
     pub fn with_uniform_spacing(&self) -> PiecewiseLinearColorMap {
-        let queries = lin_space(0.0..=1.0, self.keyframes.len());
-        let mut keyframes: Vec<ColorMapKeyFrame> = Vec::with_capacity(self.keyframes.len());
-        for (old_keyframe, query) in self.keyframes.iter().zip(queries) {
-            keyframes.push(ColorMapKeyFrame {
-                query,
-                rgb_raw: old_keyframe.rgb_raw,
-            });
+        PiecewiseLinearColorMap {
+            queries: lin_space(0.0..=1.0, self.queries.len()).collect(),
+            rgb_colors: self.rgb_colors.clone(),
         }
-        PiecewiseLinearColorMap::new(keyframes)
     }
 
     /**
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
      */
-    pub fn compute(&self, query: f32, clamp_to_nearest: bool) -> [u8; 3] {
+    pub fn compute_raw(&self, query: f32, clamp_to_nearest: bool) -> Vector3<f32> {
         if query <= 0.0f32 {
-            self.keyframes.first().unwrap().rgb_raw
+            *self.rgb_colors.first().unwrap()
         } else if query >= 1.0f32 {
-            self.keyframes.last().unwrap().rgb_raw
+            *self.rgb_colors.last().unwrap()
         } else {
-            let (i, j) = self.linear_index_search(query);
-            let mut alpha = (query - self.keyframes[i].query)
-                / (self.keyframes[j].query - self.keyframes[i].query);
+            let idx_low = linear_index_search(&self.queries, query);
+            let idx_upp = idx_low + 1;
+
             if clamp_to_nearest {
-                alpha = PiecewiseLinearColorMap::clamp_alpha_nearest(alpha);
+                let low_delta = query - self.queries[idx_low];
+                let upp_delta = self.queries[idx_upp] - query;
+                if upp_delta > low_delta {
+                    self.rgb_colors[idx_low]
+                } else {
+                    self.rgb_colors[idx_upp]
+                }
+            } else {
+                let alpha = (query - self.queries[idx_low])
+                    / (self.queries[idx_upp] - self.queries[idx_low]);
+                alpha * self.rgb_colors[idx_low] + (1.0 - alpha) * self.rgb_colors[idx_upp]
             }
-            Self::interpolate(
-                &self.keyframes[i].rgb_raw,
-                &self.keyframes[j].rgb_raw,
-                alpha,
-            )
         }
     }
 
-    /**
-     * Simple linear search, starting from the middle segment, to figure out
-     * which segment to evaluate. We could probably be faster by caching the most
-     * recent index solution, but that adds complexity and state, which are probably
-     * not worth it, given that the plan is to pre-compute the entire color map
-     * before rendering the fractal.
-     */
-    fn linear_index_search(&self, query: f32) -> (usize, usize) {
-        let mut idx_low = self.keyframes.len() / 2;
+    pub fn compute_pixel(&self, query: f32, clamp_to_nearest: bool) -> image::Rgb<u8> {
+        let color_rgb = self.compute_raw(query, clamp_to_nearest);
+        let rgb = 255.0 * color_rgb;
+        image::Rgb([rgb[0] as u8, rgb[1] as u8, rgb[2] as u8])
+    }
+}
 
-        // hard limit on upper iteration, to catch bugs
-        for _ in 0..self.keyframes.len() {
-            if query < self.keyframes[idx_low].query {
-                idx_low -= 1;
-                continue;
-            }
-            if query >= self.keyframes[idx_low + 1].query {
-                idx_low += 1;
-                continue;
-            }
-            // [low <= query < upp]  --> success!
-            return (idx_low, idx_low + 1);
+/**
+ * Simple linear search, starting from the middle segment, to figure out
+ * which segment to evaluate. We could probably be faster by caching the most
+ * recent index solution, but that adds complexity and state, which are probably
+ * not worth it, given that the plan is to pre-compute the entire color map
+ * before rendering the fractal.
+ *
+ * Preconditions:
+ * - `keys` is a sorted vector that is monotonically increasing
+ * - `keys` has at least two entries
+ * - `query` is spanned by the values in `keys`
+ *
+ * (Preconditions are not checked because they are enforced by the PiecewisLinearColorMap class invariants.)
+ *
+ * @return: `idx_low` S.T. keys[idx_low] < query < keys[idx_upp]
+ */
+fn linear_index_search(keys: &Vec<f32>, query: f32) -> usize {
+    let mut idx_low = keys.len() / 2;
+
+    // hard limit on upper iteration, to catch bugs
+    for _ in 0..keys.len() {
+        if query < keys[idx_low] {
+            idx_low -= 1;
+            continue;
         }
-
-        println!("ERROR:  Linear keyframe search failed!");
-        panic!();
-    }
-
-    /**
-     * Really simple color interpolation.
-     * See the Palette crate for a lecture about a better way to do it:
-     * https://docs.rs/palette/latest/palette/rgb/index.html
-     *
-     * I've got a version using that hacked together on a branch here:
-     * https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
-     *
-     * But this simple implementation works nicely for now.
-     */
-    fn interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let beta = 1.0 - alpha;
-        [
-            ((low[0] as f32) * beta + (upp[0] as f32) * alpha) as u8,
-            ((low[1] as f32) * beta + (upp[1] as f32) * alpha) as u8,
-            ((low[2] as f32) * beta + (upp[2] as f32) * alpha) as u8,
-        ]
-    }
-
-    /**
-     * This is a bit of a hack, but it makes it easy to implement the
-     * color swatch utility. And, who knows, perhaps it would be useful
-     * to render a fractal with sharp color bands someday.
-     */
-    fn clamp_alpha_nearest(alpha: f32) -> f32 {
-        if alpha < 0.5 {
-            0.0
-        } else {
-            1.0
+        if query >= keys[idx_low + 1] {
+            idx_low += 1;
+            continue;
         }
+        // [low <= query < upp]  --> success!
+        return idx_low;
     }
+
+    println!("ERROR:  Linear keyframe search failed!");
+    panic!();
 }

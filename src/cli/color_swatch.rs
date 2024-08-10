@@ -50,9 +50,8 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
             for x_idx in x_offset..(x_offset + params.swatch_resolution.0) {
                 for y_idx in y_offset..(y_offset + params.swatch_resolution.1) {
                     let linear_index = x_idx * params.swatch_resolution.1 + y_idx;
-                    *imgbuf.get_pixel_mut(x_idx, y_idx) = image::Rgb(
-                        color_map.compute(scale * (linear_index as f32), clamp_to_nearest),
-                    );
+                    *imgbuf.get_pixel_mut(x_idx, y_idx) =
+                        color_map.compute_pixel(scale * (linear_index as f32), clamp_to_nearest);
                 }
             }
             y_offset += params.swatch_resolution.1 + params.border_padding;
