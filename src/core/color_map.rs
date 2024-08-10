@@ -1,6 +1,7 @@
 use iter_num_tools::lin_space;
 use serde::{Deserialize, Serialize};
 use splines::{Interpolation, Key, Spline};
+use nalgebra::Vector3;
 
 /**
  * Represents a single "keyframe" of the color map, pairing a
@@ -9,7 +10,7 @@ use splines::{Interpolation, Key, Spline};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapKeyFrame {
     pub query: f32,        // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [f32; 3], // [R, G, B], defined on [0.0, 1.0]
+    pub rgb_raw: Vector3<f32>, // [R, G, B], defined on [0.0, 1.0]
 }
 
 /**
@@ -22,13 +23,7 @@ pub struct ColorMapKeyFrame {
  */
 #[derive(Clone)]
 pub struct PiecewiseLinearColorMap {
-    /**
-     * TODO:  this is inefficient --> by having a vector of splines, it means that we duplicate
-     * a ton of calculation, both in the segment look-up and in the evaluation of some interpolation
-     * types. But it works for now. I'm surprised that I couldn't find an existing implementation
-     * of spline interpolation for the nalgebra crate.
-     */
-    splines: [Spline<f32, f32>; 3],
+    spline: Spline<f32, Vector3<f32>>,
 }
 
 impl PiecewiseLinearColorMap {
@@ -40,7 +35,7 @@ impl PiecewiseLinearColorMap {
      */
     pub fn new(
         keyframes: Vec<ColorMapKeyFrame>,
-        interpolation: Interpolation<f32, f32>,
+        interpolation: Interpolation<f32, Vector3<f32>>,
     ) -> PiecewiseLinearColorMap {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
@@ -61,16 +56,12 @@ impl PiecewiseLinearColorMap {
             }
         }
 
-        let build_spline = |channel| {
-            Spline::from_iter(
-                keyframes
-                    .iter()
-                    .map(|key| Key::new(key.query, key.rgb_raw[channel], interpolation)),
-            )
-        };
-
         PiecewiseLinearColorMap {
-            splines: [build_spline(0), build_spline(1), build_spline(2)],
+            spline: Spline::from_iter(
+                keyframes
+                    .into_iter()
+                    .map(|key| Key::new(key.query, key.rgb_raw, interpolation)),
+            ),
         }
     }
 
@@ -97,14 +88,74 @@ impl PiecewiseLinearColorMap {
     pub fn sample(&self, query: f32) -> Vector3<f32> {
         let first = self.spline.keys().first().unwrap();
         if query <= first.t {
-            return first.value;
+           return first.value;
         }
 
         let last = self.spline.keys().last().unwrap();
         if query >= last.t {
-            return last.value;
+           return last.value;
         }
 
         self.spline.sample(query).unwrap()
+    }
+
+    /**
+     * Simple linear search, starting from the middle segment, to figure out
+     * which segment to evaluate. We could probably be faster by caching the most
+     * recent index solution, but that adds complexity and state, which are probably
+     * not worth it, given that the plan is to pre-compute the entire color map
+     * before rendering the fractal.
+     */
+    fn linear_index_search(&self, query: f32) -> (usize, usize) {
+        let mut idx_low = self.keyframes.len() / 2;
+
+        // hard limit on upper iteration, to catch bugs
+        for _ in 0..self.keyframes.len() {
+            if query < self.keyframes[idx_low].query {
+                idx_low -= 1;
+                continue;
+            }
+            if query >= self.keyframes[idx_low + 1].query {
+                idx_low += 1;
+                continue;
+            }
+            // [low <= query < upp]  --> success!
+            return (idx_low, idx_low + 1);
+        }
+
+        println!("ERROR:  Linear keyframe search failed!");
+        panic!();
+    }
+
+    /**
+     * Really simple color interpolation.
+     * See the Palette crate for a lecture about a better way to do it:
+     * https://docs.rs/palette/latest/palette/rgb/index.html
+     *
+     * I've got a version using that hacked together on a branch here:
+     * https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
+     *
+     * But this simple implementation works nicely for now.
+     */
+    fn interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
+        let beta = 1.0 - alpha;
+        [
+            ((low[0] as f32) * beta + (upp[0] as f32) * alpha) as u8,
+            ((low[1] as f32) * beta + (upp[1] as f32) * alpha) as u8,
+            ((low[2] as f32) * beta + (upp[2] as f32) * alpha) as u8,
+        ]
+    }
+
+    /**
+     * This is a bit of a hack, but it makes it easy to implement the
+     * color swatch utility. And, who knows, perhaps it would be useful
+     * to render a fractal with sharp color bands someday.
+     */
+    fn clamp_alpha_nearest(alpha: f32) -> f32 {
+        if alpha < 0.5 {
+            0.0
+        } else {
+            1.0
+        }
     }
 }
