@@ -43,15 +43,14 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
 
     let x_offset = params.border_padding;
     let mut y_offset = params.border_padding;
-    let scale = 1.0 / ((params.swatch_resolution.0 * params.swatch_resolution.1) as f32);
+    let scale = 1.0 / params.swatch_resolution.0 as f32;
 
     for color_map in [user_colormap, uniform_color_map] {
         for clamp_to_nearest in [true, false] {
-            for x_idx in x_offset..(x_offset + params.swatch_resolution.0) {
-                for y_idx in y_offset..(y_offset + params.swatch_resolution.1) {
-                    let linear_index = x_idx * params.swatch_resolution.1 + y_idx;
-                    *imgbuf.get_pixel_mut(x_idx, y_idx) =
-                        color_map.compute_pixel(scale * (linear_index as f32), clamp_to_nearest);
+            for x_idx in 0..(0 + params.swatch_resolution.0) {
+                for y_idx in 0..(0 + params.swatch_resolution.1) {
+                    *imgbuf.get_pixel_mut(x_idx + x_offset, y_idx + y_offset) =
+                        color_map.compute_pixel(scale * (x_idx as f32), clamp_to_nearest);
                 }
             }
             y_offset += params.swatch_resolution.1 + params.border_padding;
