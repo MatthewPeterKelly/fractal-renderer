@@ -99,63 +99,27 @@ impl PiecewiseLinearColorMap {
         self.spline.sample(query).unwrap()
     }
 
-    /**
-     * Simple linear search, starting from the middle segment, to figure out
-     * which segment to evaluate. We could probably be faster by caching the most
-     * recent index solution, but that adds complexity and state, which are probably
-     * not worth it, given that the plan is to pre-compute the entire color map
-     * before rendering the fractal.
-     */
-    fn linear_index_search(&self, query: f32) -> (usize, usize) {
-        let mut idx_low = self.keyframes.len() / 2;
-
-        // hard limit on upper iteration, to catch bugs
-        for _ in 0..self.keyframes.len() {
-            if query < self.keyframes[idx_low].query {
-                idx_low -= 1;
-                continue;
-            }
-            if query >= self.keyframes[idx_low + 1].query {
-                idx_low += 1;
-                continue;
-            }
-            // [low <= query < upp]  --> success!
-            return (idx_low, idx_low + 1);
-        }
-
-        println!("ERROR:  Linear keyframe search failed!");
-        panic!();
-    }
-
-    /**
-     * Really simple color interpolation.
-     * See the Palette crate for a lecture about a better way to do it:
-     * https://docs.rs/palette/latest/palette/rgb/index.html
-     *
-     * I've got a version using that hacked together on a branch here:
-     * https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
-     *
-     * But this simple implementation works nicely for now.
-     */
-    fn interpolate(low: &[u8; 3], upp: &[u8; 3], alpha: f32) -> [u8; 3] {
-        let beta = 1.0 - alpha;
-        [
-            ((low[0] as f32) * beta + (upp[0] as f32) * alpha) as u8,
-            ((low[1] as f32) * beta + (upp[1] as f32) * alpha) as u8,
-            ((low[2] as f32) * beta + (upp[2] as f32) * alpha) as u8,
-        ]
-    }
-
-    /**
-     * This is a bit of a hack, but it makes it easy to implement the
-     * color swatch utility. And, who knows, perhaps it would be useful
-     * to render a fractal with sharp color bands someday.
-     */
-    fn clamp_alpha_nearest(alpha: f32) -> f32 {
-        if alpha < 0.5 {
-            0.0
-        } else {
-            1.0
-        }
-    }
 }
+
+
+
+// Broken --> type piracy!  Can't define trait on an external type.
+// I don't really want to make my own custom vector type wrapping nalgebra.
+// This seems a bit silly.
+// Someone must have implemented this for nalgebra somehow.
+
+impl splines::Interpolate<f32> for Vector3<f32> {
+    fn step(t: f32, threshold: f32, a: Self, b: Self) -> Self;
+
+    fn lerp(t: f32, a: Self, b: Self) -> Self;
+
+    fn cosine(t: f32, a: Self, b: Self) -> Self;
+
+    fn cubic_hermite(t: f32, x: (f32, Self), a: (f32, Self), b: (f32, Self), y: (f32, Self)) -> Self;
+
+    fn quadratic_bezier(t: f32, a: Self, u: Self, b: Self) -> Self;
+
+    fn cubic_bezier(t: f32, a: Self, u: Self, v: Self, b: Self) -> Self;
+
+    fn cubic_bezier_mirrored(t: f32, a: Self, u: Self, v: Self, b: Self) -> Self;
+  }
