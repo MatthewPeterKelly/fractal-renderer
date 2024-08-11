@@ -82,7 +82,7 @@ impl PiecewiseLinearColorMap {
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
      */
-    pub fn compute_raw(&self, query: f32, clamp_to_nearest: bool) -> Vector3<f32> {
+    fn compute_raw(&self, query: f32, clamp_to_nearest: bool) -> Vector3<f32> {
         if query <= 0.0f32 {
             *self.rgb_colors.first().unwrap()
         } else if query >= 1.0f32 {
@@ -92,17 +92,9 @@ impl PiecewiseLinearColorMap {
             let idx_upp = idx_low + 1;
 
             if clamp_to_nearest {
-                let low_delta = query - self.queries[idx_low];
-                let upp_delta = self.queries[idx_upp] - query;
-                if upp_delta > low_delta {
-                    self.rgb_colors[idx_low]
-                } else {
-                    self.rgb_colors[idx_upp]
-                }
+                self.interpolate_nearest(query, idx_low,idx_upp)
             } else {
-                let alpha = (query - self.queries[idx_low])
-                    / (self.queries[idx_upp] - self.queries[idx_low]);
-                    (1.0 - alpha) * self.rgb_colors[idx_low] +  alpha* self.rgb_colors[idx_upp]
+                self.interpolate_linear(query, idx_low,idx_upp)
             }
         }
     }
@@ -110,6 +102,22 @@ impl PiecewiseLinearColorMap {
     pub fn compute_pixel(&self, query: f32, clamp_to_nearest: bool) -> image::Rgb<u8> {
         let color_rgb = self.compute_raw(query, clamp_to_nearest);
         image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
+    }
+
+    fn interpolate_nearest(&self, query: f32, idx_low: usize, idx_upp: usize)-> Vector3<f32> {
+        let low_delta = query - self.queries[idx_low];
+        let upp_delta = self.queries[idx_upp] - query;
+        if upp_delta > low_delta {
+            self.rgb_colors[idx_low]
+        } else {
+            self.rgb_colors[idx_upp]
+        }
+    }
+
+    fn interpolate_linear(&self, query: f32, idx_low: usize, idx_upp: usize)-> Vector3<f32> {
+        let alpha = (query - self.queries[idx_low])
+        / (self.queries[idx_upp] - self.queries[idx_low]);
+        (1.0 - alpha) * self.rgb_colors[idx_low] +  alpha* self.rgb_colors[idx_upp]
     }
 }
 
