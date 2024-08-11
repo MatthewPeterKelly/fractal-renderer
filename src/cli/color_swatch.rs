@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
-    color_map::{ColorMapKeyFrame, PiecewiseLinearColorMap},
+    color_map::{ColorMap, ColorMapKeyFrame},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
 };
@@ -38,7 +38,7 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         image::ImageBuffer::new(total_width, total_height)
     };
 
-    let user_colormap = PiecewiseLinearColorMap::new(params.keyframes);
+    let user_colormap = ColorMap::new(params.keyframes);
     let uniform_color_map = user_colormap.with_uniform_spacing();
 
     let x_offset = params.border_padding;

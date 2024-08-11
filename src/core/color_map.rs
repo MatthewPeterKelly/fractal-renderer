@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
  * Represents a single "keyframe" of the color map, pairing a
  * "query" with the color that should be produced at that query point.
  */
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ColorMapKeyFrame {
-    pub query: f32,        // specify location of this color within the map; on [0,1]
+    pub query: f32,       // specify location of this color within the map; on [0,1]
     pub rgb_raw: [u8; 3], // [R, G, B]
 }
 
@@ -20,19 +20,25 @@ pub struct ColorMapKeyFrame {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
-pub struct PiecewiseLinearColorMap {
+pub struct ColorMap<F>
+where
+    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
+{
     queries: Vec<f32>,
-    rgb_colors: Vec<Vector3<f32>>,  // [0,255], but as f32
+    rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
+    interpolator: F,
 }
-
-impl PiecewiseLinearColorMap {
+impl<F> ColorMap<F>
+where
+    F: Fn(f32, usize, usize) -> Vector3<f32>,
+{
     /**
      * Create a color map from a vector of keyframes. The queries must be
      * monotonically increasing, and the first keyframe query must be zero
      * and the last keyframe query must be one. Colors are specified in RGB
      * space as `u8` values on [0,255].
      */
-    pub fn new(keyframes: Vec<ColorMapKeyFrame>) -> PiecewiseLinearColorMap {
+    pub fn new(keyframes: &Vec<ColorMapKeyFrame>, interpolator: F) -> ColorMap<F> {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
@@ -57,46 +63,30 @@ impl PiecewiseLinearColorMap {
 
         for keyframe in keyframes {
             queries.push(keyframe.query);
-            rgb_colors.push(Vector3::new(keyframe.rgb_raw[0] as f32, keyframe.rgb_raw[1] as f32, keyframe.rgb_raw[2] as f32));
+            rgb_colors.push(Vector3::new(
+                keyframe.rgb_raw[0] as f32,
+                keyframe.rgb_raw[1] as f32,
+                keyframe.rgb_raw[2] as f32,
+            ));
         }
 
-        PiecewiseLinearColorMap {
+        ColorMap {
             queries,
             rgb_colors,
+            interpolator,
         }
     }
 
     /**
-     * Create a new color map with the same keyframe RGB values, but replace the
-     * query values with a uniformly spaced set of queries. This is largely used
-     * for visualizing the "color swatch".
+     * Create a new keyframe vector, using the same colors, but uniformly spaced queries.
      */
-    pub fn with_uniform_spacing(&self) -> PiecewiseLinearColorMap {
-        PiecewiseLinearColorMap {
-            queries: lin_space(0.0..=1.0, self.queries.len()).collect(),
-            rgb_colors: self.rgb_colors.clone(),
+    pub fn with_uniform_spacing(old_keys: &Vec<ColorMapKeyFrame>) -> Vec<ColorMapKeyFrame> {
+        let queries = lin_space(0.0..=1.0, old_keys.len());
+        let mut new_keys = old_keys.clone();
+        for (query, key) in queries.zip(&mut new_keys) {
+            key.query = query;
         }
-    }
-
-    /**
-     * Evaluates the color map, modestly efficient for small numbers of
-     * keyframes. Any query outside of [0,1] will be clamped.
-     */
-    fn compute_raw(&self, query: f32, clamp_to_nearest: bool) -> Vector3<f32> {
-        if query <= 0.0f32 {
-            *self.rgb_colors.first().unwrap()
-        } else if query >= 1.0f32 {
-            *self.rgb_colors.last().unwrap()
-        } else {
-            let idx_low = linear_index_search(&self.queries, query);
-            let idx_upp = idx_low + 1;
-
-            if clamp_to_nearest {
-                self.interpolate_nearest(query, idx_low,idx_upp)
-            } else {
-                self.interpolate_linear(query, idx_low,idx_upp)
-            }
-        }
+        new_keys
     }
 
     pub fn compute_pixel(&self, query: f32, clamp_to_nearest: bool) -> image::Rgb<u8> {
@@ -104,20 +94,38 @@ impl PiecewiseLinearColorMap {
         image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
     }
 
-    fn interpolate_nearest(&self, query: f32, idx_low: usize, idx_upp: usize)-> Vector3<f32> {
-        let low_delta = query - self.queries[idx_low];
-        let upp_delta = self.queries[idx_upp] - query;
-        if upp_delta > low_delta {
-            self.rgb_colors[idx_low]
-        } else {
-            self.rgb_colors[idx_upp]
+        /**
+         * Evaluates the color map, modestly efficient for small numbers of
+         * keyframes. Any query outside of [0,1] will be clamped.
+         */
+        fn compute_raw(&self, query: f32) -> Vector3<f32> {
+            if query <= 0.0f32 {
+                *self.rgb_colors.first().unwrap()
+            } else if query >= 1.0f32 {
+                *self.rgb_colors.last().unwrap()
+            } else {
+                let idx_low = linear_index_search(&self.queries, query);
+                let idx_upp = idx_low + 1;
+                let alpha = (query - self.queries[idx_low])
+                / (self.queries[idx_upp] - self.queries[idx_low]);
+self.interpolator(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
+            }
+        }
+
+    fn nearest_interpolator() -> impl F {
+
+        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
+           if alpha > 0.5 {
+            v0
+           } else {
+            v1
+           }
         }
     }
 
-    fn interpolate_linear(&self, query: f32, idx_low: usize, idx_upp: usize)-> Vector3<f32> {
-        let alpha = (query - self.queries[idx_low])
-        / (self.queries[idx_upp] - self.queries[idx_low]);
-        (1.0 - alpha) * self.rgb_colors[idx_low] +  alpha* self.rgb_colors[idx_upp]
+    fn linear_interpolator() -> impl F {
+           v0 + (v1 - v0) * alpha
+        }
     }
 }
 
