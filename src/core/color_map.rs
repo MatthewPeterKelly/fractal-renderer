@@ -112,20 +112,22 @@ where
         }
     }
 
-    fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
-        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
-            if alpha > 0.5 {
-                *v0
-            } else {
-                *v1
-            }
+}
+
+
+pub fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
+    move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
+        if alpha > 0.5 {
+            *v0
+        } else {
+            *v1
         }
     }
+}
 
-    fn linear_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
-        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
-            v0 + (v1 - v0) * alpha
-        }
+pub fn linear_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
+    move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
+        v0 + (v1 - v0) * alpha
     }
 }
 
