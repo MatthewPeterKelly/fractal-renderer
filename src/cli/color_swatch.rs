@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::core::{
-    color_map::{linear_interpolator, nearest_interpolator, with_uniform_spacing, ColorMap, ColorMapKeyFrame},
+    color_map::{
+        linear_interpolator, nearest_interpolator, with_uniform_spacing, ColorMap, ColorMapper, ColorMapKeyFrame,
+    },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
 };
@@ -38,24 +40,25 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         image::ImageBuffer::new(total_width, total_height)
     };
 
-    let user_color_map = ColorMap::new(&params.keyframes, linear_interpolator());
-    let sharp_color_map = ColorMap::new(&params.keyframes, nearest_interpolator());
     let uniform_keyframes = with_uniform_spacing(&params.keyframes);
-let uniform_color_map = ColorMap::new(&uniform_keyframes, linear_interpolator());
+    let mut color_maps: Vec<Box<dyn ColorMapper>> = Vec::new();
+    color_maps.push(Box::new(ColorMap::new(&params.keyframes, linear_interpolator())));
+    color_maps.push(Box::new(ColorMap::new(&params.keyframes, nearest_interpolator())));
+    color_maps.push(Box::new(ColorMap::new(&uniform_keyframes, linear_interpolator())));
 
     let x_offset = params.border_padding;
     let mut y_offset = params.border_padding;
     let scale = 1.0 / ((params.swatch_resolution.0 * params.swatch_resolution.1) as f32);
 
-    for color_map in [user_color_map, sharp_color_map, uniform_color_map] {
-            for x_idx in 0..params.swatch_resolution.0 {
-                for y_idx in 0..params.swatch_resolution.1 {
-                    let linear_index = x_idx * params.swatch_resolution.1 + y_idx;
-                    *imgbuf.get_pixel_mut(x_idx + x_offset, y_idx + y_offset) =
-                        color_map.compute_pixel(scale * (linear_index as f32));
-                }
+    for color_map in color_maps {
+        for x_idx in 0..params.swatch_resolution.0 {
+            for y_idx in 0..params.swatch_resolution.1 {
+                let linear_index = x_idx * params.swatch_resolution.1 + y_idx;
+                *imgbuf.get_pixel_mut(x_idx + x_offset, y_idx + y_offset) =
+                    color_map.compute_pixel(scale * (linear_index as f32));
             }
-            y_offset += params.swatch_resolution.1 + params.border_padding;
+        }
+        y_offset += params.swatch_resolution.1 + params.border_padding;
     }
 
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {

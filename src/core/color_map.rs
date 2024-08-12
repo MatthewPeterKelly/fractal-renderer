@@ -12,6 +12,10 @@ pub struct ColorMapKeyFrame {
     pub rgb_raw: [u8; 3], // [R, G, B]
 }
 
+pub trait ColorMapper {
+    fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
+}
+
 /**
  * Simple implementation of a "piecewise linear" color map, where the colors
  * are represented by simple linear interpolation in RGB color space. This is
@@ -28,6 +32,7 @@ where
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
     interpolator: F,
 }
+
 impl<F> ColorMap<F>
 where
     F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
@@ -77,18 +82,6 @@ where
         }
     }
 
-    /**
-     * Create a new keyframe vector, using the same colors, but uniformly spaced queries.
-     */
-    pub fn with_uniform_spacing(old_keys: &Vec<ColorMapKeyFrame>) -> Vec<ColorMapKeyFrame> {
-        let queries = lin_space(0.0..=1.0, old_keys.len());
-        let mut new_keys = old_keys.clone();
-        for (query, key) in queries.zip(&mut new_keys) {
-            key.query = query;
-        }
-        new_keys
-    }
-
     pub fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
         let color_rgb = self.compute_raw(query);
         image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
@@ -111,9 +104,28 @@ where
             (self.interpolator)(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
         }
     }
-
 }
 
+impl<F> ColorMapper for ColorMap<F>
+where
+    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
+{
+    fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
+        self.compute_pixel(query)
+    }
+}
+
+/**
+ * Create a new keyframe vector, using the same colors, but uniformly spaced queries.
+ */
+pub fn with_uniform_spacing(old_keys: &Vec<ColorMapKeyFrame>) -> Vec<ColorMapKeyFrame> {
+    let queries = lin_space(0.0..=1.0, old_keys.len());
+    let mut new_keys = old_keys.clone();
+    for (query, key) in queries.zip(&mut new_keys) {
+        key.query = query;
+    }
+    new_keys
+}
 
 pub fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
     move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
