@@ -30,7 +30,7 @@ where
 }
 impl<F> ColorMap<F>
 where
-    F: Fn(f32, usize, usize) -> Vector3<f32>,
+    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
 {
     /**
      * Create a color map from a vector of keyframes. The queries must be
@@ -89,42 +89,42 @@ where
         new_keys
     }
 
-    pub fn compute_pixel(&self, query: f32, clamp_to_nearest: bool) -> image::Rgb<u8> {
-        let color_rgb = self.compute_raw(query, clamp_to_nearest);
+    pub fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
+        let color_rgb = self.compute_raw(query);
         image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
     }
 
-        /**
-         * Evaluates the color map, modestly efficient for small numbers of
-         * keyframes. Any query outside of [0,1] will be clamped.
-         */
-        fn compute_raw(&self, query: f32) -> Vector3<f32> {
-            if query <= 0.0f32 {
-                *self.rgb_colors.first().unwrap()
-            } else if query >= 1.0f32 {
-                *self.rgb_colors.last().unwrap()
-            } else {
-                let idx_low = linear_index_search(&self.queries, query);
-                let idx_upp = idx_low + 1;
-                let alpha = (query - self.queries[idx_low])
-                / (self.queries[idx_upp] - self.queries[idx_low]);
-self.interpolator(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
-            }
-        }
-
-    fn nearest_interpolator() -> impl F {
-
-        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
-           if alpha > 0.5 {
-            v0
-           } else {
-            v1
-           }
+    /**
+     * Evaluates the color map, modestly efficient for small numbers of
+     * keyframes. Any query outside of [0,1] will be clamped.
+     */
+    fn compute_raw(&self, query: f32) -> Vector3<f32> {
+        if query <= 0.0f32 {
+            *self.rgb_colors.first().unwrap()
+        } else if query >= 1.0f32 {
+            *self.rgb_colors.last().unwrap()
+        } else {
+            let idx_low = linear_index_search(&self.queries, query);
+            let idx_upp = idx_low + 1;
+            let alpha =
+                (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
+            (self.interpolator)(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
         }
     }
 
-    fn linear_interpolator() -> impl F {
-           v0 + (v1 - v0) * alpha
+    fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
+        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
+            if alpha > 0.5 {
+                *v0
+            } else {
+                *v1
+            }
+        }
+    }
+
+    fn linear_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
+        move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
+            v0 + (v1 - v0) * alpha
         }
     }
 }
