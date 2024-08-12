@@ -130,9 +130,9 @@ pub fn with_uniform_spacing(old_keys: &Vec<ColorMapKeyFrame>) -> Vec<ColorMapKey
 pub fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
     move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
         if alpha > 0.5 {
-            *v0
-        } else {
             *v1
+        } else {
+            *v0
         }
     }
 }

@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{
-        linear_interpolator, nearest_interpolator, with_uniform_spacing, ColorMap, ColorMapper, ColorMapKeyFrame,
+        linear_interpolator, nearest_interpolator, with_uniform_spacing, ColorMap,
+        ColorMapKeyFrame, ColorMapper,
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
@@ -31,20 +32,23 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
+    let uniform_keyframes = with_uniform_spacing(&params.keyframes);
+    let color_maps: Vec<Box<dyn ColorMapper>> = vec![
+        Box::new(ColorMap::new(&params.keyframes, linear_interpolator())),
+        Box::new(ColorMap::new(&params.keyframes, nearest_interpolator())),
+        Box::new(ColorMap::new(&uniform_keyframes, linear_interpolator())),
+        Box::new(ColorMap::new(&uniform_keyframes, nearest_interpolator())),
+    ];
+
     // Save the image to a file, deducing the type from the file name
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = {
         let total_width = 2 * params.border_padding + params.swatch_resolution.0;
         let total_height =
-            4 * (params.border_padding + params.swatch_resolution.1) + params.border_padding;
+            (color_maps.len() as u32) * (params.border_padding + params.swatch_resolution.1) + params.border_padding;
         image::ImageBuffer::new(total_width, total_height)
     };
 
-    let uniform_keyframes = with_uniform_spacing(&params.keyframes);
-    let mut color_maps: Vec<Box<dyn ColorMapper>> = Vec::new();
-    color_maps.push(Box::new(ColorMap::new(&params.keyframes, linear_interpolator())));
-    color_maps.push(Box::new(ColorMap::new(&params.keyframes, nearest_interpolator())));
-    color_maps.push(Box::new(ColorMap::new(&uniform_keyframes, linear_interpolator())));
 
     let x_offset = params.border_padding;
     let mut y_offset = params.border_padding;
