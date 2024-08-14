@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::{
     color_map::{
         with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapper, LinearInterpolator,
-        NearestInterpolator,
+        StepInterpolator,
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
@@ -35,9 +35,15 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     let uniform_keyframes = with_uniform_spacing(&params.keyframes);
     let color_maps: Vec<Box<dyn ColorMapper>> = vec![
         Box::new(ColorMap::new(&params.keyframes, LinearInterpolator {})),
-        Box::new(ColorMap::new(&params.keyframes, NearestInterpolator {})),
+        Box::new(ColorMap::new(
+            &params.keyframes,
+            StepInterpolator { threshold: 0.5 },
+        )),
         Box::new(ColorMap::new(&uniform_keyframes, LinearInterpolator {})),
-        Box::new(ColorMap::new(&uniform_keyframes, NearestInterpolator {})),
+        Box::new(ColorMap::new(
+            &uniform_keyframes,
+            StepInterpolator { threshold: 0.5 },
+        )),
     ];
 
     // Save the image to a file, deducing the type from the file name

@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -18,8 +16,12 @@ pub trait ColorMapper {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
 pub trait Interpolator {
-    fn interpolate(query: f32, value_zero: &Vector3<f32>, value_one: &Vector3<f32>)
-        -> Vector3<f32>;
+    fn interpolate(
+        &self,
+        query: f32,
+        value_zero: &Vector3<f32>,
+        value_one: &Vector3<f32>,
+    ) -> Vector3<f32>;
 }
 
 /**
@@ -30,22 +32,21 @@ pub trait Interpolator {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
-pub struct ColorMap<F: Interpolator>
-{
+pub struct ColorMap<F: Interpolator> {
     queries: Vec<f32>,
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
-    _marker: PhantomData<F>,
+    interpolator: F,
 }
 
-impl<F: Interpolator> ColorMap<F>
-{
+impl<F: Interpolator> ColorMap<F> {
     /**
      * Create a color map from a vector of keyframes. The queries must be
+     *
      * monotonically increasing, and the first keyframe query must be zero
      * and the last keyframe query must be one. Colors are specified in RGB
      * space as `u8` values on [0,255].
      */
-    pub fn new(keyframes: &Vec<ColorMapKeyFrame>, _interpolator: F) -> ColorMap<F> {
+    pub fn new(keyframes: &Vec<ColorMapKeyFrame>, interpolator: F) -> ColorMap<F> {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
@@ -80,7 +81,7 @@ impl<F: Interpolator> ColorMap<F>
         ColorMap {
             queries,
             rgb_colors,
-            _marker: PhantomData,
+            interpolator,
         }
     }
 
@@ -103,7 +104,11 @@ impl<F: Interpolator> ColorMap<F>
             let idx_upp = idx_low + 1;
             let alpha =
                 (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
-            F::interpolate(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
+            self.interpolator.interpolate(
+                alpha,
+                &self.rgb_colors[idx_low],
+                &self.rgb_colors[idx_upp],
+            )
         }
     }
 }
@@ -117,15 +122,18 @@ where
     }
 }
 
-pub struct NearestInterpolator {}
+pub struct StepInterpolator {
+    pub threshold: f32,
+}
 
-impl Interpolator for NearestInterpolator {
+impl Interpolator for StepInterpolator {
     fn interpolate(
+        &self,
         query: f32,
         value_zero: &Vector3<f32>,
         value_one: &Vector3<f32>,
     ) -> Vector3<f32> {
-        if query > 0.5 {
+        if query > self.threshold {
             *value_one
         } else {
             *value_zero
@@ -137,6 +145,7 @@ pub struct LinearInterpolator {}
 
 impl Interpolator for LinearInterpolator {
     fn interpolate(
+        &self,
         query: f32,
         value_zero: &Vector3<f32>,
         value_one: &Vector3<f32>,
