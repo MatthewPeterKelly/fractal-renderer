@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -15,6 +17,10 @@ pub struct ColorMapKeyFrame {
 pub trait ColorMapper {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
+pub trait Interpolator {
+    fn interpolate(query: f32, value_zero: &Vector3<f32>, value_one: &Vector3<f32>)
+        -> Vector3<f32>;
+}
 
 /**
  * Simple implementation of a "piecewise linear" color map, where the colors
@@ -24,18 +30,14 @@ pub trait ColorMapper {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
-pub struct ColorMap<F>
-where
-    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
+pub struct ColorMap<F: Interpolator>
 {
     queries: Vec<f32>,
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
-    interpolator: F,
+    _marker: PhantomData<F>,
 }
 
-impl<F> ColorMap<F>
-where
-    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
+impl<F: Interpolator> ColorMap<F>
 {
     /**
      * Create a color map from a vector of keyframes. The queries must be
@@ -78,7 +80,7 @@ where
         ColorMap {
             queries,
             rgb_colors,
-            interpolator,
+            PhantomData::new(interpolator),
         }
     }
 
@@ -101,17 +103,45 @@ where
             let idx_upp = idx_low + 1;
             let alpha =
                 (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
-            (self.interpolator)(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
+            F::interpolate(alpha, &self.rgb_colors[idx_low], &self.rgb_colors[idx_upp])
         }
     }
 }
 
 impl<F> ColorMapper for ColorMap<F>
 where
-    F: Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32>,
+    F: Interpolator,
 {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
         self.compute_pixel(query)
+    }
+}
+
+pub struct NearestInterpolator {}
+
+impl Interpolator for NearestInterpolator {
+    fn interpolate(
+        query: f32,
+        value_zero: &Vector3<f32>,
+        value_one: &Vector3<f32>,
+    ) -> Vector3<f32> {
+        if query > 0.5 {
+            *value_one
+        } else {
+            *value_zero
+        }
+    }
+}
+
+pub struct LinearInterpolator {}
+
+impl Interpolator for LinearInterpolator {
+    fn interpolate(
+        query: f32,
+        value_zero: &Vector3<f32>,
+        value_one: &Vector3<f32>,
+    ) -> Vector3<f32> {
+        value_zero + (value_one - value_zero) * query
     }
 }
 
@@ -125,23 +155,6 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
         key.query = query;
     }
     new_keys
-}
-
-
-pub fn nearest_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
-    move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
-        if alpha > 0.5 {
-            *v1
-        } else {
-            *v0
-        }
-    }
-}
-
-pub fn linear_interpolator() -> impl Fn(f32, &Vector3<f32>, &Vector3<f32>) -> Vector3<f32> {
-    move |alpha: f32, v0: &Vector3<f32>, v1: &Vector3<f32>| -> Vector3<f32> {
-        v0 + (v1 - v0) * alpha
-    }
 }
 
 /**
