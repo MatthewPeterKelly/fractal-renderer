@@ -45,7 +45,7 @@ impl<F: Interpolator> ColorMap<F>
      * and the last keyframe query must be one. Colors are specified in RGB
      * space as `u8` values on [0,255].
      */
-    pub fn new(keyframes: &Vec<ColorMapKeyFrame>, interpolator: F) -> ColorMap<F> {
+    pub fn new(keyframes: &Vec<ColorMapKeyFrame>, _interpolator: F) -> ColorMap<F> {
         if keyframes.is_empty() {
             println!("ERROR:  keyframes are empty!");
             panic!();
@@ -80,7 +80,7 @@ impl<F: Interpolator> ColorMap<F>
         ColorMap {
             queries,
             rgb_colors,
-            PhantomData::new(interpolator),
+            _marker: PhantomData,
         }
     }
 
