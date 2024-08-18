@@ -3,47 +3,15 @@
  * in which a discrete sequence of points is sampled, and rendering those
  * points will converge to some fractal.
  */
-use std::{
-    io::{self, Write},
-    time::{Duration, Instant},
-};
-
 use image::Pixel;
 
 use crate::core::{
     file_io::FilePrefix,
     histogram::Histogram,
-    image_utils::{elapsed_and_reset, ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
+    image_utils::{ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
 };
 
-use super::image_utils::write_image_to_file_or_panic;
-
-/**
- * Timing data, used for simple analysis logging.
- */
-#[derive(Default)]
-pub struct MeasuredElapsedTime {
-    pub setup: Duration,
-    pub sampling: Duration,
-    pub write_raw_png: Duration,
-    pub antialiasing_post_process: Duration,
-}
-
-impl MeasuredElapsedTime {
-    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writeln!(writer, "MeasuredElapsedTime:")?;
-        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
-        writeln!(writer, " -- Sampling: {:?}", self.sampling)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_raw_png)?;
-        writeln!(
-            writer,
-            " -- Antialiasing post-processing:  {:?}",
-            self.antialiasing_post_process
-        )?;
-        writeln!(writer)?;
-        Ok(())
-    }
-}
+use super::{image_utils::write_image_to_file_or_panic, stopwatch::{self, Stopwatch}};
 
 pub struct ColoredPoint {
     pub point: nalgebra::Vector2<f64>,
@@ -66,8 +34,7 @@ pub fn chaos_game_render<D>(
 where
     D: FnMut() -> ColoredPoint,
 {
-    let mut stopwatch: Instant = Instant::now();
-    let mut timer = MeasuredElapsedTime::default();
+    let mut stopwatch = Stopwatch::new("Chaos Game Stopwatch".to_owned());
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
@@ -88,7 +55,7 @@ where
 
     let pixel_mapper = UpsampledPixelMapper::new(image_specification, subpixel_antialiasing);
 
-    timer.setup = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("setup".to_owned());
 
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
@@ -101,12 +68,12 @@ where
         }
     }
 
-    timer.sampling = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("sampling".to_owned());
 
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix("_raw.png"), |f| {
         imgbuf.save(f)
     });
-    timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("write_raw_png".to_owned());
 
     // Scale back the colors toward the background, based on the subpixel sample data:
     let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
@@ -125,15 +92,15 @@ where
         });
         histogram.insert(weight_background);
     }
-    timer.antialiasing_post_process = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("antialiasing_post_process".to_owned());
 
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
-    timer.write_raw_png = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("write_raw_png".to_owned());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
-    timer.display(&mut diagnostics_file)?;
+    stopwatch.display(&mut diagnostics_file)?;
     histogram.display(&mut diagnostics_file)?;
 
     Ok(())
