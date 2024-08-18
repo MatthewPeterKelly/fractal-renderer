@@ -1,9 +1,6 @@
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageSpecification {
@@ -281,15 +278,6 @@ impl Default for SubpixelGridMask {
 
 // Use the PixelMapper to map from "point" to "pixel" space, and then
 // use existing utilitites in the ImageBuffer to draw the pixel at a specific color
-
-/**
- * Small utility function that resets a stopwatch and returns the elapsed time.
- */
-pub fn elapsed_and_reset(stopwatch: &mut Instant) -> Duration {
-    let duration = stopwatch.elapsed();
-    *stopwatch = Instant::now();
-    duration
-}
 
 /**
  * Given image size parameters and a mapping into "regular" space used by the fractal,

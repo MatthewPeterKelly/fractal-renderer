@@ -1,16 +1,11 @@
-use std::{
-    io::{self, Write},
-    time::{Duration, Instant},
-};
-
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
-    image_utils::{
-        elapsed_and_reset, generate_scalar_image, write_image_to_file_or_panic, ImageSpecification,
-    },
+    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
 };
 use serde::{Deserialize, Serialize};
+
+use crate::core::stopwatch::Stopwatch;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
@@ -135,30 +130,6 @@ impl MandelbrotSequence {
     }
 }
 
-#[derive(Default)]
-pub struct MeasuredElapsedTime {
-    pub setup: Duration,
-    pub mandelbrot: Duration,
-    pub histogram: Duration,
-    pub cdf: Duration,
-    pub color_map: Duration,
-    pub write_png: Duration,
-}
-
-impl MeasuredElapsedTime {
-    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writeln!(writer, "MeasuredElapsedTime:")?;
-        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
-        writeln!(writer, " -- Mandelbrot: {:?}", self.mandelbrot)?;
-        writeln!(writer, " -- Histogram:  {:?}", self.histogram)?;
-        writeln!(writer, " -- CDF:        {:?}", self.cdf)?;
-        writeln!(writer, " -- Color Map:  {:?}", self.color_map)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
-        writeln!(writer)?;
-        Ok(())
-    }
-}
-
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
 ) -> impl Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync {
@@ -181,8 +152,7 @@ pub fn render_mandelbrot_set(
     params: &MandelbrotParams,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch: Instant = Instant::now();
-    let mut timer = MeasuredElapsedTime::default();
+    let mut stopwatch = Stopwatch::new("Mandelbrot Render Stopwatch".to_owned());
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
@@ -192,23 +162,22 @@ pub fn render_mandelbrot_set(
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
-    timer.setup = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("setup".to_owned());
 
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
-    timer.mandelbrot = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("mandelbrot sequence".to_owned());
 
     // Compute the histogram by iterating over the raw data.
     let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
     insert_buffer_into_histogram(&raw_data, &mut hist);
-    timer.histogram = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("histogram".to_owned());
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
-
-    timer.cdf = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("CDF".to_owned());
 
     // Iterate over the coordinates and pixels of the image
     let color_map = create_color_map_black_blue_white();
@@ -216,15 +185,15 @@ pub fn render_mandelbrot_set(
         *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    timer.color_map = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("colormap".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
-    timer.write_png = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("write PNG".to_owned());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
 
-    timer.display(&mut diagnostics_file)?;
+    stopwatch.display(&mut diagnostics_file)?;
     cdf.display(&mut diagnostics_file)?;
     hist.display(&mut diagnostics_file)?;
 
