@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-struct Split {
+pub struct Split {
     pub name: String,
     pub duration: Duration,
 }
@@ -48,16 +48,19 @@ impl Stopwatch {
     }
 
     pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        writeln!(writer, "{}:", self.name)?;
         writeln!(
             writer,
-            "Stopwatch: {};  Total elapsed duration: {:?}",
-            self.name,
-            self.total_elapsed()
+            "  total elapsed duration: {:?}",
+            self.total_elapsed(),
         )?;
+        if !self.splits.is_empty() {
+            writeln!(writer, "  splits:")?;
+        }
         for split in self.splits.iter() {
-            write!(writer, "  ");
-            split.display(writer);
-            writeln!(writer);
+            write!(writer, "    ")?;
+            split.display(writer)?;
+            writeln!(writer)?;
         }
         Ok(())
     }
