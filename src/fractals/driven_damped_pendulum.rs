@@ -1,15 +1,10 @@
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    image_utils::{
-        elapsed_and_reset, generate_scalar_image, write_image_to_file_or_panic, ImageSpecification,
-    },
+    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
     ode_solvers::rk4_simulate,
+    stopwatch::Stopwatch,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    io::{self, Write},
-    time::{Duration, Instant},
-};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TimePhaseSpecification {
@@ -106,30 +101,11 @@ pub fn compute_basin_of_attraction(
     None
 }
 
-#[derive(Default)]
-pub struct MeasuredElapsedTime {
-    pub setup: Duration,
-    pub simulation: Duration,
-    pub write_png: Duration,
-}
-
-impl MeasuredElapsedTime {
-    pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        writeln!(writer, "MeasuredElapsedTime:")?;
-        writeln!(writer, " -- Setup:      {:?}", self.setup)?;
-        writeln!(writer, " -- Simulation: {:?}", self.simulation)?;
-        writeln!(writer, " -- Write PNG:  {:?}", self.write_png)?;
-        writeln!(writer)?;
-        Ok(())
-    }
-}
-
 pub fn render_driven_damped_pendulum_attractor(
     params: &DrivenDampedPendulumParams,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch: Instant = Instant::now();
-    let mut timer = MeasuredElapsedTime::default();
+    let mut stopwatch = Stopwatch::new("DDP Stopwatch".to_owned());
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
@@ -141,7 +117,7 @@ pub fn render_driven_damped_pendulum_attractor(
             let scale = (upp - low) / (count as f64);
             let inner_directory_path = file_prefix.full_path_with_suffix("");
             std::fs::create_dir_all(&inner_directory_path).unwrap();
-            timer.setup = elapsed_and_reset(&mut stopwatch);
+            stopwatch.record_split("setup".to_owned());
             for idx in 0..count {
                 let time = low + (idx as f64) * scale;
                 let mut inner_params = params.clone();
@@ -152,8 +128,9 @@ pub fn render_driven_damped_pendulum_attractor(
                 };
                 render_driven_damped_pendulum_attractor(&inner_params, inner_file_prefix)?;
             }
-            timer.simulation = elapsed_and_reset(&mut stopwatch);
-            timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
+            stopwatch.record_split("simulation".to_owned());
+            stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
+
             return Ok(());
         }
     };
@@ -164,7 +141,7 @@ pub fn render_driven_damped_pendulum_attractor(
         params.image_specification.resolution[1],
     );
 
-    timer.setup = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("setup".to_owned());
 
     let subpixel_samples = params
         .image_specification
@@ -194,7 +171,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
-    timer.simulation = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("simulation".to_owned());
 
     // Iterate over the coordinates and pixels of the image
     let color_map = greyscale_color_map();
@@ -205,9 +182,9 @@ pub fn render_driven_damped_pendulum_attractor(
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
-    timer.write_png = elapsed_and_reset(&mut stopwatch);
+    stopwatch.record_split("write_png".to_owned());
 
-    timer.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
+    stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
     Ok(())
 }

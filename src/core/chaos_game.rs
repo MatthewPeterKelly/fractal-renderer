@@ -11,7 +11,7 @@ use crate::core::{
     image_utils::{ImageSpecification, SubpixelGridMask, UpsampledPixelMapper},
 };
 
-use super::{image_utils::write_image_to_file_or_panic, stopwatch::{self, Stopwatch}};
+use super::{image_utils::write_image_to_file_or_panic, stopwatch::Stopwatch};
 
 pub struct ColoredPoint {
     pub point: nalgebra::Vector2<f64>,
