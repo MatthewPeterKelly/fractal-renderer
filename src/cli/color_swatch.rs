@@ -17,6 +17,11 @@ pub struct ColorSwatchParams {
     pub keyframes: Vec<ColorMapKeyFrame>,
 }
 
+pub struct NamedColorMapper {
+    pub name: String,
+    pub color_map: Box<dyn ColorMapper>,
+}
+
 /**
  * Generates a "color swatch" that makes it easier to visualize color maps.
  * -- user spacing, with no interpolation
@@ -33,17 +38,29 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     let uniform_keyframes = with_uniform_spacing(&params.keyframes);
-    let color_maps: Vec<Box<dyn ColorMapper>> = vec![
-        Box::new(ColorMap::new(&params.keyframes, LinearInterpolator {})),
-        Box::new(ColorMap::new(
-            &params.keyframes,
-            StepInterpolator { threshold: 0.5 },
-        )),
-        Box::new(ColorMap::new(&uniform_keyframes, LinearInterpolator {})),
-        Box::new(ColorMap::new(
-            &uniform_keyframes,
-            StepInterpolator { threshold: 0.5 },
-        )),
+    let color_maps: Vec<NamedColorMapper> = vec![
+        NamedColorMapper {
+            name: "user-defined, linear interpolation".to_owned(),
+            color_map: Box::new(ColorMap::new(&params.keyframes, LinearInterpolator {})),
+        },
+        NamedColorMapper {
+            name: "user-defined, nearest interpolation".to_owned(),
+            color_map: Box::new(ColorMap::new(
+                &params.keyframes,
+                StepInterpolator { threshold: 0.5 },
+            )),
+        },
+        NamedColorMapper {
+            name: "uniform-spacing, linear interpolation".to_owned(),
+            color_map: Box::new(ColorMap::new(&uniform_keyframes, LinearInterpolator {})),
+        },
+        NamedColorMapper {
+            name: "uniform-spacing, nearest interpolation".to_owned(),
+            color_map: Box::new(ColorMap::new(
+                &uniform_keyframes,
+                StepInterpolator { threshold: 0.5 },
+            )),
+        },
     ];
 
     // Save the image to a file, deducing the type from the file name
@@ -60,12 +77,12 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     let mut y_offset = params.border_padding;
     let scale = 1.0 / ((params.swatch_resolution.0 * params.swatch_resolution.1) as f32);
 
-    for color_map in color_maps {
+    for named_map in color_maps {
         for x_idx in 0..params.swatch_resolution.0 {
             for y_idx in 0..params.swatch_resolution.1 {
                 let linear_index = x_idx * params.swatch_resolution.1 + y_idx;
                 *imgbuf.get_pixel_mut(x_idx + x_offset, y_idx + y_offset) =
-                    color_map.compute_pixel(scale * (linear_index as f32));
+                    named_map.color_map.compute_pixel(scale * (linear_index as f32));
             }
         }
         y_offset += params.swatch_resolution.1 + params.border_padding;
