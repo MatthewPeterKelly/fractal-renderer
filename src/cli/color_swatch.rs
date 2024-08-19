@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{
-        with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator, StepInterpolator
+        with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper,
+        LinearInterpolator, StepInterpolator,
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
@@ -65,11 +66,17 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         },
         NamedColorMapper {
             name: "user-defined, lookup table 16 entries".to_owned(),
-            color_map: Box::new(ColorMapLookUpTable::new(&ColorMap::new(&params.keyframes, LinearInterpolator {}), 16)),
+            color_map: Box::new(ColorMapLookUpTable::new(
+                &ColorMap::new(&params.keyframes, LinearInterpolator {}),
+                16,
+            )),
         },
         NamedColorMapper {
             name: "user-defined, lookup table 1024 entries".to_owned(),
-            color_map: Box::new(ColorMapLookUpTable::new(&ColorMap::new(&params.keyframes, LinearInterpolator {}), 1024)),
+            color_map: Box::new(ColorMapLookUpTable::new(
+                &ColorMap::new(&params.keyframes, LinearInterpolator {}),
+                1024,
+            )),
         },
     ];
 
@@ -105,6 +112,7 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         stopwatch.record_split(format!("evaluate color map:  {}", named_map.name.clone()));
     }
 
+    // TODO: mystery:  why does it take ~2 seconds to save this image... but only about 2 ms to save other images?
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
