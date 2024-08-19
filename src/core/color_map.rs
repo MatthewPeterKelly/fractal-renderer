@@ -188,17 +188,65 @@ fn linear_index_search(keys: &[f32], query: f32) -> usize {
     // hard limit on upper iteration, to catch bugs
     for _ in 0..keys.len() {
         if query < keys[idx_low] {
+            if idx_low == 0 {
+                println!("ERROR:  query < keys.first()");
+                panic!();
+            }
             idx_low -= 1;
             continue;
         }
         if query >= keys[idx_low + 1] {
+            if idx_low >= (keys.len() - 2) {
+                println!("ERROR:  query > keys.last()");
+                panic!();
+            }
             idx_low += 1;
             continue;
         }
         // [low <= query < upp]  --> success!
         return idx_low;
     }
-
-    println!("ERROR:  Linear keyframe search failed!");
+    println!("ERROR:  internal error -- unreachable!");
     panic!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_linear_index_search_valid_query() {
+        let keys = vec![0.0, 0.5, 1.0];
+        assert_eq!(linear_index_search(&keys, 0.0), 0);
+        assert_eq!(linear_index_search(&keys, 0.1), 0);
+        assert_eq!(linear_index_search(&keys, 0.25), 0);
+        assert_eq!(linear_index_search(&keys, 0.5), 1);
+        assert_eq!(linear_index_search(&keys, 0.75), 1);
+        assert_eq!(linear_index_search(&keys, 0.9), 1);
+        // assert_eq!(linear_index_search(&keys, 1.0), 1);
+    }
+
+    #[test]
+    fn test_linear_index_search_bigger_data_set() {
+        let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
+        // assert_eq!(linear_index_search(&keys, -10.0), 1);
+        assert_eq!(linear_index_search(&keys, -0.5111), 0);
+        assert_eq!(linear_index_search(&keys, -0.4999), 1);
+        assert_eq!(linear_index_search(&keys, 200.0), 3);
+        // assert_eq!(linear_index_search(&keys, 500.0), 1);
+    }
+
+    #[test]
+    fn test_linear_index_search_query_outside_range_low() {
+        let keys = vec![0.0, 0.5, 1.0];
+        let result = std::panic::catch_unwind(|| linear_index_search(&keys, -0.1));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_linear_index_search_query_outside_range_high() {
+        let keys = vec![0.0, 0.5, 1.0];
+        let result = std::panic::catch_unwind(|| linear_index_search(&keys, 1.1));
+        assert!(result.is_err());
+    }
 }
