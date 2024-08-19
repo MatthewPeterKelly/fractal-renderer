@@ -2,6 +2,8 @@ use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
+use super::lookup_table::LookupTable;
+
 /**
  * Represents a single "keyframe" of the color map, pairing a
  * "query" with the color that should be produced at that query point.
@@ -100,8 +102,10 @@ impl<F: Interpolator> ColorMap<F> {
         } else if query >= 1.0f32 {
             *self.rgb_colors.last().unwrap()
         } else {
-            let idx_low = linear_index_search(&self.queries, query);
-            let idx_upp = idx_low + 1;
+            let idx_upp = self
+                .queries
+                .partition_point(|test_query| query >= *test_query);
+            let idx_low = idx_upp - 1;
             let alpha =
                 (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
             self.interpolator.interpolate(
@@ -167,38 +171,25 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
 }
 
 /**
- * Simple linear search, starting from the middle segment, to figure out
- * which segment to evaluate. We could probably be faster by caching the most
- * recent index solution, but that adds complexity and state, which are probably
- * not worth it, given that the plan is to pre-compute the entire color map
- * before rendering the fractal.
- *
- * Preconditions:
- * - `keys` is a sorted vector that is monotonically increasing
- * - `keys` has at least two entries
- * - `query` is spanned by the values in `keys`
- *
- * (Preconditions are not checked because they are enforced by the PiecewisLinearColorMap class invariants.)
- *
- * @return: `idx_low` S.T. keys[idx_low] < query < keys[idx_upp]
+ * Wrapper around a color map that precomputes a look-up table mapping from query
+ * to the resulting color. This makes evaluation much faster.
  */
-fn linear_index_search(keys: &[f32], query: f32) -> usize {
-    let mut idx_low = keys.len() / 2;
+pub struct ColorMapLookUpTable {
+    pub table: LookupTable<image::Rgb<u8>>,
+}
 
-    // hard limit on upper iteration, to catch bugs
-    for _ in 0..keys.len() {
-        if query < keys[idx_low] {
-            idx_low -= 1;
-            continue;
+impl ColorMapLookUpTable {
+    pub fn new<F: ColorMapper>(color_map: &F, entry_count: usize) -> ColorMapLookUpTable {
+        ColorMapLookUpTable {
+            table: LookupTable::new([0.0, 1.0], entry_count, |query: f32| {
+                color_map.compute_pixel(query)
+            }),
         }
-        if query >= keys[idx_low + 1] {
-            idx_low += 1;
-            continue;
-        }
-        // [low <= query < upp]  --> success!
-        return idx_low;
     }
+}
 
-    println!("ERROR:  Linear keyframe search failed!");
-    panic!();
+impl ColorMapper for ColorMapLookUpTable {
+    fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
+        self.table.lookup(query)
+    }
 }

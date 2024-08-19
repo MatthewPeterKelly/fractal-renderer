@@ -1,6 +1,6 @@
 {
-  "swatch_resolution": [1920, 100],
-  "border_padding": 50,
+  "swatch_resolution": [1024, 128],
+  "border_padding": 32,
   "border_color_rgb": [0, 0, 0],
   "keyframes": [
     {
@@ -8,11 +8,11 @@
       "rgb_raw": [255, 0, 0]
     },
     {
-      "query": 0.17,
+      "query": 0.1,
       "rgb_raw": [255, 127, 0]
     },
     {
-      "query": 0.33,
+      "query": 0.2,
       "rgb_raw": [255, 255, 0]
     },
     {
@@ -20,11 +20,11 @@
       "rgb_raw": [0, 255, 0]
     },
     {
-      "query": 0.67,
+      "query": 0.6,
       "rgb_raw": [0, 0, 255]
     },
     {
-      "query": 0.83,
+      "query": 0.9,
       "rgb_raw": [75, 0, 130]
     },
     {
