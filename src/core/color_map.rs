@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -38,6 +40,7 @@ pub struct ColorMap<F: Interpolator> {
     queries: Vec<f32>,
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
     interpolator: F,
+    index_guess: Cell< usize>,
 }
 
 impl<F: Interpolator> ColorMap<F> {
@@ -84,6 +87,7 @@ impl<F: Interpolator> ColorMap<F> {
             queries,
             rgb_colors,
             interpolator,
+            index_guess:Cell::new( (keyframes.len() / 2).clamp(0, keyframes.len() - 1)),
         }
     }
 
@@ -102,8 +106,9 @@ impl<F: Interpolator> ColorMap<F> {
         } else if query >= 1.0f32 {
             *self.rgb_colors.last().unwrap()
         } else {
-            let idx_low = linear_index_search(&self.queries, query);
+            let idx_low = linear_index_search(&self.queries, query, self.index_guess.get());
             let idx_upp = idx_low + 1;
+            self.index_guess.set(idx_low);
             let alpha =
                 (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
             self.interpolator.interpolate(
@@ -182,10 +187,13 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
  *
  * (Preconditions are not checked because they are enforced by the PiecewisLinearColorMap class invariants.)
  *
+ * @paraam query:
+ * @param idx_low: guess for the index
+ *
  * @return: `idx_low` S.T. keys[idx_low] <= query < keys[idx_upp]
  */
-fn linear_index_search(keys: &[f32], query: f32) -> usize {
-    let mut idx_low = keys.len() / 2;
+fn linear_index_search(keys: &[f32], query: f32, index_guess: usize) -> usize {
+    let mut idx_low = index_guess;
 
     // hard limit on upper iteration, to catch bugs
     for _ in 0..keys.len() {
@@ -243,36 +251,40 @@ mod tests {
     #[test]
     fn test_linear_index_search_valid_query() {
         let keys = vec![0.0, 0.5, 1.0];
-        assert_eq!(linear_index_search(&keys, 0.0), 0);
-        assert_eq!(linear_index_search(&keys, 0.1), 0);
-        assert_eq!(linear_index_search(&keys, 0.25), 0);
-        assert_eq!(linear_index_search(&keys, 0.5), 1);
-        assert_eq!(linear_index_search(&keys, 0.75), 1);
-        assert_eq!(linear_index_search(&keys, 0.9), 1);
+        for index_guess in [0, 1] {
+            assert_eq!(linear_index_search(&keys, 0.0, index_guess), 0);
+            assert_eq!(linear_index_search(&keys, 0.1, index_guess), 0);
+            assert_eq!(linear_index_search(&keys, 0.25, index_guess), 0);
+            assert_eq!(linear_index_search(&keys, 0.5, index_guess), 1);
+            assert_eq!(linear_index_search(&keys, 0.75, index_guess), 1);
+            assert_eq!(linear_index_search(&keys, 0.9, index_guess), 1);
+        }
     }
 
     #[test]
     fn test_linear_index_search_bigger_data_set() {
         let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
-        assert_eq!(linear_index_search(&keys, -10.0), 0);
-        assert_eq!(linear_index_search(&keys, -0.5111), 0);
-        assert_eq!(linear_index_search(&keys, -0.4999), 1);
-        assert_eq!(linear_index_search(&keys, 200.0), 3);
+        for index_guess in [0, 3] {
+            assert_eq!(linear_index_search(&keys, -10.0, index_guess), 0);
+            assert_eq!(linear_index_search(&keys, -0.5111, index_guess), 0);
+            assert_eq!(linear_index_search(&keys, -0.4999, index_guess), 1);
+            assert_eq!(linear_index_search(&keys, 200.0, index_guess), 3);
+        }
     }
 
     #[test]
     fn test_linear_index_search_query_invalid() {
         let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
         {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, -400.0));
+            let result = std::panic::catch_unwind(|| linear_index_search(&keys, -400.0, 0));
             assert!(result.is_err());
         }
         {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 500.0));
+            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 500.0, 0));
             assert!(result.is_err());
         }
         {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 600.0));
+            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 600.0, 0));
             assert!(result.is_err());
         }
     }
