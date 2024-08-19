@@ -2,6 +2,8 @@ use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
+use super::lookup_table::LookupTable;
+
 /**
  * Represents a single "keyframe" of the color map, pairing a
  * "query" with the color that should be produced at that query point.
@@ -183,7 +185,6 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
  * @return: `idx_low` S.T. keys[idx_low] <= query < keys[idx_upp]
  */
 fn linear_index_search(keys: &[f32], query: f32) -> usize {
-
     let mut idx_low = keys.len() / 2;
 
     // hard limit on upper iteration, to catch bugs
@@ -209,6 +210,30 @@ fn linear_index_search(keys: &[f32], query: f32) -> usize {
     }
     println!("ERROR:  internal error -- unreachable!");
     panic!();
+}
+
+/**
+ * Wrapper around a color map that precomputes a look-up table mapping from query
+ * to the resulting color. This makes evaluation much faster.
+ */
+pub struct ColorMapLookUpTable {
+    pub table: LookupTable<image::Rgb<u8>>,
+}
+
+impl ColorMapLookUpTable {
+    pub fn new<F: ColorMapper>(color_map: &F, entry_count: usize) -> ColorMapLookUpTable {
+        ColorMapLookUpTable {
+            table: LookupTable::new([0.0, 1.0], entry_count, |query: f32| {
+                color_map.compute_pixel(query)
+            }),
+        }
+    }
+}
+
+impl ColorMapper for ColorMapLookUpTable {
+    fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
+        self.table.lookup(query)
+    }
 }
 
 #[cfg(test)]
@@ -237,7 +262,6 @@ mod tests {
 
     #[test]
     fn test_linear_index_search_query_invalid() {
-
         let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
         {
             let result = std::panic::catch_unwind(|| linear_index_search(&keys, -400.0));

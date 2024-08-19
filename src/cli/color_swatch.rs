@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{
-        with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapper, LinearInterpolator,
-        StepInterpolator,
+        with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator, StepInterpolator
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
@@ -63,6 +62,14 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
                 &uniform_keyframes,
                 StepInterpolator { threshold: 0.5 },
             )),
+        },
+        NamedColorMapper {
+            name: "user-defined, lookup table 16 entries".to_owned(),
+            color_map: Box::new(ColorMapLookUpTable::new(&ColorMap::new(&params.keyframes, LinearInterpolator {}), 16)),
+        },
+        NamedColorMapper {
+            name: "user-defined, lookup table 1024 entries".to_owned(),
+            color_map: Box::new(ColorMapLookUpTable::new(&ColorMap::new(&params.keyframes, LinearInterpolator {}), 1024)),
         },
     ];
 
