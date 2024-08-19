@@ -113,6 +113,7 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     }
 
     // TODO: mystery:  why does it take ~2 seconds to save this image... but only about 2 ms to save other images?
+    // https://github.com/MatthewPeterKelly/fractal-renderer/issues/81
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
