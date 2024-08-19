@@ -1,6 +1,6 @@
 {
-  "swatch_resolution": [4460, 500],
-  "border_padding": 50,
+  "swatch_resolution": [1024, 128],
+  "border_padding": 32,
   "border_color_rgb": [0, 0, 0],
   "keyframes": [
     {
