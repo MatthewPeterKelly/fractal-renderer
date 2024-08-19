@@ -6,7 +6,7 @@ use crate::core::{
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
-    stopwatch::{self, Stopwatch},
+    stopwatch::Stopwatch,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
