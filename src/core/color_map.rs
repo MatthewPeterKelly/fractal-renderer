@@ -102,8 +102,10 @@ impl<F: Interpolator> ColorMap<F> {
         } else if query >= 1.0f32 {
             *self.rgb_colors.last().unwrap()
         } else {
-            let idx_low = linear_index_search(&self.queries, query);
-            let idx_upp = idx_low + 1;
+            let idx_upp = self
+                .queries
+                .partition_point(|test_query| query >= *test_query);
+            let idx_low = idx_upp - 1;
             let alpha =
                 (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
             self.interpolator.interpolate(
@@ -169,50 +171,6 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
 }
 
 /**
- * Simple linear search, starting from the middle segment, to figure out
- * which segment to evaluate. We could probably be faster by caching the most
- * recent index solution, but that adds complexity and state, which are probably
- * not worth it, given that the plan is to pre-compute the entire color map
- * before rendering the fractal.
- *
- * Preconditions:
- * - `keys` is a sorted vector that is monotonically increasing
- * - `keys` has at least two entries
- * - `query` is spanned by the values in `keys`:  [low, upp)
- *
- * (Preconditions are not checked because they are enforced by the PiecewisLinearColorMap class invariants.)
- *
- * @return: `idx_low` S.T. keys[idx_low] <= query < keys[idx_upp]
- */
-fn linear_index_search(keys: &[f32], query: f32) -> usize {
-    let mut idx_low = keys.len() / 2;
-
-    // hard limit on upper iteration, to catch bugs
-    for _ in 0..keys.len() {
-        if query < keys[idx_low] {
-            if idx_low == 0 {
-                println!("ERROR:  query < keys.first()");
-                panic!();
-            }
-            idx_low -= 1;
-            continue;
-        }
-        if query >= keys[idx_low + 1] {
-            if idx_low >= (keys.len() - 2) {
-                println!("ERROR:  query > keys.last()");
-                panic!();
-            }
-            idx_low += 1;
-            continue;
-        }
-        // [low <= query < upp]  --> success!
-        return idx_low;
-    }
-    println!("ERROR:  internal error -- unreachable!");
-    panic!();
-}
-
-/**
  * Wrapper around a color map that precomputes a look-up table mapping from query
  * to the resulting color. This makes evaluation much faster.
  */
@@ -233,47 +191,5 @@ impl ColorMapLookUpTable {
 impl ColorMapper for ColorMapLookUpTable {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
         self.table.lookup(query)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_linear_index_search_valid_query() {
-        let keys = vec![0.0, 0.5, 1.0];
-        assert_eq!(linear_index_search(&keys, 0.0), 0);
-        assert_eq!(linear_index_search(&keys, 0.1), 0);
-        assert_eq!(linear_index_search(&keys, 0.25), 0);
-        assert_eq!(linear_index_search(&keys, 0.5), 1);
-        assert_eq!(linear_index_search(&keys, 0.75), 1);
-        assert_eq!(linear_index_search(&keys, 0.9), 1);
-    }
-
-    #[test]
-    fn test_linear_index_search_bigger_data_set() {
-        let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
-        assert_eq!(linear_index_search(&keys, -10.0), 0);
-        assert_eq!(linear_index_search(&keys, -0.5111), 0);
-        assert_eq!(linear_index_search(&keys, -0.4999), 1);
-        assert_eq!(linear_index_search(&keys, 200.0), 3);
-    }
-
-    #[test]
-    fn test_linear_index_search_query_invalid() {
-        let keys = vec![-10.0, -0.5, 1.0, 1.2, 500.0];
-        {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, -400.0));
-            assert!(result.is_err());
-        }
-        {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 500.0));
-            assert!(result.is_err());
-        }
-        {
-            let result = std::panic::catch_unwind(|| linear_index_search(&keys, 600.0));
-            assert!(result.is_err());
-        }
     }
 }
