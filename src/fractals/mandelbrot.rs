@@ -1,5 +1,5 @@
 use crate::core::{
-    color_map::ColorMapKeyFrame, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification}
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification}
 };
 use serde::{Deserialize, Serialize};
 
@@ -186,13 +186,20 @@ pub fn render_mandelbrot_set(
     let cdf = CumulativeDistributionFunction::new(&hist);
     stopwatch.record_split("CDF".to_owned());
 
-    // Iterate over the coordinates and pixels of the image
-    let color_map = create_color_map_black_blue_white();
+    // Set up the color map:
+    let color_map =ColorMapLookUpTable::new(
+        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
+        params.color_map.lookup_table_count,
+    );
+    stopwatch.record_split("colormap_lookup_table".to_owned());
+
+    // Apply color to each pixel in the image:
+    // TODO:  separate color for the set itself?
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
+        *pixel = color_map.compute_pixel(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    stopwatch.record_split("colormap".to_owned());
+    stopwatch.record_split("apply_color_to_image".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
@@ -207,6 +214,7 @@ pub fn render_mandelbrot_set(
     Ok(())
 }
 
+// TODO:  remove!
 pub fn create_color_map_black_blue_white() -> impl Fn(f32) -> image::Rgb<u8> {
     move |input: f32| {
         const THRESHOLD: f32 = 0.7;
