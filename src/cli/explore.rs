@@ -9,6 +9,7 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     core::{
+        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
         file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
         image_utils::{
@@ -16,10 +17,7 @@ use crate::{
             ImageSpecification, PixelMapper,
         },
     },
-    fractals::{
-        common::FractalParams,
-        mandelbrot::{create_color_map_black_blue_white, mandelbrot_pixel_renderer},
-    },
+    fractals::{common::FractalParams, mandelbrot::mandelbrot_pixel_renderer},
 };
 
 // Parameters for GUI key-press interactions
@@ -40,7 +38,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec, mut histogram) = match params {
+    let (pixel_renderer, image_spec, mut histogram, color_map) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             (
@@ -49,6 +47,10 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 Histogram::new(
                     inner_params.histogram_bin_count,
                     inner_params.max_iter_count as f32,
+                ),
+                ColorMapLookUpTable::new(
+                    &ColorMap::new(&inner_params.color_map.keyframes, LinearInterpolator {}),
+                    inner_params.color_map.lookup_table_count,
                 ),
             )
         }
@@ -86,9 +88,6 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
     // Then properly set up the image resolution here
     let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
-
-    // Allocate memory for color mapping:
-    let color_map = create_color_map_black_blue_white();
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
@@ -261,15 +260,13 @@ impl PixelGrid {
     /**
      *  Renders data from the double buffer to the screen.
      */
-    fn draw<F>(
+    fn draw<F: ColorMapper>(
         &self,
         color_map: &F,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
         screen: &mut [u8],
-    ) where
-        F: Fn(f32) -> image::Rgb<u8>,
-    {
+    ) {
         histogram.clear();
         insert_buffer_into_histogram(&self.display_buffer, histogram);
         cdf.reset(histogram);
@@ -285,20 +282,18 @@ impl PixelGrid {
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
-            let raw_pixel = color_map(cdf.percentile(self.display_buffer[i][j]));
+            let raw_pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j]));
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
     }
 
-    fn render_to_file<F>(
+    fn render_to_file<F: ColorMapper>(
         &self,
         color_map: &F,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
-    ) where
-        F: Fn(f32) -> image::Rgb<u8>,
-    {
+    ) {
         let datetime = date_time_string();
 
         // TODO:  eventually generalize this to write the entire parameter struct:
@@ -320,7 +315,8 @@ impl PixelGrid {
 
         // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            *pixel = color_map(cdf.percentile(self.display_buffer[x as usize][y as usize]));
+            *pixel = color_map
+                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize]));
         }
 
         write_image_to_file_or_panic(

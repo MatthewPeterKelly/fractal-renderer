@@ -1,4 +1,5 @@
 use crate::core::{
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
@@ -8,6 +9,12 @@ use serde::{Deserialize, Serialize};
 use crate::core::stopwatch::Stopwatch;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct ColorMapParams {
+    pub keyframes: Vec<ColorMapKeyFrame>,
+    pub lookup_table_count: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
     pub image_specification: ImageSpecification,
     // Convergence criteria
@@ -15,6 +22,7 @@ pub struct MandelbrotParams {
     pub max_iter_count: u32,
     pub refinement_count: u32,
     pub histogram_bin_count: usize,
+    pub color_map: ColorMapParams,
 }
 
 /**
@@ -179,13 +187,19 @@ pub fn render_mandelbrot_set(
     let cdf = CumulativeDistributionFunction::new(&hist);
     stopwatch.record_split("CDF".to_owned());
 
-    // Iterate over the coordinates and pixels of the image
-    let color_map = create_color_map_black_blue_white();
+    // Set up the color map:
+    let color_map = ColorMapLookUpTable::new(
+        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
+        params.color_map.lookup_table_count,
+    );
+    stopwatch.record_split("colormap_lookup_table".to_owned());
+
+    // Apply color to each pixel in the image:
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(cdf.percentile(raw_data[x as usize][y as usize]));
+        *pixel = color_map.compute_pixel(cdf.percentile(raw_data[x as usize][y as usize]));
     }
 
-    stopwatch.record_split("colormap".to_owned());
+    stopwatch.record_split("apply_color_to_image".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
@@ -198,21 +212,4 @@ pub fn render_mandelbrot_set(
     hist.display(&mut diagnostics_file)?;
 
     Ok(())
-}
-
-pub fn create_color_map_black_blue_white() -> impl Fn(f32) -> image::Rgb<u8> {
-    move |input: f32| {
-        const THRESHOLD: f32 = 0.7;
-        if input > THRESHOLD {
-            let alpha = input - THRESHOLD;
-            const SCALE: f32 = 255.0 / (1.0 - THRESHOLD);
-            let x = (alpha * SCALE) as u8;
-            image::Rgb([x, x, 255])
-        } else {
-            const SCALE: f32 = 255.0 / THRESHOLD;
-            let alpha = input * SCALE;
-            let x = alpha as u8;
-            image::Rgb([0, 0, x])
-        }
-    }
 }
