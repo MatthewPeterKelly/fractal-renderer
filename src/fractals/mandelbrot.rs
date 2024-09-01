@@ -1,10 +1,12 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification}
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+    file_io::{serialize_to_json_or_panic, FilePrefix},
+    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
+    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapParams {
@@ -186,7 +188,7 @@ pub fn render_mandelbrot_set(
     stopwatch.record_split("CDF".to_owned());
 
     // Set up the color map:
-    let color_map =ColorMapLookUpTable::new(
+    let color_map = ColorMapLookUpTable::new(
         &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
         params.color_map.lookup_table_count,
     );

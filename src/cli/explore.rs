@@ -9,15 +9,15 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     core::{
-        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix}, histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram}, image_utils::{
+        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+        file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
+        histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
+        image_utils::{
             create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
             ImageSpecification, PixelMapper,
-        }
+        },
     },
-    fractals::{
-        common::FractalParams,
-        mandelbrot::mandelbrot_pixel_renderer,
-    },
+    fractals::{common::FractalParams, mandelbrot::mandelbrot_pixel_renderer},
 };
 
 // Parameters for GUI key-press interactions
@@ -51,7 +51,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 ColorMapLookUpTable::new(
                     &ColorMap::new(&inner_params.color_map.keyframes, LinearInterpolator {}),
                     inner_params.color_map.lookup_table_count,
-                )
+                ),
             )
         }
         _ => {
@@ -266,8 +266,7 @@ impl PixelGrid {
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
         screen: &mut [u8],
-    )
-    {
+    ) {
         histogram.clear();
         insert_buffer_into_histogram(&self.display_buffer, histogram);
         cdf.reset(histogram);
@@ -294,8 +293,7 @@ impl PixelGrid {
         color_map: &F,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
-    )
-    {
+    ) {
         let datetime = date_time_string();
 
         // TODO:  eventually generalize this to write the entire parameter struct:
@@ -317,7 +315,8 @@ impl PixelGrid {
 
         // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            *pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize]));
+            *pixel = color_map
+                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize]));
         }
 
         write_image_to_file_or_panic(
