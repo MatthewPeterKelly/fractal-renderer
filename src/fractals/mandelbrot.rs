@@ -1,11 +1,17 @@
 use crate::core::{
-    file_io::{serialize_to_json_or_panic, FilePrefix},
-    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
-    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
+    color_map::ColorMapKeyFrame, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification}
 };
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ColorMapParams {
+    pub keyframes: Vec<ColorMapKeyFrame>,
+    pub lookup_table_count: usize,
+    pub rgb_color_mandelbrot_set: [u8; 3],
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
@@ -15,6 +21,7 @@ pub struct MandelbrotParams {
     pub max_iter_count: u32,
     pub refinement_count: u32,
     pub histogram_bin_count: usize,
+    pub color_map: ColorMapParams,
 }
 
 /**
