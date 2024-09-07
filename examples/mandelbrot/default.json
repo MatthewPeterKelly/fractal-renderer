@@ -13,19 +13,15 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [0, 0, 0]
-        },
-        {
-          "query": 0.2,
           "rgb_raw": [50, 0, 100]
         },
         {
           "query": 0.92,
-          "rgb_raw": [20, 0, 240]
+          "rgb_raw": [20, 0, 220]
         },
         {
           "query": 0.97,
-          "rgb_raw": [0, 50, 240]
+          "rgb_raw": [0, 50, 230]
         },
         {
           "query": 1.0,

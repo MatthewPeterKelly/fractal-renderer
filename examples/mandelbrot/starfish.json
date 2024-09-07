@@ -32,7 +32,8 @@
           "rgb_raw": [230, 245, 255]
         }
       ],
-      "lookup_table_count": 512
+      "lookup_table_count": 512,
+      "background_color_rgb": [0, 0, 0]
     }
   }
 }
