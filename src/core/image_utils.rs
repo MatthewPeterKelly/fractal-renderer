@@ -290,11 +290,11 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) -> Vec<Vec<f32>>
+pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) -> Vec<Vec<Option<f32>>>
 where
-    F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
 {
-    let mut raw_data: Vec<Vec<_>> = create_buffer(0f32, &spec.resolution);
+    let mut raw_data: Vec<Vec<_>> = create_buffer(None, &spec.resolution);
     generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
     raw_data
 }
@@ -305,16 +305,15 @@ where
 pub fn generate_scalar_image_in_place<F>(
     spec: &ImageSpecification,
     pixel_renderer: F,
-    raw_data: &mut Vec<Vec<f32>>,
+    raw_data: &mut Vec<Vec<Option<f32>>>,
 ) where
-    F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
 {
     assert_eq!(
         raw_data.len(),
         spec.resolution[0] as usize,
         "Outer dimension mismatch"
     );
-
     let pixel_map_width =
         LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
 
@@ -325,12 +324,11 @@ pub fn generate_scalar_image_in_place<F>(
     );
     raw_data.par_iter_mut().enumerate().for_each(|(x, row)| {
         let re = pixel_map_width.map(x as u32);
-
         assert_eq!(
             row.len(),
             spec.resolution[1] as usize,
             "Inner dimension mismatch"
-        ); // rm?
+        );
         row.iter_mut().enumerate().for_each(|(y, elem)| {
             let im = pixel_map_height.map(y as u32);
             *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));

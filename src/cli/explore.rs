@@ -195,8 +195,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
 #[derive(Clone, Debug)]
 struct PixelGrid {
-    display_buffer: Vec<Vec<f32>>, // rendered to the screen on `draw()`
-    scratch_buffer: Vec<Vec<f32>>, // updated in-place on `update()`
+    display_buffer: Vec<Vec<Option<f32>>>, // rendered to the screen on `draw()`
+    scratch_buffer: Vec<Vec<Option<f32>>>, // updated in-place on `update()`
     image_specification: ImageSpecification,
     update_required: bool, // used to mark when the image_specification has changed.
     file_prefix: FilePrefix, // used for writing intermediate image frames to file
@@ -209,11 +209,11 @@ impl PixelGrid {
         pixel_renderer: F,
     ) -> Self
     where
-        F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+        F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
     {
         let mut grid = Self {
-            display_buffer: create_buffer(0f32, &image_specification.resolution),
-            scratch_buffer: create_buffer(0f32, &image_specification.resolution),
+            display_buffer: create_buffer(None, &image_specification.resolution),
+            scratch_buffer: create_buffer(None, &image_specification.resolution),
             image_specification,
             update_required: true,
             file_prefix,
@@ -246,7 +246,7 @@ impl PixelGrid {
      */
     fn update<F>(&mut self, pixel_renderer: F)
     where
-        F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+        F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
     {
         generate_scalar_image_in_place(
             &self.image_specification,
@@ -282,7 +282,8 @@ impl PixelGrid {
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
-            let raw_pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j]));
+            // TODO:  better support for background color
+            let raw_pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j].unwrap_or(0.0)));
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
@@ -315,8 +316,10 @@ impl PixelGrid {
 
         // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+            // TODO:  better support for background color, also --> we should render what we actually put on the screen.
+            // This is just recomputing it!
             *pixel = color_map
-                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize]));
+                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize].unwrap_or(0.0)));
         }
 
         write_image_to_file_or_panic(
