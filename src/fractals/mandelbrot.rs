@@ -1,12 +1,9 @@
-use std::mem;
-
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
 };
-use image::{Rgb, Rgba};
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
@@ -218,11 +215,6 @@ pub fn render_mandelbrot_set(
     stopwatch.display(&mut diagnostics_file)?;
     cdf.display(&mut diagnostics_file)?;
     hist.display(&mut diagnostics_file)?;
-
-    println!("Size of f32: {}", mem::size_of::<f32>());
-    println!("Size of Option<f32>: {}", mem::size_of::<Option<f32>>());
-    println!("Size of [Rgb<u8>;6]: {}", mem::size_of::<[Rgb<u8>;6]>());
-    println!("Size of Rgba<u8>: {}", mem::size_of::<Rgba<u8>>());
 
     Ok(())
 }
