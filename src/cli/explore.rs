@@ -283,7 +283,8 @@ impl PixelGrid {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
             // TODO:  better support for background color
-            let raw_pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j].unwrap_or(0.0)));
+            let raw_pixel =
+                color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j].unwrap_or(0.0)));
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
@@ -318,8 +319,9 @@ impl PixelGrid {
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
             // TODO:  better support for background color, also --> we should render what we actually put on the screen.
             // This is just recomputing it!
-            *pixel = color_map
-                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize].unwrap_or(0.0)));
+            *pixel = color_map.compute_pixel(
+                cdf.percentile(self.display_buffer[x as usize][y as usize].unwrap_or(0.0)),
+            );
         }
 
         write_image_to_file_or_panic(
