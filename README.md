@@ -33,7 +33,7 @@ cargo run --release -- explore ./examples/mandelbrot/default.json
 ```
 
 ```
-cargo run color-swatch -- examples/color_swatch/rainbow.json
+cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
 ```
 
 ## Autoformatting:
