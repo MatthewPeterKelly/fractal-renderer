@@ -2,8 +2,8 @@
   "Mandelbrot": {
     "image_specification": {
       "resolution": [1920, 1080],
-      "center": [-0.6662520448654659, -0.44206654617502306],
-      "width": 0.05
+      "center": [-0.667644184649272, -0.4560625791666313],
+      "width": 0.05229268716825751
     },
     "escape_radius_squared": 5,
     "max_iter_count": 720,
@@ -17,19 +17,19 @@
         },
         {
           "query": 0.9,
-          "rgb_raw": [50, 0, 100]
+          "rgb_raw": [40, 0, 80]
         },
         {
           "query": 0.94,
-          "rgb_raw": [20, 0, 240]
+          "rgb_raw": [20, 0, 200]
         },
         {
           "query": 0.98,
-          "rgb_raw": [0, 50, 240]
+          "rgb_raw": [0, 50, 250]
         },
         {
           "query": 1.0,
-          "rgb_raw": [230, 245, 255]
+          "rgb_raw": [230, 240, 255]
         }
       ],
       "lookup_table_count": 512,
