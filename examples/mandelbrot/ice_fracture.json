@@ -8,28 +8,32 @@
     "escape_radius_squared": 4,
     "max_iter_count": 550,
     "refinement_count": 5,
-    "histogram_bin_count": 1024,
+    "histogram_bin_count": 32,
     "color_map": {
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [20, 0, 30]
+          "rgb_raw": [10, 0, 20]
         },
         {
-          "query": 0.6,
-          "rgb_raw": [30, 0, 60]
+          "query": 0.9,
+          "rgb_raw": [40, 0, 80]
         },
         {
-          "query": 0.92,
-          "rgb_raw": [30, 50, 120]
+          "query": 0.94,
+          "rgb_raw": [20, 0, 200]
+        },
+        {
+          "query": 0.98,
+          "rgb_raw": [0, 50, 200]
         },
         {
           "query": 1.0,
-          "rgb_raw": [150, 200, 180]
+          "rgb_raw": [230, 245, 255]
         }
       ],
       "lookup_table_count": 512,
-      "background_color_rgb": [100, 0, 0]
+      "background_color_rgb": [0, 0, 0]
     }
   }
 }
