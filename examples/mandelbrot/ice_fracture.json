@@ -2,8 +2,8 @@
   "Mandelbrot": {
     "image_specification": {
       "resolution": [1920, 1080],
-      "center": [-1.3874610407329426, 0.015175617602018132],
-      "width": 0.05
+      "center": [-1.3952321839526187, 0.018220366323002782],
+      "width": 0.013358361379321044
     },
     "escape_radius_squared": 4,
     "max_iter_count": 550,
@@ -13,27 +13,23 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [0, 0, 0]
+          "rgb_raw": [20, 0, 30]
         },
         {
-          "query": 0.9,
-          "rgb_raw": [50, 0, 100]
+          "query": 0.6,
+          "rgb_raw": [30, 0, 60]
         },
         {
-          "query": 0.94,
-          "rgb_raw": [20, 0, 240]
-        },
-        {
-          "query": 0.98,
-          "rgb_raw": [0, 50, 240]
+          "query": 0.92,
+          "rgb_raw": [30, 50, 120]
         },
         {
           "query": 1.0,
-          "rgb_raw": [230, 245, 255]
+          "rgb_raw": [150, 200, 180]
         }
       ],
       "lookup_table_count": 512,
-      "background_color_rgb": [0, 0, 0]
+      "background_color_rgb": [100, 0, 0]
     }
   }
 }
