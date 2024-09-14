@@ -15,7 +15,7 @@ use super::{image_utils::write_image_to_file_or_panic, stopwatch::Stopwatch};
 
 pub struct ColoredPoint {
     pub point: nalgebra::Vector2<f64>,
-    pub color: image::Rgba<u8>,
+    pub color: image::Rgb<u8>,
 }
 
 /**
@@ -24,7 +24,7 @@ pub struct ColoredPoint {
  * file generation and diagnostics.
  */
 pub fn chaos_game_render<D>(
-    background_color: image::Rgba<u8>,
+    background_color: image::Rgb<u8>,
     distribution_generator: &mut D,
     sample_count: u32,
     subpixel_antialiasing: i32,
@@ -37,7 +37,7 @@ where
     let mut stopwatch = Stopwatch::new("Chaos Game Stopwatch".to_owned());
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(
+    let mut imgbuf = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::new(
         image_specification.resolution[0],
         image_specification.resolution[1],
     );

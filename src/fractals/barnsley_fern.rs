@@ -63,8 +63,8 @@ pub struct BarnsleyFernParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
-    pub background_color_rgba: [u8; 4],
-    pub fern_color_rgba: [u8; 4],
+    pub background_color_rgb: [u8; 3],
+    pub fern_color_rgb: [u8; 3],
     pub coeffs: Coeffs,
 }
 
@@ -124,7 +124,7 @@ pub fn render_barnsley_fern(
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
     let mut rng = rand::thread_rng();
     let generator = SampleGenerator::new(&params.coeffs);
-    let fern_color = image::Rgba(params.fern_color_rgba);
+    let fern_color = image::Rgb(params.fern_color_rgb);
 
     let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
@@ -137,7 +137,7 @@ pub fn render_barnsley_fern(
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     chaos_game_render(
-        image::Rgba(params.background_color_rgba),
+        image::Rgb(params.background_color_rgb),
         &mut distribution,
         params.sample_count,
         params.subpixel_antialiasing,
