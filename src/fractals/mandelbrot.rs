@@ -4,6 +4,7 @@ use crate::core::{
     histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
 };
+use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
@@ -141,18 +142,30 @@ impl MandelbrotSequence {
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync {
+) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync   {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
+    let background_color = Rgb(params.color_map.background_color_rgb);
+
+ // TODO:  precompute the histogram and CDF, then fold into the color map
+ let color_map = ColorMapLookUpTable::new(
+    &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
+    params.color_map.lookup_table_count,
+);
 
     move |point: &nalgebra::Vector2<f64>| {
-        MandelbrotSequence::normalized_escape_count(
+       let maybe_value =  MandelbrotSequence::normalized_escape_count(
             point,
             escape_radius_squared,
             max_iter_count,
             refinement_count,
-        )
+        );
+        if let Some(value) = maybe_value {
+            color_map.compute_pixel(value)
+        } else {
+            background_color
+        }
     }
 }
 
@@ -172,36 +185,30 @@ pub fn render_mandelbrot_set(
 
     stopwatch.record_split("setup".to_owned());
 
+
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
     stopwatch.record_split("mandelbrot sequence".to_owned());
 
-    // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
-    insert_buffer_into_histogram(&raw_data, &mut hist);
-    stopwatch.record_split("histogram".to_owned());
+    // // Compute the histogram by iterating over the raw data.
+    // let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
+    // insert_buffer_into_histogram(&raw_data, &mut hist);
+    // stopwatch.record_split("histogram".to_owned());
 
-    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(&hist);
-    stopwatch.record_split("CDF".to_owned());
+    // // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    // let cdf = CumulativeDistributionFunction::new(&hist);
+    // stopwatch.record_split("CDF".to_owned());
 
     // Set up the color map:
-    let color_map = ColorMapLookUpTable::new(
-        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
-        params.color_map.lookup_table_count,
-    );
+
     stopwatch.record_split("colormap_lookup_table".to_owned());
 
     // Apply color to each pixel in the image:
     let background_color = image::Rgb(params.color_map.background_color_rgb);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        if let Some(value) = raw_data[x as usize][y as usize] {
-            *pixel = color_map.compute_pixel(cdf.percentile(value));
-        } else {
-            *pixel = background_color;
-        }
+        *pixel =  raw_data[x as usize][y as usize];
     }
 
     stopwatch.record_split("apply_color_to_image".to_owned());
@@ -213,8 +220,8 @@ pub fn render_mandelbrot_set(
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
 
     stopwatch.display(&mut diagnostics_file)?;
-    cdf.display(&mut diagnostics_file)?;
-    hist.display(&mut diagnostics_file)?;
+    // cdf.display(&mut diagnostics_file)?;
+    // hist.display(&mut diagnostics_file)?;
 
     Ok(())
 }
