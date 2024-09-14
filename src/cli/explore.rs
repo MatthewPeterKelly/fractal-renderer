@@ -1,3 +1,4 @@
+use image::Rgb;
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -38,7 +39,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec, mut histogram, color_map) = match params {
+    let (pixel_renderer, image_spec, mut histogram, color_map, background_color_rgb) = match params
+    {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             (
@@ -52,6 +54,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                     &ColorMap::new(&inner_params.color_map.keyframes, LinearInterpolator {}),
                     inner_params.color_map.lookup_table_count,
                 ),
+                inner_params.color_map.background_color_rgb,
             )
         }
         _ => {
@@ -93,7 +96,13 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(&color_map, &mut histogram, &mut cdf, pixels.frame_mut());
+            pixel_grid.draw(
+                &color_map,
+                image::Rgb(background_color_rgb),
+                &mut histogram,
+                &mut cdf,
+                pixels.frame_mut(),
+            );
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -263,6 +272,7 @@ impl PixelGrid {
     fn draw<F: ColorMapper>(
         &self,
         color_map: &F,
+        background_color: Rgb<u8>,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
         screen: &mut [u8],
@@ -282,9 +292,11 @@ impl PixelGrid {
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
-            // TODO:  better support for background color
-            let raw_pixel =
-                color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j].unwrap_or(0.0)));
+            let raw_pixel = if let Some(value) = self.display_buffer[i][j] {
+                color_map.compute_pixel(cdf.percentile(value))
+            } else {
+                background_color
+            };
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
