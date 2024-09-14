@@ -37,8 +37,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec) = match params
-    {
+    let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             (
@@ -84,9 +83,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(
-                pixels.frame_mut(),
-            );
+            pixel_grid.draw(pixels.frame_mut());
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -180,8 +177,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file(
-                );
+                pixel_grid.render_to_file();
             }
         }
     });
@@ -206,8 +202,8 @@ impl PixelGrid {
         F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
     {
         let mut grid = Self {
-            display_buffer: create_buffer(Rgb([0,0,0]), &image_specification.resolution),
-            scratch_buffer: create_buffer(Rgb([0,0,0]), &image_specification.resolution),
+            display_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
+            scratch_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
             image_specification,
             update_required: true,
             file_prefix,
@@ -254,11 +250,7 @@ impl PixelGrid {
     /**
      *  Renders data from the double buffer to the screen.
      */
-    fn draw(
-        &self,
-        screen: &mut [u8],
-    ) {
-
+    fn draw(&self, screen: &mut [u8]) {
         // The screen buffer should be 4x the size of our buffer because it has RGBA channels
         // where as we only have a scalar channel that is mapped through a color map.
         debug_assert_eq!(
@@ -276,9 +268,7 @@ impl PixelGrid {
         }
     }
 
-    fn render_to_file(
-        &self,
-    ) {
+    fn render_to_file(&self) {
         let datetime = date_time_string();
 
         // TODO:  eventually generalize this to write the entire parameter struct:

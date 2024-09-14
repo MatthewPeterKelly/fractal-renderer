@@ -150,7 +150,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     let pixel_renderer = {
         let subpixel_samples = &subpixel_samples; // Capture by reference
-    let color_map = greyscale_color_map();
+        let color_map = greyscale_color_map();
         move |point: &nalgebra::Vector2<f64>| {
             let mut sum: f32 = 0.0;
 

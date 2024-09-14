@@ -291,14 +291,11 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F>(
-    spec: &ImageSpecification,
-    pixel_renderer: F,
-) -> Vec<Vec<Rgb<u8>>>
+pub fn generate_scalar_image<F>(spec: &ImageSpecification, pixel_renderer: F) -> Vec<Vec<Rgb<u8>>>
 where
     F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
-    let mut raw_data: Vec<Vec<_>> = create_buffer(Rgb([0,0,0]), &spec.resolution);
+    let mut raw_data: Vec<Vec<_>> = create_buffer(Rgb([0, 0, 0]), &spec.resolution);
     generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
     raw_data
 }

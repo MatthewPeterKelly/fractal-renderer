@@ -1,7 +1,6 @@
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
     image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
 };
 use image::Rgb;
@@ -142,20 +141,20 @@ impl MandelbrotSequence {
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync   {
+) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
     let background_color = Rgb(params.color_map.background_color_rgb);
 
- // TODO:  precompute the histogram and CDF, then fold into the color map
- let color_map = ColorMapLookUpTable::new(
-    &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
-    params.color_map.lookup_table_count,
-);
+    // TODO:  precompute the histogram and CDF, then fold into the color map
+    let color_map = ColorMapLookUpTable::new(
+        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
+        params.color_map.lookup_table_count,
+    );
 
     move |point: &nalgebra::Vector2<f64>| {
-       let maybe_value =  MandelbrotSequence::normalized_escape_count(
+        let maybe_value = MandelbrotSequence::normalized_escape_count(
             point,
             escape_radius_squared,
             max_iter_count,
@@ -185,7 +184,6 @@ pub fn render_mandelbrot_set(
 
     stopwatch.record_split("setup".to_owned());
 
-
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
@@ -206,9 +204,8 @@ pub fn render_mandelbrot_set(
     stopwatch.record_split("colormap_lookup_table".to_owned());
 
     // Apply color to each pixel in the image:
-    let background_color = image::Rgb(params.color_map.background_color_rgb);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel =  raw_data[x as usize][y as usize];
+        *pixel = raw_data[x as usize][y as usize];
     }
 
     stopwatch.record_split("apply_color_to_image".to_owned());
