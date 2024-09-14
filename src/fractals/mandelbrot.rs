@@ -12,6 +12,7 @@ use crate::core::stopwatch::Stopwatch;
 pub struct ColorMapParams {
     pub keyframes: Vec<ColorMapKeyFrame>,
     pub lookup_table_count: usize,
+    pub background_color_rgb: [u8; 3],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -140,19 +141,18 @@ impl MandelbrotSequence {
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync {
+) -> impl Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
 
     move |point: &nalgebra::Vector2<f64>| {
-        let result = MandelbrotSequence::normalized_escape_count(
+        MandelbrotSequence::normalized_escape_count(
             point,
             escape_radius_squared,
             max_iter_count,
             refinement_count,
-        );
-        result.unwrap_or(0.0)
+        )
     }
 }
 
@@ -195,8 +195,13 @@ pub fn render_mandelbrot_set(
     stopwatch.record_split("colormap_lookup_table".to_owned());
 
     // Apply color to each pixel in the image:
+    let background_color = image::Rgb(params.color_map.background_color_rgb);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map.compute_pixel(cdf.percentile(raw_data[x as usize][y as usize]));
+        if let Some(value) = raw_data[x as usize][y as usize] {
+            *pixel = color_map.compute_pixel(cdf.percentile(value));
+        } else {
+            *pixel = background_color;
+        }
     }
 
     stopwatch.record_split("apply_color_to_image".to_owned());

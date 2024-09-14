@@ -1,3 +1,4 @@
+use image::Rgb;
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -38,7 +39,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec, mut histogram, color_map) = match params {
+    let (pixel_renderer, image_spec, mut histogram, color_map, background_color_rgb) = match params
+    {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             (
@@ -52,6 +54,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                     &ColorMap::new(&inner_params.color_map.keyframes, LinearInterpolator {}),
                     inner_params.color_map.lookup_table_count,
                 ),
+                inner_params.color_map.background_color_rgb,
             )
         }
         _ => {
@@ -93,7 +96,13 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(&color_map, &mut histogram, &mut cdf, pixels.frame_mut());
+            pixel_grid.draw(
+                &color_map,
+                image::Rgb(background_color_rgb),
+                &mut histogram,
+                &mut cdf,
+                pixels.frame_mut(),
+            );
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -187,7 +196,12 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file(&color_map, &mut histogram, &mut cdf);
+                pixel_grid.render_to_file(
+                    &color_map,
+                    image::Rgb(background_color_rgb),
+                    &mut histogram,
+                    &mut cdf,
+                );
             }
         }
     });
@@ -195,8 +209,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
 #[derive(Clone, Debug)]
 struct PixelGrid {
-    display_buffer: Vec<Vec<f32>>, // rendered to the screen on `draw()`
-    scratch_buffer: Vec<Vec<f32>>, // updated in-place on `update()`
+    display_buffer: Vec<Vec<Option<f32>>>, // rendered to the screen on `draw()`
+    scratch_buffer: Vec<Vec<Option<f32>>>, // updated in-place on `update()`
     image_specification: ImageSpecification,
     update_required: bool, // used to mark when the image_specification has changed.
     file_prefix: FilePrefix, // used for writing intermediate image frames to file
@@ -209,11 +223,11 @@ impl PixelGrid {
         pixel_renderer: F,
     ) -> Self
     where
-        F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+        F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
     {
         let mut grid = Self {
-            display_buffer: create_buffer(0f32, &image_specification.resolution),
-            scratch_buffer: create_buffer(0f32, &image_specification.resolution),
+            display_buffer: create_buffer(None, &image_specification.resolution),
+            scratch_buffer: create_buffer(None, &image_specification.resolution),
             image_specification,
             update_required: true,
             file_prefix,
@@ -246,7 +260,7 @@ impl PixelGrid {
      */
     fn update<F>(&mut self, pixel_renderer: F)
     where
-        F: Fn(&nalgebra::Vector2<f64>) -> f32 + std::marker::Sync,
+        F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
     {
         generate_scalar_image_in_place(
             &self.image_specification,
@@ -263,6 +277,7 @@ impl PixelGrid {
     fn draw<F: ColorMapper>(
         &self,
         color_map: &F,
+        background_color: Rgb<u8>,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
         screen: &mut [u8],
@@ -282,7 +297,11 @@ impl PixelGrid {
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
-            let raw_pixel = color_map.compute_pixel(cdf.percentile(self.display_buffer[i][j]));
+            let raw_pixel = if let Some(value) = self.display_buffer[i][j] {
+                color_map.compute_pixel(cdf.percentile(value))
+            } else {
+                background_color
+            };
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
@@ -291,6 +310,7 @@ impl PixelGrid {
     fn render_to_file<F: ColorMapper>(
         &self,
         color_map: &F,
+        background_color: Rgb<u8>,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
     ) {
@@ -315,8 +335,12 @@ impl PixelGrid {
 
         // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            *pixel = color_map
-                .compute_pixel(cdf.percentile(self.display_buffer[x as usize][y as usize]));
+            // TODO:  we have to duplicate this logic because we double buffer the *input* that computes he RGB pixel, not the output.
+            *pixel = if let Some(value) = self.display_buffer[x as usize][y as usize] {
+                color_map.compute_pixel(cdf.percentile(value))
+            } else {
+                background_color
+            };
         }
 
         write_image_to_file_or_panic(

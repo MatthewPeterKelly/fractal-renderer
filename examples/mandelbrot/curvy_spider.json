@@ -13,15 +13,11 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [0, 0, 0]
+          "rgb_raw": [100, 40, 0]
         },
         {
           "query": 0.9,
-          "rgb_raw": [50, 0, 100]
-        },
-        {
-          "query": 0.94,
-          "rgb_raw": [20, 0, 240]
+          "rgb_raw": [30, 0, 80]
         },
         {
           "query": 0.98,
@@ -32,7 +28,8 @@
           "rgb_raw": [230, 245, 255]
         }
       ],
-      "lookup_table_count": 512
+      "lookup_table_count": 512,
+      "background_color_rgb": [0, 0, 0]
     }
   }
 }

@@ -87,11 +87,11 @@ impl Histogram {
     }
 }
 
-pub fn insert_buffer_into_histogram(raw_data: &[Vec<f32>], histogram: &mut Histogram) {
+pub fn insert_buffer_into_histogram(raw_data: &[Vec<Option<f32>>], histogram: &mut Histogram) {
     raw_data.iter().for_each(|row| {
-        row.iter().for_each(|&val| {
-            if val > 0.0 {
-                histogram.insert(val);
+        row.iter().for_each(|&maybe_value| {
+            if let Some(value) = maybe_value {
+                histogram.insert(value);
             }
         });
     });
