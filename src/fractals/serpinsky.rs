@@ -14,8 +14,8 @@ pub struct SerpinskyParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
     pub subpixel_antialiasing: i32,
-    pub background_color_rgba: [u8; 4],
-    pub vertex_colors_rgba: Vec<[u8; 4]>,
+    pub background_color_rgb: [u8; 3],
+    pub vertex_colors_rgb: Vec<[u8; 3]>,
 }
 
 /**
@@ -53,25 +53,25 @@ fn optimal_contraction_ratio(n: usize) -> f64 {
 struct SampleGenerator {
     distribution: Uniform<usize>, // samples the next vertex to jump to
     vertices: Vec<nalgebra::Vector2<f64>>,
-    colors: Vec<image::Rgba<u8>>,
+    colors: Vec<image::Rgb<u8>>,
     ratio: f64,
 }
 
 impl SampleGenerator {
     pub fn regular_polygon(
-        vertex_colors_rgba: &[[u8; 4]],
+        vertex_colors_rgb: &[[u8; 3]],
         vertices: &[nalgebra::Vector2<f64>],
     ) -> SampleGenerator {
         assert!(!vertices.is_empty());
-        assert_eq!(vertex_colors_rgba.len(), vertices.len());
+        assert_eq!(vertex_colors_rgb.len(), vertices.len());
         SampleGenerator {
-            distribution: Uniform::from(0..vertex_colors_rgba.len()),
+            distribution: Uniform::from(0..vertex_colors_rgb.len()),
             vertices: vertices.to_vec(),
-            colors: vertex_colors_rgba
+            colors: vertex_colors_rgb
                 .iter()
-                .map(|&color| image::Rgba(color))
+                .map(|&color| image::Rgb(color))
                 .collect(),
-            ratio: optimal_contraction_ratio(vertex_colors_rgba.len()),
+            ratio: optimal_contraction_ratio(vertex_colors_rgb.len()),
         }
     }
 
@@ -94,10 +94,10 @@ pub fn render_serpinsky(
     params: &SerpinskyParams,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let vertices = polygon_verticies(params.vertex_colors_rgba.len());
+    let vertices = polygon_verticies(params.vertex_colors_rgb.len());
     let mut sample_point = vertices[0];
     let mut rng = rand::thread_rng();
-    let generator = SampleGenerator::regular_polygon(&params.vertex_colors_rgba, &vertices);
+    let generator = SampleGenerator::regular_polygon(&params.vertex_colors_rgb, &vertices);
 
     let mut distribution = || {
         let next_colored_point = generator.next(&mut rng, &sample_point);
@@ -108,7 +108,7 @@ pub fn render_serpinsky(
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
     chaos_game_render(
-        image::Rgba(params.background_color_rgba),
+        image::Rgb(params.background_color_rgb),
         &mut distribution,
         params.sample_count,
         params.subpixel_antialiasing,

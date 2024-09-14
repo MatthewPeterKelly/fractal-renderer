@@ -6,8 +6,8 @@
     },
     "sample_count": 100000000,
     "subpixel_antialiasing": 8,
-    "background_color_rgba": [0, 0, 0, 255],
-    "fern_color_rgba": [79, 121, 66, 255],
+    "background_color_rgb": [0, 0, 0],
+    "fern_color_rgb": [79, 121, 66],
     "coeffs": {
       "view_rectangle": {
         "center": [0, 5],
