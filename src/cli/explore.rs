@@ -196,7 +196,12 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file(&color_map, image::Rgb( background_color_rgb), &mut histogram, &mut cdf);
+                pixel_grid.render_to_file(
+                    &color_map,
+                    image::Rgb(background_color_rgb),
+                    &mut histogram,
+                    &mut cdf,
+                );
             }
         }
     });
