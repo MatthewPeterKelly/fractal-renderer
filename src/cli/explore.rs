@@ -196,7 +196,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file(&color_map, &mut histogram, &mut cdf);
+                pixel_grid.render_to_file(&color_map, image::Rgb( background_color_rgb), &mut histogram, &mut cdf);
             }
         }
     });
@@ -305,6 +305,7 @@ impl PixelGrid {
     fn render_to_file<F: ColorMapper>(
         &self,
         color_map: &F,
+        background_color: Rgb<u8>,
         histogram: &mut Histogram,
         cdf: &mut CumulativeDistributionFunction,
     ) {
@@ -329,11 +330,12 @@ impl PixelGrid {
 
         // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            // TODO:  better support for background color, also --> we should render what we actually put on the screen.
-            // This is just recomputing it!
-            *pixel = color_map.compute_pixel(
-                cdf.percentile(self.display_buffer[x as usize][y as usize].unwrap_or(0.0)),
-            );
+            // TODO:  we have to duplicate this logic because we double buffer the *input* that computes he RGB pixel, not the output.
+            *pixel = if let Some(value) = self.display_buffer[x as usize][y as usize] {
+                color_map.compute_pixel(cdf.percentile(value))
+            } else {
+                background_color
+            };
         }
 
         write_image_to_file_or_panic(
