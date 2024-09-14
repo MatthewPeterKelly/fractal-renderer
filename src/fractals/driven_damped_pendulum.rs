@@ -150,6 +150,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     let pixel_renderer = {
         let subpixel_samples = &subpixel_samples; // Capture by reference
+    let color_map = greyscale_color_map();
         move |point: &nalgebra::Vector2<f64>| {
             let mut sum: f32 = 0.0;
 
@@ -165,7 +166,7 @@ pub fn render_driven_damped_pendulum_attractor(
                     sum += subpixel_scale;
                 }
             }
-            Some(sum)
+            color_map(sum)
         }
     };
 
@@ -174,9 +175,8 @@ pub fn render_driven_damped_pendulum_attractor(
     stopwatch.record_split("simulation".to_owned());
 
     // Iterate over the coordinates and pixels of the image
-    let color_map = greyscale_color_map();
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = color_map(raw_data[x as usize][y as usize].unwrap_or(0.0));
+        *pixel = raw_data[x as usize][y as usize];
     }
 
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {

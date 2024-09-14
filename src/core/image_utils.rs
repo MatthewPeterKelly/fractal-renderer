@@ -1,3 +1,4 @@
+use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -293,11 +294,11 @@ impl Default for SubpixelGridMask {
 pub fn generate_scalar_image<F>(
     spec: &ImageSpecification,
     pixel_renderer: F,
-) -> Vec<Vec<Option<f32>>>
+) -> Vec<Vec<Rgb<u8>>>
 where
-    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
-    let mut raw_data: Vec<Vec<_>> = create_buffer(None, &spec.resolution);
+    let mut raw_data: Vec<Vec<_>> = create_buffer(Rgb([0,0,0]), &spec.resolution);
     generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
     raw_data
 }
@@ -308,9 +309,9 @@ where
 pub fn generate_scalar_image_in_place<F>(
     spec: &ImageSpecification,
     pixel_renderer: F,
-    raw_data: &mut Vec<Vec<Option<f32>>>,
+    raw_data: &mut Vec<Vec<Rgb<u8>>>,
 ) where
-    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
     assert_eq!(
         raw_data.len(),
