@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+#[derive(Default)]
 pub struct Histogram {
     pub bin_count: Vec<u32>,
     pub data_to_index_scale: f32,

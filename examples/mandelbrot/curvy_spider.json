@@ -8,7 +8,6 @@
     "escape_radius_squared": 5,
     "max_iter_count": 1024,
     "refinement_count": 5,
-    "histogram_bin_count": 1024,
     "color_map": {
       "keyframes": [
         {
@@ -29,7 +28,9 @@
         }
       ],
       "lookup_table_count": 512,
-      "background_color_rgb": [0, 0, 0]
+      "background_color_rgb": [0, 0, 0],
+      "histogram_bin_count": 16,
+      "histogram_sample_count": 500000
     }
   }
 }
