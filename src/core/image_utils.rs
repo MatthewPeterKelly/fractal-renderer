@@ -191,8 +191,8 @@ impl LinearPixelMap {
 
 #[derive(Clone, Debug)]
 pub struct PixelMapper {
-    width: LinearPixelMap,
-    height: LinearPixelMap,
+   pub width: LinearPixelMap,
+    pub height: LinearPixelMap,
 }
 
 // TODO:  standardize on "point" = Vector2 and "pixel_coordinate" = (u32, u32)?

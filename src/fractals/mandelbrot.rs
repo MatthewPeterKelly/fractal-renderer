@@ -1,7 +1,5 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
-    file_io::{serialize_to_json_or_panic, FilePrefix},
-    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper}, lookup_table::LookupTable
 };
 use image::Rgb;
 use serde::{Deserialize, Serialize};
@@ -152,29 +150,38 @@ pub fn mandelbrot_pixel_renderer(
     /////////////////////////////////////////////////////////////////////////
 
 // Create a reduced-resolution pixel map for the histogram samples:
-// let hist_image_spec = params.image_specification.scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
+let hist_image_spec = params.image_specification.scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
+let mut hist = Histogram::new(params.color_map.histogram_bin_count, params.max_iter_count as f32);
+let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-//     // Compute the histogram by iterating over the raw data.
-//     let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
-//     insert_buffer_into_histogram(&raw_data, &mut hist);
-//     stopwatch.record_split("histogram".to_owned());
-
-//     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-//     let cdf = CumulativeDistributionFunction::new(&hist);
-//     stopwatch.record_split("CDF".to_owned());
-
-
-//     stopwatch.record_split("colormap_lookup_table".to_owned());
-
-
-    /////////////////////////////////////////////////////////////////////////
-
-    // TODO:  precompute the histogram and CDF, then fold into the color map
-    let color_map = ColorMapLookUpTable::new(
-        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
-        params.color_map.lookup_table_count,
+for i in 0..hist_image_spec.resolution[0]{
+    let x = pixel_mapper.width.map(i);
+    for j in 0..hist_image_spec.resolution[1] {
+    let y = pixel_mapper.height.map(j);
+    let maybe_value = MandelbrotSequence::normalized_escape_count(
+        &nalgebra::Vector2::new(x,y),
+        escape_radius_squared,
+        max_iter_count,
+        refinement_count,
     );
+    if let Some(value) = maybe_value {
+        hist.insert(value);
+    }
+    }
+}
+
+// Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    let cdf = CumulativeDistributionFunction::new(&hist);
+
+    let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
+
+   let color_map = ColorMapLookUpTable {
+        table: LookupTable::new([0.0, 1.0], params.color_map.lookup_table_count, |query: f32| {
+            let mapped_query = cdf.percentile(query);
+            base_color_map.compute_pixel(mapped_query)
+        }),
+    };
 
     move |point: &nalgebra::Vector2<f64>| {
         let maybe_value = MandelbrotSequence::normalized_escape_count(
