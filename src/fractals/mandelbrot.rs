@@ -13,6 +13,8 @@ pub struct ColorMapParams {
     pub keyframes: Vec<ColorMapKeyFrame>,
     pub lookup_table_count: usize,
     pub background_color_rgb: [u8; 3],
+    pub histogram_bin_count: usize,
+    pub histogram_sample_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,7 +24,7 @@ pub struct MandelbrotParams {
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
     pub refinement_count: u32,
-    pub histogram_bin_count: usize,
+    // All details related to coloring:
     pub color_map: ColorMapParams,
 }
 
@@ -147,6 +149,27 @@ pub fn mandelbrot_pixel_renderer(
     let refinement_count = params.refinement_count;
     let background_color = Rgb(params.color_map.background_color_rgb);
 
+    /////////////////////////////////////////////////////////////////////////
+
+// Create a reduced-resolution pixel map for the histogram samples:
+// let hist_image_spec = params.image_specification.scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
+
+
+//     // Compute the histogram by iterating over the raw data.
+//     let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
+//     insert_buffer_into_histogram(&raw_data, &mut hist);
+//     stopwatch.record_split("histogram".to_owned());
+
+//     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+//     let cdf = CumulativeDistributionFunction::new(&hist);
+//     stopwatch.record_split("CDF".to_owned());
+
+
+//     stopwatch.record_split("colormap_lookup_table".to_owned());
+
+
+    /////////////////////////////////////////////////////////////////////////
+
     // TODO:  precompute the histogram and CDF, then fold into the color map
     let color_map = ColorMapLookUpTable::new(
         &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
@@ -189,19 +212,6 @@ pub fn render_mandelbrot_set(
     let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
 
     stopwatch.record_split("mandelbrot sequence".to_owned());
-
-    // // Compute the histogram by iterating over the raw data.
-    // let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
-    // insert_buffer_into_histogram(&raw_data, &mut hist);
-    // stopwatch.record_split("histogram".to_owned());
-
-    // // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    // let cdf = CumulativeDistributionFunction::new(&hist);
-    // stopwatch.record_split("CDF".to_owned());
-
-    // Set up the color map:
-
-    stopwatch.record_split("colormap_lookup_table".to_owned());
 
     // Apply color to each pixel in the image:
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
