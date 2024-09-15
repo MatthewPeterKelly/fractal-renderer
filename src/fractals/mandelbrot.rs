@@ -231,6 +231,8 @@ pub fn render_mandelbrot_set(
 
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
+    stopwatch.record_split("build renderer".to_owned());
+
     let raw_data =
         generate_scalar_image(&params.image_specification, pixel_renderer, Rgb([0, 0, 0]));
 
