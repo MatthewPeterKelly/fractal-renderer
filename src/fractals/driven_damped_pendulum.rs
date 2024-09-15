@@ -170,7 +170,7 @@ pub fn render_driven_damped_pendulum_attractor(
         }
     };
 
-    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
+    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer, image::Rgb([0, 0, 0]));
 
     stopwatch.record_split("simulation".to_owned());
 

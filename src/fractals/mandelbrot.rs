@@ -209,7 +209,7 @@ pub fn render_mandelbrot_set(
 
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
-    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
+    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer,Rgb([0, 0, 0]));
 
     stopwatch.record_split("mandelbrot sequence".to_owned());
 
