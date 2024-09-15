@@ -191,7 +191,7 @@ impl LinearPixelMap {
 
 #[derive(Clone, Debug)]
 pub struct PixelMapper {
-   pub width: LinearPixelMap,
+    pub width: LinearPixelMap,
     pub height: LinearPixelMap,
 }
 
@@ -313,7 +313,11 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F, E: Clone + Send>(spec: &ImageSpecification, pixel_renderer: F, default_element: E) -> Vec<Vec<E>>
+pub fn generate_scalar_image<F, E: Clone + Send>(
+    spec: &ImageSpecification,
+    pixel_renderer: F,
+    default_element: E,
+) -> Vec<Vec<E>>
 where
     F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
 {
@@ -325,7 +329,7 @@ where
 /**
  * In-place version of the above function.
  */
-pub fn generate_scalar_image_in_place<F,E: Clone+ Send>(
+pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
     spec: &ImageSpecification,
     pixel_renderer: F,
     raw_data: &mut Vec<Vec<E>>,

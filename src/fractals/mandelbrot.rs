@@ -1,5 +1,11 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper}, lookup_table::LookupTable
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+    file_io::{serialize_to_json_or_panic, FilePrefix},
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+    },
+    lookup_table::LookupTable,
 };
 use image::Rgb;
 use serde::{Deserialize, Serialize};
@@ -149,38 +155,47 @@ pub fn mandelbrot_pixel_renderer(
 
     /////////////////////////////////////////////////////////////////////////
 
-// Create a reduced-resolution pixel map for the histogram samples:
-let hist_image_spec = params.image_specification.scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
+    // Create a reduced-resolution pixel map for the histogram samples:
+    let hist_image_spec = params
+        .image_specification
+        .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
-let mut hist = Histogram::new(params.color_map.histogram_bin_count, params.max_iter_count as f32);
-let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-for i in 0..hist_image_spec.resolution[0]{
-    let x = pixel_mapper.width.map(i);
-    for j in 0..hist_image_spec.resolution[1] {
-    let y = pixel_mapper.height.map(j);
-    let maybe_value = MandelbrotSequence::normalized_escape_count(
-        &nalgebra::Vector2::new(x,y),
-        escape_radius_squared,
-        max_iter_count,
-        refinement_count,
+    let mut hist = Histogram::new(
+        params.color_map.histogram_bin_count,
+        params.max_iter_count as f32,
     );
-    if let Some(value) = maybe_value {
-        hist.insert(value);
-    }
-    }
-}
+    let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-// Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    for i in 0..hist_image_spec.resolution[0] {
+        let x = pixel_mapper.width.map(i);
+        for j in 0..hist_image_spec.resolution[1] {
+            let y = pixel_mapper.height.map(j);
+            let maybe_value = MandelbrotSequence::normalized_escape_count(
+                &nalgebra::Vector2::new(x, y),
+                escape_radius_squared,
+                max_iter_count,
+                refinement_count,
+            );
+            if let Some(value) = maybe_value {
+                hist.insert(value);
+            }
+        }
+    }
+
+    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(&hist);
 
     let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
 
-   let color_map = ColorMapLookUpTable {
-        table: LookupTable::new([0.0, 1.0], params.color_map.lookup_table_count, |query: f32| {
-            let mapped_query = cdf.percentile(query);
-            base_color_map.compute_pixel(mapped_query)
-        }),
+    let color_map = ColorMapLookUpTable {
+        table: LookupTable::new(
+            [0.0, 1.0],
+            params.color_map.lookup_table_count,
+            |query: f32| {
+                let mapped_query = cdf.percentile(query);
+                base_color_map.compute_pixel(mapped_query)
+            },
+        ),
     };
 
     move |point: &nalgebra::Vector2<f64>| {
@@ -216,7 +231,8 @@ pub fn render_mandelbrot_set(
 
     let pixel_renderer = mandelbrot_pixel_renderer(params);
 
-    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer,Rgb([0, 0, 0]));
+    let raw_data =
+        generate_scalar_image(&params.image_specification, pixel_renderer, Rgb([0, 0, 0]));
 
     stopwatch.record_split("mandelbrot sequence".to_owned());
 
