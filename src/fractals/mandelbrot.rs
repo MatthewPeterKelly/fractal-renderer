@@ -178,6 +178,10 @@ pub fn mandelbrot_pixel_renderer_with_hist(
         let x = pixel_mapper.width.map(i);
         for j in 0..hist_image_spec.resolution[1] {
             let y = pixel_mapper.height.map(j);
+
+            // TODO:  I think we have bounds all messed up here.
+            // I suspect some on [0,1] and some on [0,N]
+
             let maybe_value = MandelbrotSequence::normalized_escape_count(
                 &nalgebra::Vector2::new(x, y),
                 escape_radius_squared,
@@ -214,7 +218,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
             refinement_count,
         );
         if let Some(value) = maybe_value {
-            color_map.compute_pixel(value)
+            color_map.compute_pixel(value/(max_iter_count as f32))
         } else {
             background_color
         }
