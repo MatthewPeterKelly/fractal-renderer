@@ -1,3 +1,5 @@
+use std::io;
+
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
@@ -174,6 +176,8 @@ pub fn mandelbrot_pixel_renderer_with_hist(
     );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
+    println!("hist_image_spec: {:?}", hist_image_spec);
+
     for i in 0..hist_image_spec.resolution[0] {
         let x = pixel_mapper.width.map(i);
         for j in 0..hist_image_spec.resolution[1] {
@@ -188,14 +192,18 @@ pub fn mandelbrot_pixel_renderer_with_hist(
                 max_iter_count,
                 refinement_count,
             );
+
+            println!("maybe_value: {:?}", maybe_value);
             if let Some(value) = maybe_value {
                 histogram.insert(value);
             }
         }
     }
 
+    let _ = histogram.display(&mut io::stdout());
+
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(&histogram);
+    let cdf = CumulativeDistributionFunction::new(histogram);
 
     let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
 

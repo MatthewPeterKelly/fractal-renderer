@@ -151,9 +151,11 @@ impl CumulativeDistributionFunction {
      */
     pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {
+            println!("data {} <= min: {}!", data, self.min_data);
             return 0.0;
         }
         if data >= self.max_data {
+            println!("data {} <= max: {}!", data, self.max_data);
             return 1.0;
         }
         // Interesting case: linearly interpolate between edges.
