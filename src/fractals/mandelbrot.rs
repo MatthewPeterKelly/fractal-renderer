@@ -193,7 +193,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
                 refinement_count,
             );
 
-            println!("maybe_value: {:?}", maybe_value);
+            // println!("maybe_value: {:?}", maybe_value);
             if let Some(value) = maybe_value {
                 histogram.insert(value);
             }
