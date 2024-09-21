@@ -147,7 +147,7 @@ impl CumulativeDistributionFunction {
 
     /**
      * @param value: data point, same units as would be used in the histogram
-     * @return: fractional position within the population of the histogram
+     * @return: fractional position within the population of the histogram on [0,1]
      */
     pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {

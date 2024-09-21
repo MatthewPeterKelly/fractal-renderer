@@ -12,15 +12,39 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [50, 0, 100]
+          "rgb_raw": [255, 0, 0]
+        },
+        {
+          "query": 0.01,
+          "rgb_raw": [0, 255, 0]
+        },
+        {
+          "query": 0.02,
+          "rgb_raw": [0, 0, 255]
+        },
+        {
+          "query": 0.03,
+          "rgb_raw": [255, 0, 0]
+        },
+        {
+          "query": 0.21,
+          "rgb_raw": [0, 255, 0]
+        },
+        {
+          "query": 0.22,
+          "rgb_raw": [0, 0, 255]
+        },
+        {
+          "query": 0.23,
+          "rgb_raw": [0, 0, 0]
         },
         {
           "query": 0.92,
-          "rgb_raw": [20, 0, 220]
+          "rgb_raw": [100, 100, 100]
         },
         {
           "query": 0.97,
-          "rgb_raw": [0, 50, 230]
+          "rgb_raw": [200, 200, 200]
         },
         {
           "query": 1.0,
@@ -29,8 +53,8 @@
       ],
       "lookup_table_count": 512,
       "background_color_rgb": [0, 0, 0],
-      "histogram_bin_count": 15,
-      "histogram_sample_count": 50000
+      "histogram_bin_count": 50,
+      "histogram_sample_count": 5000000
     }
   }
 }
