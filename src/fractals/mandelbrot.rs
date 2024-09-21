@@ -1,9 +1,13 @@
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    histogram::{insert_buffer_into_histogram, CumulativeDistributionFunction, Histogram},
-    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+    },
+    lookup_table::LookupTable,
 };
+use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
@@ -13,6 +17,8 @@ pub struct ColorMapParams {
     pub keyframes: Vec<ColorMapKeyFrame>,
     pub lookup_table_count: usize,
     pub background_color_rgb: [u8; 3],
+    pub histogram_bin_count: usize,
+    pub histogram_sample_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,7 +28,7 @@ pub struct MandelbrotParams {
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
     pub refinement_count: u32,
-    pub histogram_bin_count: usize,
+    // All details related to coloring:
     pub color_map: ColorMapParams,
 }
 
@@ -141,19 +147,78 @@ impl MandelbrotSequence {
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync {
+) -> (
+    impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+    Histogram,
+    CumulativeDistributionFunction,
+) {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
+    let background_color = Rgb(params.color_map.background_color_rgb);
 
-    move |point: &nalgebra::Vector2<f64>| {
-        MandelbrotSequence::normalized_escape_count(
-            point,
-            escape_radius_squared,
-            max_iter_count,
-            refinement_count,
-        )
+    /////////////////////////////////////////////////////////////////////////
+
+    let max_iteration_domain = params.max_iter_count as f32;
+
+    // Create a reduced-resolution pixel map for the histogram samples:
+    let hist_image_spec = params
+        .image_specification
+        .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
+
+    let mut histogram = Histogram::new(params.color_map.histogram_bin_count, max_iteration_domain);
+    let pixel_mapper = PixelMapper::new(&hist_image_spec);
+
+    for i in 0..hist_image_spec.resolution[0] {
+        let x = pixel_mapper.width.map(i);
+        for j in 0..hist_image_spec.resolution[1] {
+            let y = pixel_mapper.height.map(j);
+            let maybe_value = MandelbrotSequence::normalized_escape_count(
+                &nalgebra::Vector2::new(x, y),
+                escape_radius_squared,
+                max_iter_count,
+                refinement_count,
+            );
+
+            if let Some(value) = maybe_value {
+                histogram.insert(value);
+            }
+        }
     }
+
+    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    let cdf = CumulativeDistributionFunction::new(&histogram);
+
+    let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
+
+    let color_map = ColorMapLookUpTable {
+        table: LookupTable::new(
+            [0.0, max_iteration_domain],
+            params.color_map.lookup_table_count,
+            |query: f32| {
+                let mapped_query = cdf.percentile(query);
+                base_color_map.compute_pixel(mapped_query)
+            },
+        ),
+    };
+
+    (
+        move |point: &nalgebra::Vector2<f64>| {
+            let maybe_value = MandelbrotSequence::normalized_escape_count(
+                point,
+                escape_radius_squared,
+                max_iter_count,
+                refinement_count,
+            );
+            if let Some(value) = maybe_value {
+                color_map.compute_pixel(value)
+            } else {
+                background_color
+            }
+        },
+        histogram,
+        cdf,
+    )
 }
 
 pub fn render_mandelbrot_set(
@@ -170,51 +235,32 @@ pub fn render_mandelbrot_set(
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
-    stopwatch.record_split("setup".to_owned());
+    stopwatch.record_split("basic setup".to_owned());
 
-    let pixel_renderer = mandelbrot_pixel_renderer(params);
+    let (pixel_renderer, histogram, cdf) = mandelbrot_pixel_renderer(params);
 
-    let raw_data = generate_scalar_image(&params.image_specification, pixel_renderer);
+    stopwatch.record_split("build renderer".to_owned());
 
-    stopwatch.record_split("mandelbrot sequence".to_owned());
+    let raw_data =
+        generate_scalar_image(&params.image_specification, pixel_renderer, Rgb([0, 0, 0]));
 
-    // Compute the histogram by iterating over the raw data.
-    let mut hist = Histogram::new(params.histogram_bin_count, params.max_iter_count as f32);
-    insert_buffer_into_histogram(&raw_data, &mut hist);
-    stopwatch.record_split("histogram".to_owned());
-
-    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(&hist);
-    stopwatch.record_split("CDF".to_owned());
-
-    // Set up the color map:
-    let color_map = ColorMapLookUpTable::new(
-        &ColorMap::new(&params.color_map.keyframes, LinearInterpolator {}),
-        params.color_map.lookup_table_count,
-    );
-    stopwatch.record_split("colormap_lookup_table".to_owned());
+    stopwatch.record_split("compute mandelbrot sequence".to_owned());
 
     // Apply color to each pixel in the image:
-    let background_color = image::Rgb(params.color_map.background_color_rgb);
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        if let Some(value) = raw_data[x as usize][y as usize] {
-            *pixel = color_map.compute_pixel(cdf.percentile(value));
-        } else {
-            *pixel = background_color;
-        }
+        *pixel = raw_data[x as usize][y as usize];
     }
 
-    stopwatch.record_split("apply_color_to_image".to_owned());
+    stopwatch.record_split("copy into image buffer".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
     });
     stopwatch.record_split("write PNG".to_owned());
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
-
     stopwatch.display(&mut diagnostics_file)?;
+    histogram.display(&mut diagnostics_file)?;
     cdf.display(&mut diagnostics_file)?;
-    hist.display(&mut diagnostics_file)?;
 
     Ok(())
 }

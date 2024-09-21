@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+#[derive(Default)]
 pub struct Histogram {
     pub bin_count: Vec<u32>,
     pub data_to_index_scale: f32,
@@ -23,7 +24,6 @@ impl Histogram {
     }
 
     // Insert a data point into the histogram
-    // TODO:  template on data type
     pub fn insert(&mut self, data: f32) {
         if data < 0.0 {
             self.bin_count[0] += 1;
@@ -34,12 +34,6 @@ impl Histogram {
             *self.bin_count.last_mut().unwrap() += 1;
         } else {
             self.bin_count[index] += 1;
-        }
-    }
-
-    pub fn clear(&mut self) {
-        for bin in &mut self.bin_count {
-            *bin = 0;
         }
     }
 
@@ -85,16 +79,6 @@ impl Histogram {
         writeln!(writer)?;
         Ok(())
     }
-}
-
-pub fn insert_buffer_into_histogram(raw_data: &[Vec<Option<f32>>], histogram: &mut Histogram) {
-    raw_data.iter().for_each(|row| {
-        row.iter().for_each(|&maybe_value| {
-            if let Some(value) = maybe_value {
-                histogram.insert(value);
-            }
-        });
-    });
 }
 
 #[derive(Debug)]
@@ -146,19 +130,19 @@ impl CumulativeDistributionFunction {
 
     /**
      * @param value: data point, same units as would be used in the histogram
-     * @return: fractional position within the population of the histogram
+     * @return: fractional position within the population of the histogram on [0,1]
      */
     pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {
             return 0.0;
         }
-        if data >= self.max_data {
+        let bin_index = (data * self.data_to_index_scale) as usize;
+        if bin_index >= self.offset.len() {
             return 1.0;
         }
         // Interesting case: linearly interpolate between edges.
         // Interpolating coefficients are pre-computed in the constructor
-        let index = (data * self.data_to_index_scale) as usize;
-        self.offset[index] + data * self.scale[index]
+        self.offset[bin_index] + data * self.scale[bin_index]
     }
 
     /**
@@ -175,7 +159,7 @@ impl CumulativeDistributionFunction {
         let scale = 1.0 / self.data_to_index_scale;
         for i in 0..(n_bins + 1) {
             let data = (i as f32) * scale;
-            writeln!(writer, "  {:.1}  -->  {:.4}", data, self.percentile(data))?;
+            writeln!(writer, "  {:.2}  -->  {:.4}", data, self.percentile(data))?;
         }
         writeln!(writer)?;
         Ok(())

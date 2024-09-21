@@ -59,6 +59,28 @@ impl ImageSpecification {
             width: self.width,
         }
     }
+
+    /**
+     * Returns a new image specification object with the same center and width, but
+     * with a resolution scaled to approximately hit the target number of pixels.
+     * Implemented by rescaling the resolution of each axis and rounding up to the nearest
+     * integer.
+     *
+     * @param: target pixel count in the new image, lower bound.
+     */
+    pub fn scale_to_total_pixel_count(&self, target_pixel_count: i32) -> ImageSpecification {
+        assert!(target_pixel_count > 0);
+        let old_pixel_count = self.resolution[0] * self.resolution[1];
+        let scale = ((target_pixel_count as f64) / (old_pixel_count as f64)).sqrt();
+        ImageSpecification {
+            resolution: nalgebra::Vector2::new(
+                (self.resolution[0] as f64 * scale).ceil() as u32,
+                (self.resolution[1] as f64 * scale).ceil() as u32,
+            ),
+            center: self.center,
+            width: self.width,
+        }
+    }
 }
 
 pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) -> Vec<Vec<T>> {
@@ -168,8 +190,8 @@ impl LinearPixelMap {
 
 #[derive(Clone, Debug)]
 pub struct PixelMapper {
-    width: LinearPixelMap,
-    height: LinearPixelMap,
+    pub width: LinearPixelMap,
+    pub height: LinearPixelMap,
 }
 
 // TODO:  standardize on "point" = Vector2 and "pixel_coordinate" = (u32, u32)?
@@ -290,14 +312,15 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F>(
+pub fn generate_scalar_image<F, E: Clone + Send>(
     spec: &ImageSpecification,
     pixel_renderer: F,
-) -> Vec<Vec<Option<f32>>>
+    default_element: E,
+) -> Vec<Vec<E>>
 where
-    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
 {
-    let mut raw_data: Vec<Vec<_>> = create_buffer(None, &spec.resolution);
+    let mut raw_data: Vec<Vec<_>> = create_buffer(default_element, &spec.resolution);
     generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
     raw_data
 }
@@ -305,12 +328,12 @@ where
 /**
  * In-place version of the above function.
  */
-pub fn generate_scalar_image_in_place<F>(
+pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
     spec: &ImageSpecification,
     pixel_renderer: F,
-    raw_data: &mut Vec<Vec<Option<f32>>>,
+    raw_data: &mut Vec<Vec<E>>,
 ) where
-    F: Fn(&nalgebra::Vector2<f64>) -> Option<f32> + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
 {
     assert_eq!(
         raw_data.len(),
@@ -353,6 +376,7 @@ mod tests {
     use std::{collections::BTreeSet, iter::FromIterator};
 
     use super::*;
+    use nalgebra::Vector2;
     use ordered_float::OrderedFloat;
 
     #[test]
@@ -508,5 +532,19 @@ mod tests {
         let tol = 1e-6;
         assert_relative_eq!(pixel_map.map(0), x0, epsilon = tol);
         assert_relative_eq!(pixel_map.map(n - 1), x1, epsilon = tol);
+    }
+
+    #[test]
+    fn test_scale_to_total_pixel_count() {
+        let image_spec = ImageSpecification {
+            resolution: Vector2::new(800, 600),
+            center: Vector2::new(0.0, 0.0),
+            width: 1.0,
+        };
+
+        let scaled_spec = image_spec.scale_to_total_pixel_count(32);
+        assert_eq!(scaled_spec.center, image_spec.center);
+        assert_eq!(scaled_spec.width, image_spec.width);
+        assert_eq!(scaled_spec.resolution, Vector2::new(7, 5));
     }
 }
