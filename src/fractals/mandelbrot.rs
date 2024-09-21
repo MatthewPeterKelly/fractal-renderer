@@ -159,7 +159,7 @@ pub fn mandelbrot_pixel_renderer(
 
     /////////////////////////////////////////////////////////////////////////
 
-    let max_iteration_domain = (1.0 + (params.max_iter_count as f32)).ln();
+    let max_iteration_domain = params.max_iter_count as f32;
 
     // Create a reduced-resolution pixel map for the histogram samples:
     let hist_image_spec = params
@@ -181,7 +181,7 @@ pub fn mandelbrot_pixel_renderer(
             );
 
             if let Some(value) = maybe_value {
-                histogram.insert((value + 1.0).ln());
+                histogram.insert(value);
             }
         }
     }
@@ -211,7 +211,7 @@ pub fn mandelbrot_pixel_renderer(
                 refinement_count,
             );
             if let Some(value) = maybe_value {
-                color_map.compute_pixel((value + 1.0).ln())
+                color_map.compute_pixel(value)
             } else {
                 background_color
             }
