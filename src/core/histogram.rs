@@ -159,7 +159,7 @@ impl CumulativeDistributionFunction {
         let scale = 1.0 / self.data_to_index_scale;
         for i in 0..(n_bins + 1) {
             let data = (i as f32) * scale;
-            writeln!(writer, "  {:.1}  -->  {:.4}", data, self.percentile(data))?;
+            writeln!(writer, "  {:.2}  -->  {:.4}", data, self.percentile(data))?;
         }
         writeln!(writer)?;
         Ok(())

@@ -1,9 +1,7 @@
-use std::io::{self, Write};
-
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    histogram::{self, CumulativeDistributionFunction, Histogram},
+    histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
     },

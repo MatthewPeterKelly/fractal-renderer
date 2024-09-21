@@ -1,4 +1,3 @@
-use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
