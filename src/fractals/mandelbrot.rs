@@ -165,6 +165,8 @@ pub fn mandelbrot_pixel_renderer_with_hist(
 
     /////////////////////////////////////////////////////////////////////////
 
+    let max_iteration_domain = params.max_iter_count as f32;
+
     // Create a reduced-resolution pixel map for the histogram samples:
     let hist_image_spec = params
         .image_specification
@@ -172,7 +174,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
 
         *histogram= Histogram::new(
         params.color_map.histogram_bin_count,
-        params.max_iter_count as f32,
+        max_iteration_domain,
     );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
@@ -193,8 +195,6 @@ pub fn mandelbrot_pixel_renderer_with_hist(
         }
     }
 
-    let _ = histogram.display(&mut io::stdout());
-
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
     let cdf = CumulativeDistributionFunction::new(histogram);
 
@@ -202,7 +202,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
 
     let color_map = ColorMapLookUpTable {
         table: LookupTable::new(
-            [0.0, params.max_iter_count as f32],
+            [0.0, max_iteration_domain],
             params.color_map.lookup_table_count,
             |query: f32| {
                 let mapped_query = cdf.percentile(query);
