@@ -149,7 +149,11 @@ impl MandelbrotSequence {
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
+) -> (
+    impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+    Histogram,
+    CumulativeDistributionFunction,
+) {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
@@ -200,19 +204,23 @@ pub fn mandelbrot_pixel_renderer(
         ),
     };
 
-    move |point: &nalgebra::Vector2<f64>| {
-        let maybe_value = MandelbrotSequence::normalized_escape_count(
-            point,
-            escape_radius_squared,
-            max_iter_count,
-            refinement_count,
-        );
-        if let Some(value) = maybe_value {
-            color_map.compute_pixel((value + 1.0).ln())
-        } else {
-            background_color
-        }
-    }
+    (
+        move |point: &nalgebra::Vector2<f64>| {
+            let maybe_value = MandelbrotSequence::normalized_escape_count(
+                point,
+                escape_radius_squared,
+                max_iter_count,
+                refinement_count,
+            );
+            if let Some(value) = maybe_value {
+                color_map.compute_pixel((value + 1.0).ln())
+            } else {
+                background_color
+            }
+        },
+        histogram,
+        cdf,
+    )
 }
 
 pub fn render_mandelbrot_set(
@@ -231,9 +239,7 @@ pub fn render_mandelbrot_set(
 
     stopwatch.record_split("basic setup".to_owned());
 
-    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
-
-    let pixel_renderer = mandelbrot_pixel_renderer(params);
+    let (pixel_renderer, histogram, cdf) = mandelbrot_pixel_renderer(params);
 
     stopwatch.record_split("build renderer".to_owned());
 
@@ -253,7 +259,10 @@ pub fn render_mandelbrot_set(
     });
     stopwatch.record_split("write PNG".to_owned());
 
+    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
     stopwatch.display(&mut diagnostics_file)?;
+    histogram.display(&mut diagnostics_file)?;
+    cdf.display(&mut diagnostics_file)?;
 
     Ok(())
 }

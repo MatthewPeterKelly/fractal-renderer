@@ -40,10 +40,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            (
-                mandelbrot_pixel_renderer(inner_params),
-                inner_params.image_specification.clone(),
-            )
+            let (renderer, _, _) = mandelbrot_pixel_renderer(inner_params);
+            (renderer, inner_params.image_specification.clone())
         }
         _ => {
             println!("ERROR:  Unsupported fractal parameter type. Aborting.");
