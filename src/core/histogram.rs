@@ -7,6 +7,10 @@ pub struct Histogram {
     pub bin_width: f32,
 }
 
+
+// TODO:  make the histogram in log space
+
+
 /**
  * Fast and simple histogram for non-negative data.
  */
