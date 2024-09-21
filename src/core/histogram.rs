@@ -24,7 +24,6 @@ impl Histogram {
     }
 
     // Insert a data point into the histogram
-    // TODO:  template on data type
     pub fn insert(&mut self, data: f32) {
         if data < 0.0 {
             self.bin_count[0] += 1;
@@ -35,12 +34,6 @@ impl Histogram {
             *self.bin_count.last_mut().unwrap() += 1;
         } else {
             self.bin_count[index] += 1;
-        }
-    }
-
-    pub fn clear(&mut self) {
-        for bin in &mut self.bin_count {
-            *bin = 0;
         }
     }
 
@@ -141,22 +134,15 @@ impl CumulativeDistributionFunction {
      */
     pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {
-            // println!("data {} <= min: {}!", data, self.min_data);
             return 0.0;
         }
-        if data >= self.max_data {
-            // println!("data {} <= max: {}!", data, self.max_data);
+        let bin_index = (data * self.data_to_index_scale) as usize;
+        if bin_index >= self.offset.len() {
             return 1.0;
         }
         // Interesting case: linearly interpolate between edges.
         // Interpolating coefficients are pre-computed in the constructor
-        let index = (data * self.data_to_index_scale) as usize;
-        if index >= self.offset.len(){
-            println!("BAD!");
-            0.0
-        } else {
-            self.offset[index] + data * self.scale[index]
-        }
+        self.offset[bin_index] + data * self.scale[bin_index]
     }
 
     /**
