@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write};
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
@@ -150,14 +150,6 @@ impl MandelbrotSequence {
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
 ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
-    mandelbrot_pixel_renderer_with_hist(params, & mut Histogram::default())
-}
-
-
-pub fn mandelbrot_pixel_renderer_with_hist(
-    params: &MandelbrotParams,
-    histogram: &mut Histogram,
-) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
@@ -172,10 +164,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
         .image_specification
         .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
-        *histogram= Histogram::new(
-        params.color_map.histogram_bin_count,
-        max_iteration_domain,
-    );
+    let mut histogram = Histogram::new(params.color_map.histogram_bin_count, max_iteration_domain);
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
     for i in 0..hist_image_spec.resolution[0] {
@@ -196,7 +185,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
     }
 
     // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(histogram);
+    let cdf = CumulativeDistributionFunction::new(&histogram);
 
     let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
 
@@ -242,8 +231,9 @@ pub fn render_mandelbrot_set(
 
     stopwatch.record_split("basic setup".to_owned());
 
-    let mut histogram = Histogram::default();
-    let pixel_renderer = mandelbrot_pixel_renderer_with_hist(params, &mut histogram);
+    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
+
+    let pixel_renderer = mandelbrot_pixel_renderer(params);
 
     stopwatch.record_split("build renderer".to_owned());
 
@@ -263,10 +253,7 @@ pub fn render_mandelbrot_set(
     });
     stopwatch.record_split("write PNG".to_owned());
 
-    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
-
     stopwatch.display(&mut diagnostics_file)?;
-    histogram.display(&mut diagnostics_file)?;
 
     Ok(())
 }

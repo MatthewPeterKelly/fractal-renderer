@@ -7,10 +7,6 @@ pub struct Histogram {
     pub bin_width: f32,
 }
 
-
-// TODO:  make the histogram in log space
-
-
 /**
  * Fast and simple histogram for non-negative data.
  */
@@ -92,16 +88,6 @@ impl Histogram {
     }
 }
 
-pub fn insert_buffer_into_histogram(raw_data: &[Vec<Option<f32>>], histogram: &mut Histogram) {
-    raw_data.iter().for_each(|row| {
-        row.iter().for_each(|&maybe_value| {
-            if let Some(value) = maybe_value {
-                histogram.insert(value);
-            }
-        });
-    });
-}
-
 #[derive(Debug)]
 pub struct CumulativeDistributionFunction {
     pub offset: Vec<f32>, // n_bins
@@ -165,7 +151,12 @@ impl CumulativeDistributionFunction {
         // Interesting case: linearly interpolate between edges.
         // Interpolating coefficients are pre-computed in the constructor
         let index = (data * self.data_to_index_scale) as usize;
-        self.offset[index] + data * self.scale[index]
+        if index >= self.offset.len(){
+            println!("BAD!");
+            0.0
+        } else {
+            self.offset[index] + data * self.scale[index]
+        }
     }
 
     /**

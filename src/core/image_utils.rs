@@ -539,7 +539,7 @@ mod tests {
     fn test_scale_to_total_pixel_count() {
         let image_spec = ImageSpecification {
             resolution: Vector2::new(800, 600),
-            center: Vector2::new(0.0,0.0),
+            center: Vector2::new(0.0, 0.0),
             width: 1.0,
         };
 
