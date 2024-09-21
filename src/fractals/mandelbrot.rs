@@ -176,16 +176,10 @@ pub fn mandelbrot_pixel_renderer_with_hist(
     );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-    println!("hist_image_spec: {:?}", hist_image_spec);
-
     for i in 0..hist_image_spec.resolution[0] {
         let x = pixel_mapper.width.map(i);
         for j in 0..hist_image_spec.resolution[1] {
             let y = pixel_mapper.height.map(j);
-
-            // TODO:  I think we have bounds all messed up here.
-            // I suspect some on [0,1] and some on [0,N]
-
             let maybe_value = MandelbrotSequence::normalized_escape_count(
                 &nalgebra::Vector2::new(x, y),
                 escape_radius_squared,
@@ -193,7 +187,6 @@ pub fn mandelbrot_pixel_renderer_with_hist(
                 refinement_count,
             );
 
-            // println!("maybe_value: {:?}", maybe_value);
             if let Some(value) = maybe_value {
                 histogram.insert(value);
             }
@@ -209,7 +202,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
 
     let color_map = ColorMapLookUpTable {
         table: LookupTable::new(
-            [0.0, 1.0],
+            [0.0, params.max_iter_count as f32],
             params.color_map.lookup_table_count,
             |query: f32| {
                 let mapped_query = cdf.percentile(query);
@@ -226,7 +219,7 @@ pub fn mandelbrot_pixel_renderer_with_hist(
             refinement_count,
         );
         if let Some(value) = maybe_value {
-            color_map.compute_pixel(value/(max_iter_count as f32))
+            color_map.compute_pixel(value)
         } else {
             background_color
         }
