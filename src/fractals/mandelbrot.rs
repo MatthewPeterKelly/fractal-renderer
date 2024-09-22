@@ -69,6 +69,12 @@ impl MandelbrotSequence {
         self.radius_squared().sqrt()
     }
 
+    // natural log of the iteration count, shifted to be on range (0,inf) for positive inputs
+   pub fn log_iter_count(
+        iter_count: f32) -> f32 {
+        (iter_count - 1.0).ln()
+    }
+
     // Z = Z*Z + C
     fn step(&mut self) {
         self.y = (self.x + self.x) * self.y + self.y0;
@@ -79,25 +85,25 @@ impl MandelbrotSequence {
     }
 
     // @return: true -- escaped! false --> did not escape
-    // @return: iteration count if the point escapes, otherwise None().
+    // @return: true if the point escapes, false otherwise.
     fn step_until_condition(
         &mut self,
         max_iter_count: u32,
         max_radius_squared: f64,
-    ) -> Option<f32> {
+    ) -> bool {
         while self.iter_count < max_iter_count {
             if self.radius_squared() > max_radius_squared {
-                return Some(self.iter_count as f32);
+                return true;
             }
             self.step();
         }
-        None
+        false
     }
 
     /**
-     * @return: normalized iteration count (if escaped), or unset optional.
+     * @return: natural log of the normalized iteration count (if escaped), or unset optional.
      */
-    fn compute_normalized_escape(
+    fn compute_normalized_log_escape(
         &mut self,
         max_iter_count: u32,
         max_radius_squared: f64,
@@ -113,7 +119,7 @@ impl MandelbrotSequence {
             (self.iter_count as f64) - f64::ln(f64::ln(self.radius())) * SCALE;
 
         if normalized_iteration_count < max_iter_count as f64 {
-            Some(normalized_iteration_count as f32)
+            Some(Self::log_iter_count(normalized_iteration_count as f32))
         } else {
             None
         }
@@ -125,7 +131,7 @@ impl MandelbrotSequence {
     /// @param max_iter_count: assume that a point is in the mandelbrot set if this number of iterations is reached without exceeding the escape radius.
     /// @param refinement_count: normalize the escape count, providing smooth interpolation between integer "escape count" values.
     /// @return: normalized (smooth) iteration count if the point escapes, otherwise None().
-    pub fn normalized_escape_count(
+    pub fn normalized_log_escape_count(
         test_point: &nalgebra::Vector2<f64>,
         escape_radius_squared: f64,
         max_iter_count: u32,
@@ -134,10 +140,14 @@ impl MandelbrotSequence {
         let mut escape_sequence = MandelbrotSequence::new(test_point);
 
         if refinement_count == 0 {
-            return escape_sequence.step_until_condition(max_iter_count, escape_radius_squared);
+            if escape_sequence.step_until_condition(max_iter_count, escape_radius_squared){
+                return Some(Self::log_iter_count(escape_sequence.iter_count as f32));
+            } else{
+                return None;
+            }
         }
 
-        escape_sequence.compute_normalized_escape(
+        escape_sequence.compute_normalized_log_escape(
             max_iter_count,
             escape_radius_squared,
             refinement_count,
@@ -159,21 +169,21 @@ pub fn mandelbrot_pixel_renderer(
 
     /////////////////////////////////////////////////////////////////////////
 
-    let max_iteration_domain = params.max_iter_count as f32;
-
     // Create a reduced-resolution pixel map for the histogram samples:
     let hist_image_spec = params
         .image_specification
         .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
-    let mut histogram = Histogram::new(params.color_map.histogram_bin_count, max_iteration_domain);
+    let mut histogram = Histogram::new(params.color_map.histogram_bin_count,
+            MandelbrotSequence::log_iter_count(params.max_iter_count as f32)
+         );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
     for i in 0..hist_image_spec.resolution[0] {
         let x = pixel_mapper.width.map(i);
         for j in 0..hist_image_spec.resolution[1] {
             let y = pixel_mapper.height.map(j);
-            let maybe_value = MandelbrotSequence::normalized_escape_count(
+            let maybe_value = MandelbrotSequence::normalized_log_escape_count(
                 &nalgebra::Vector2::new(x, y),
                 escape_radius_squared,
                 max_iter_count,
@@ -193,7 +203,7 @@ pub fn mandelbrot_pixel_renderer(
 
     let color_map = ColorMapLookUpTable {
         table: LookupTable::new(
-            [0.0, max_iteration_domain],
+            [cdf.min_data, cdf.max_data],
             params.color_map.lookup_table_count,
             |query: f32| {
                 let mapped_query = cdf.percentile(query);
@@ -204,7 +214,7 @@ pub fn mandelbrot_pixel_renderer(
 
     (
         move |point: &nalgebra::Vector2<f64>| {
-            let maybe_value = MandelbrotSequence::normalized_escape_count(
+            let maybe_value = MandelbrotSequence::normalized_log_escape_count(
                 point,
                 escape_radius_squared,
                 max_iter_count,
