@@ -6,9 +6,8 @@
       "width": 0.05229268716825751
     },
     "escape_radius_squared": 5,
-    "max_iter_count": 720,
+    "max_iter_count": 5000,
     "refinement_count": 5,
-    "histogram_bin_count": 1024,
     "color_map": {
       "keyframes": [
         {
@@ -34,8 +33,8 @@
       ],
       "lookup_table_count": 5000,
       "background_color_rgb": [0, 0, 0],
-      "histogram_bin_count": 5000,
-      "histogram_sample_count": 50000
+      "histogram_bin_count": 16,
+      "histogram_sample_count": 5000
     }
   }
 }
