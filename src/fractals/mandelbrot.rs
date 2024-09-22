@@ -70,8 +70,7 @@ impl MandelbrotSequence {
     }
 
     // natural log of the iteration count, shifted to be on range (0,inf) for positive inputs
-   pub fn log_iter_count(
-        iter_count: f32) -> f32 {
+    pub fn log_iter_count(iter_count: f32) -> f32 {
         (iter_count - 1.0).ln()
     }
 
@@ -86,11 +85,7 @@ impl MandelbrotSequence {
 
     // @return: true -- escaped! false --> did not escape
     // @return: true if the point escapes, false otherwise.
-    fn step_until_condition(
-        &mut self,
-        max_iter_count: u32,
-        max_radius_squared: f64,
-    ) -> bool {
+    fn step_until_condition(&mut self, max_iter_count: u32, max_radius_squared: f64) -> bool {
         while self.iter_count < max_iter_count {
             if self.radius_squared() > max_radius_squared {
                 return true;
@@ -140,9 +135,9 @@ impl MandelbrotSequence {
         let mut escape_sequence = MandelbrotSequence::new(test_point);
 
         if refinement_count == 0 {
-            if escape_sequence.step_until_condition(max_iter_count, escape_radius_squared){
+            if escape_sequence.step_until_condition(max_iter_count, escape_radius_squared) {
                 return Some(Self::log_iter_count(escape_sequence.iter_count as f32));
-            } else{
+            } else {
                 return None;
             }
         }
@@ -174,9 +169,10 @@ pub fn mandelbrot_pixel_renderer(
         .image_specification
         .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
-    let mut histogram = Histogram::new(params.color_map.histogram_bin_count,
-            MandelbrotSequence::log_iter_count(params.max_iter_count as f32)
-         );
+    let mut histogram = Histogram::new(
+        params.color_map.histogram_bin_count,
+        MandelbrotSequence::log_iter_count(params.max_iter_count as f32),
+    );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
     for i in 0..hist_image_spec.resolution[0] {
