@@ -26,8 +26,8 @@
       ],
       "lookup_table_count": 256,
       "background_color_rgb": [0, 0, 0],
-      "histogram_bin_count": 8,
-      "histogram_sample_count": 32
+      "histogram_bin_count": 4,
+      "histogram_sample_count": 64
     }
   }
 }
