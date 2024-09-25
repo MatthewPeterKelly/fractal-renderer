@@ -1,14 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use fractal_renderer::{cli::color_swatch::ColorSwatchParams, fractals::common::FractalParams};
     use glob::glob;
     use serde::de::DeserializeOwned;
     use std::any::type_name;
+    use std::fs;
 
-
-    fn test_parse_parameter_file<T: DeserializeOwned>(directory: &str)
-    {
+    fn parse_all_parameter_files_or_panic<T: DeserializeOwned>(directory: &str) {
         let pattern = format!("{}/**/*.json", directory);
 
         // Use glob to find all matching .json files
@@ -21,29 +19,34 @@ mod tests {
 
                     let result: Result<T, _> = serde_json::from_str(&content);
 
-                    assert!(
-                        result.is_ok(),
-                        "Failed to parse JSON file: {:?} as parameter type: `{}`. Error:\n\n{:?}\n\n",
-                        path,
-                        type_name::<T>(),
-                        result.err()
-                    );
+                    match result {
+                        Ok(_) => {} // Parsing was successful --> move on to the next one.
+                        Err(err) => {
+                            panic!(
+                                "Failed to parse JSON file: {:?} as parameter type: `{}`.\n\n{:?}\n",
+                                path,
+                                type_name::<T>(),
+                                err
+                            );
+                        }
+                    }
                 }
                 Err(e) => panic!("Failed to read path: {:?}. Check permissions.", e),
             }
         }
     }
 
-
     #[test]
     fn test_ensure_all_example_files_can_be_parsed() {
-        for sub_dir in ["/barnsley_fern",
+        for sub_dir in [
+            "/barnsley_fern",
             "/driven_damped_pendulum",
             "/mandelbrot",
-            "/serpinsky"] {
-                test_parse_parameter_file::<FractalParams>(&format!("examples/{}", sub_dir));
-            }
+            "/serpinsky",
+        ] {
+            parse_all_parameter_files_or_panic::<FractalParams>(&format!("examples/{}", sub_dir));
+        }
 
-        test_parse_parameter_file::<ColorSwatchParams>("examples/color_swatch");
+        parse_all_parameter_files_or_panic::<ColorSwatchParams>("examples/color_swatch");
     }
 }
