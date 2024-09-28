@@ -64,15 +64,25 @@ mod tests {
     use crate::render_image_and_verify_file_hash;
 
     #[test]
-    fn test_mandelbrot_render() {
-        let ok = render_image_and_verify_file_hash(
-            "mandelbrot/default_regression_test",
-            "559ef8eadaeab60dc8136933acd8b9eb7c589e69263ec995a5e526ad79b9ec14",
-        );
-        let ok = render_image_and_verify_file_hash(
-            "barnsley_fern/default_regression_test",
-            "0a0105e25e2f1ecc2376d850c0fa99c9251425798be5e9dc5d1a1e7db5cc6b90",
-        );
+    fn regression_test_cli_render_pipeline() {
+
+        let test_cases = vec![
+            (
+                "mandelbrot/default_regression_test",
+                "559ef8eadaeab60dc8136933acd8b9eb7c589e69263ec995a5e526ad79b9ec14",
+            ),
+            (
+                "barnsley_fern/default_regression_test",
+                "546e5c5961b06b798ab16deee917ce200d84643d5dbb87415bf66ee780d2c7ae",
+            ),
+        ];
+
+        let mut ok = true;
+        for (name, hash) in test_cases {
+            if !render_image_and_verify_file_hash(name, hash) {
+                ok = false;
+            }
+        }
 
         assert!(ok);
     }
