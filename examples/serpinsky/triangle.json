@@ -5,6 +5,7 @@
       "padding_scale": 1.1
     },
     "sample_count": 10000000,
+    "rng_seed": 12345,
     "subpixel_antialiasing": 2,
     "background_color_rgb": [0, 0, 0],
     "vertex_colors_rgb": [

@@ -2,7 +2,8 @@ use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
 use crate::core::file_io::{serialize_to_json_or_panic, FilePrefix};
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 // Fern Generation Algorithm reference:
@@ -62,6 +63,7 @@ impl Coeffs {
 pub struct BarnsleyFernParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
+    pub rng_seed: u64,
     pub subpixel_antialiasing: i32,
     pub background_color_rgb: [u8; 3],
     pub fern_color_rgb: [u8; 3],
@@ -122,7 +124,7 @@ pub fn render_barnsley_fern(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(params.rng_seed);
     let generator = SampleGenerator::new(&params.coeffs);
     let fern_color = image::Rgb(params.fern_color_rgb);
 

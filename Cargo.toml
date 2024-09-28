@@ -23,5 +23,6 @@ rand = "0"
 rayon = "1.8.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10.8"
 winit = "0.28"
 winit_input_helper = "0.14"
