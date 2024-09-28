@@ -32,7 +32,7 @@ pub struct NamedColorMapper {
  */
 pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     let params: ColorSwatchParams = serde_json::from_str(
-        &std::fs::read_to_string(params_path).unwrap_or_else(|_| panic!("Unable to read param file: {}", params_path)),
+        &std::fs::read_to_string(params_path).expect("Unable to read param file"),
     )
     .unwrap();
 

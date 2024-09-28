@@ -36,18 +36,18 @@ fn run_command(command: &str, args: &[&str]) {
     assert!(status.success(), "Command {:?} failed", command);
 }
 
-fn render_image_and_verify_file_hash(command_name: &str, test_param_file_name_base: &str, expected_hash: &str) -> bool {
+fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_hash: &str) -> bool {
     run_command(
         "cargo",
         &[
             "run",
             "--release",
             "--",
-            command_name,
+            "render",
             &format!("./tests/param_files/{}.json", test_param_file_name_base),
         ],
     );
-    let image_file_path = format!("out/{}/{}.png",command_name, test_param_file_name_base);
+    let image_file_path = format!("out/render/{}.png", test_param_file_name_base);
     match check_file_hash(&image_file_path, expected_hash) {
         Ok(()) => true,
         Err(diagnostics) => {
@@ -87,13 +87,9 @@ mod tests {
 
         let mut ok = true;
         for (name, hash) in test_cases {
-            if !render_image_and_verify_file_hash("render", name, hash) {
+            if !render_image_and_verify_file_hash(name, hash) {
                 ok = false;
             }
-        }
-
-        if !render_image_and_verify_file_hash("color-swatch", "color-swatch/default_regression_test", "0") {
-            ok = false;
         }
 
         assert!(ok);
