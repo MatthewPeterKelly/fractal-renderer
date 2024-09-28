@@ -15,24 +15,16 @@ fn compute_file_hash(file_path: &str) -> Result<String, io::Error> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn check_file_hash(file_path: &str, expected_hash: &str) -> bool {
+fn check_file_hash(file_path: &str, expected_hash: &str) -> Result<(), String> {
     match compute_file_hash(file_path) {
         Ok(computed_hash) => {
             if computed_hash == expected_hash {
-                println!("Hash matches the expected value.");
-                true
+                Ok(())
             } else {
-                println!(
-                    "Hash mismatch! Expected: {}, but got: {}",
-                    expected_hash, computed_hash
-                );
-                false
+                Err(computed_hash)
             }
         }
-        Err(e) => {
-            eprintln!("Error reading the file: {:?}", e);
-            false
-        }
+        Err(e) => Err(format!("Unable to read file {}:{}", file_path, e)),
     }
 }
 
@@ -56,7 +48,16 @@ fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_h
         ],
     );
     let image_file_path = format!("out/render/{}.png", test_param_file_name_base);
-    check_file_hash(&image_file_path, expected_hash)
+    match check_file_hash(&image_file_path, expected_hash) {
+        Ok(()) => true,
+        Err(diagnostics) => {
+            println!(
+                "Hash mismatch! Expected: {}, but got:\n\n(\"{}\",\"{}\"),\n",
+                expected_hash, test_param_file_name_base, diagnostics
+            );
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -65,7 +66,6 @@ mod tests {
 
     #[test]
     fn regression_test_cli_render_pipeline() {
-
         let test_cases = vec![
             (
                 "mandelbrot/default_regression_test",
@@ -73,7 +73,15 @@ mod tests {
             ),
             (
                 "barnsley_fern/default_regression_test",
-                "546e5c5961b06b798ab16deee917ce200d84643d5dbb87415bf66ee780d2c7ae",
+                "aca6adf73cd023de8cead344e3e9c685ab4b3f4f36c310e76c3c604eefe4b2fd",
+            ),
+            (
+                "driven_damped_pendulum/default_regression_test",
+                "cc86a883e363661b95f32346c986f98561e3e3e71cd0555a5afc9a9b18878633",
+            ),
+            (
+                "serpinsky/default_regression_test",
+                "e2a1fb8000f7ad9c73a64e190dc26e45db5f217a96a7227e99dbead4bc8191ca",
             ),
         ];
 

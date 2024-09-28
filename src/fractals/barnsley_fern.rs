@@ -63,6 +63,7 @@ impl Coeffs {
 pub struct BarnsleyFernParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
+    pub rng_seed: u64,
     pub subpixel_antialiasing: i32,
     pub background_color_rgb: [u8; 3],
     pub fern_color_rgb: [u8; 3],
@@ -123,8 +124,7 @@ pub fn render_barnsley_fern(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Set up the "fern sample distribution":
     let mut sample_point = nalgebra::Vector2::<f64>::new(0.0, 0.0);
-    let seed: u64 = 42; // Example seed
-    let mut rng = StdRng::seed_from_u64(seed);
+    let mut rng = StdRng::seed_from_u64(params.rng_seed);
     let generator = SampleGenerator::new(&params.coeffs);
     let fern_color = image::Rgb(params.fern_color_rgb);
 

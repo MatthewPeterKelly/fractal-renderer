@@ -2,7 +2,8 @@ use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
 use crate::core::file_io::{serialize_to_json_or_panic, FilePrefix};
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 /**
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub struct SerpinskyParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
+    pub rng_seed: u64,
     pub subpixel_antialiasing: i32,
     pub background_color_rgb: [u8; 3],
     pub vertex_colors_rgb: Vec<[u8; 3]>,
@@ -96,7 +98,7 @@ pub fn render_serpinsky(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let vertices = polygon_verticies(params.vertex_colors_rgb.len());
     let mut sample_point = vertices[0];
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(params.rng_seed);
     let generator = SampleGenerator::regular_polygon(&params.vertex_colors_rgb, &vertices);
 
     let mut distribution = || {

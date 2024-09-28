@@ -1,0 +1,16 @@
+{
+  "DrivenDampedPendulum": {
+    "image_specification": {
+      "resolution": [40, 30],
+      "center": [0, 0],
+      "width": 8
+    },
+    "time_phase": {
+      "Snapshot": 0
+    },
+    "n_max_period": 40,
+    "n_steps_per_period": 12,
+    "periodic_state_error_tolerance": 0.1,
+    "subpixel_antialiasing": 2
+  }
+}
