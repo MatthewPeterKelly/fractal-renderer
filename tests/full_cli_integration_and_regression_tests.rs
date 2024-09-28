@@ -76,10 +76,12 @@ mod tests {
                 "barnsley_fern/default_regression_test",
                 "a4605eabb0ecaec01d3decc4191430143b36e36820a1ec5a186c836ed7364dd4",
             ),
-            (
-                "driven_damped_pendulum/default_regression_test",
-                "5f1bbcbe83afdc2ea36b34ce3774e5efc99bec3b426c80524bf0c4efb1097e7e",
-            ),
+            // Disabled; Works locally, but not in CI. Details here:
+            // https://github.com/MatthewPeterKelly/fractal-renderer/issues/90
+            // (
+            //     "driven_damped_pendulum/default_regression_test",
+            //     "5f1bbcbe83afdc2ea36b34ce3774e5efc99bec3b426c80524bf0c4efb1097e7e",
+            // ),
             (
                 "serpinsky/default_regression_test",
                 "d7776c07094689b9c994f69012eeacccebd0167ab6fcec30e67f73f8ca9cd4c5",
