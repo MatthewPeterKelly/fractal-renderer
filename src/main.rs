@@ -51,7 +51,7 @@ fn main() {
         Some(CommandsEnum::ColorSwatch(params)) => {
             generate_color_swatch(
                 &params.params_path,
-                build_file_prefix(params, "color_swatch"),
+                build_file_prefix(params, "color-swatch"),
             );
         }
         None => {
