@@ -36,16 +36,14 @@ fn run_command(command: &str, args: &[&str]) {
     assert!(status.success(), "Command {:?} failed", command);
 }
 
+fn run_cargo_release_with_two_args(one: &str, two: &str) {
+    run_command("cargo", &["run", "--release", "--", one, two]);
+}
+
 fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_hash: &str) -> bool {
-    run_command(
-        "cargo",
-        &[
-            "run",
-            "--release",
-            "--",
-            "render",
-            &format!("./tests/param_files/{}.json", test_param_file_name_base),
-        ],
+    run_cargo_release_with_two_args(
+        "render",
+        &format!("./tests/param_files/{}.json", test_param_file_name_base),
     );
     let image_file_path = format!("out/render/{}.png", test_param_file_name_base);
     match check_file_hash(&image_file_path, expected_hash) {
@@ -62,7 +60,10 @@ fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_h
 
 #[cfg(test)]
 mod tests {
-    use crate::render_image_and_verify_file_hash;
+    use crate::{
+        check_file_hash, render_image_and_verify_file_hash, run_cargo_release_with_two_args,
+        run_command,
+    };
 
     #[test]
     fn regression_test_cli_render_pipeline() {
@@ -93,5 +94,23 @@ mod tests {
         }
 
         assert!(ok);
+    }
+
+    #[test]
+    fn regression_test_cli_color_swatch() {
+        run_cargo_release_with_two_args(
+            "color-swatch",
+            "./tests/param_files/color_swatch/default_regression_test.json",
+        );
+        match check_file_hash(
+            "out/color_swatch/default_regression_test.png",
+            "653310e9d703d995db79fcd40c0a33f39812c4ac9d50c7b5f62ac1169b8f53fb",
+        ) {
+            Ok(()) => {}
+            Err(diagnostics) => {
+                println!("Hash mismatch! Color swatch hash: {}", diagnostics);
+                panic!()
+            }
+        }
     }
 }
