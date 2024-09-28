@@ -1,22 +1,23 @@
 use std::process::Command;
 
+use image::io::Reader as ImageReader;
 use sha2::{Digest, Sha256};
-use std::fs::File;
-use std::io::{self, Read};
 
-fn compute_file_hash(file_path: &str) -> Result<String, io::Error> {
-    let mut file = File::open(file_path)?;
+// We can't actually check the hash of the file, because the file has will be slightly
+// different on each platform. Instead, we import the image contents as a flat buffer of
+// pixels, and then hash that, which should be stable across platforms.
+fn compute_image_file_hash(path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let img = ImageReader::open(path)?.decode()?;
+    let rgba_image = img.to_rgba8();
+    let pixel_data = rgba_image.as_raw();
     let mut hasher = Sha256::new();
-    let mut buffer = Vec::new();
-
-    file.read_to_end(&mut buffer)?;
-    hasher.update(&buffer);
-
-    Ok(format!("{:x}", hasher.finalize()))
+    hasher.update(pixel_data);
+    let hash_result = hasher.finalize();
+    Ok(format!("{:x}", hash_result))
 }
 
-fn check_file_hash(file_path: &str, expected_hash: &str) -> Result<(), String> {
-    match compute_file_hash(file_path) {
+fn check_image_file_hash(file_path: &str, expected_hash: &str) -> Result<(), String> {
+    match compute_image_file_hash(file_path) {
         Ok(computed_hash) => {
             if computed_hash == expected_hash {
                 Ok(())
@@ -46,7 +47,7 @@ fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_h
         &format!("./tests/param_files/{}.json", test_param_file_name_base),
     );
     let image_file_path = format!("out/render/{}.png", test_param_file_name_base);
-    match check_file_hash(&image_file_path, expected_hash) {
+    match check_image_file_hash(&image_file_path, expected_hash) {
         Ok(()) => true,
         Err(diagnostics) => {
             println!(
@@ -61,8 +62,7 @@ fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_h
 #[cfg(test)]
 mod tests {
     use crate::{
-        check_file_hash, render_image_and_verify_file_hash, run_cargo_release_with_two_args,
-        run_command,
+        check_image_file_hash, render_image_and_verify_file_hash, run_cargo_release_with_two_args,
     };
 
     #[test]
@@ -70,19 +70,19 @@ mod tests {
         let test_cases = vec![
             (
                 "mandelbrot/default_regression_test",
-                "559ef8eadaeab60dc8136933acd8b9eb7c589e69263ec995a5e526ad79b9ec14",
+                "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
             ),
             (
                 "barnsley_fern/default_regression_test",
-                "aca6adf73cd023de8cead344e3e9c685ab4b3f4f36c310e76c3c604eefe4b2fd",
+                "a4605eabb0ecaec01d3decc4191430143b36e36820a1ec5a186c836ed7364dd4",
             ),
             (
                 "driven_damped_pendulum/default_regression_test",
-                "cc86a883e363661b95f32346c986f98561e3e3e71cd0555a5afc9a9b18878633",
+                "c8dba887da982870addd16109945df9a9436737f91b146683ebea7876963f05d",
             ),
             (
                 "serpinsky/default_regression_test",
-                "e2a1fb8000f7ad9c73a64e190dc26e45db5f217a96a7227e99dbead4bc8191ca",
+                "d7776c07094689b9c994f69012eeacccebd0167ab6fcec30e67f73f8ca9cd4c5",
             ),
         ];
 
@@ -102,9 +102,9 @@ mod tests {
             "color-swatch",
             "./tests/param_files/color_swatch/default_regression_test.json",
         );
-        match check_file_hash(
+        match check_image_file_hash(
             "out/color_swatch/default_regression_test.png",
-            "653310e9d703d995db79fcd40c0a33f39812c4ac9d50c7b5f62ac1169b8f53fb",
+            "a8d6ad55aa64624152a9fb9d867ce77aab1a05cf25956b8c6826cf6cd388cf51",
         ) {
             Ok(()) => {}
             Err(diagnostics) => {
