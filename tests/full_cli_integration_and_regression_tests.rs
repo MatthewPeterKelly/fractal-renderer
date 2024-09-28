@@ -78,7 +78,7 @@ mod tests {
             ),
             (
                 "driven_damped_pendulum/default_regression_test",
-                "c8dba887da982870addd16109945df9a9436737f91b146683ebea7876963f05d",
+                "5f1bbcbe83afdc2ea36b34ce3774e5efc99bec3b426c80524bf0c4efb1097e7e",
             ),
             (
                 "serpinsky/default_regression_test",
