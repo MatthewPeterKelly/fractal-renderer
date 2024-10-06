@@ -39,22 +39,22 @@ pub struct JuliaParams {
 pub struct JuliaSequence {
     pub x0: f64,
     pub y0: f64,
-    pub x_sqr: f64,
-    pub y_sqr: f64,
     pub x: f64,
     pub y: f64,
+    pub x_sqr: f64,
+    pub y_sqr: f64,
     pub iter_count: u32,
 }
 
 impl JuliaSequence {
     fn new(point: &nalgebra::Vector2<f64>) -> JuliaSequence {
         let mut value = JuliaSequence {
-            x0: point[0],
-            y0: point[1],
-            x_sqr: 0.0,
-            y_sqr: 0.0,
-            x: 0.0,
-            y: 0.0,
+            x0: -0.4,  // HACK:  initial C value,
+            y0: 0.6,  //HACK:  initial C value,
+            x: point[0],
+            y: point[1],
+            x_sqr: point[0]*point[0],
+            y_sqr: point[1]*point[1],
             iter_count: 0,
         };
         value.step(); // ensures that cached values are correct
@@ -254,7 +254,7 @@ pub fn render_julia_set(
 
     // Apply color to each pixel in the image:
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = raw_data[x as usize][y as usize];
+    *pixel = raw_data[x as usize][y as usize];
     }
 
     stopwatch.record_split("copy into image buffer".to_owned());
