@@ -11,6 +11,9 @@ Long-term goal: add support for zoom sequences and other fractals, along with (m
 ```
 cargo run --release -- render ./examples/mandelbrot/default.json
 ```
+```
+cargo run --release -- render ./examples/julia/default.json
+```
 
 ```
 cargo run --release -- render ./examples/driven_damped_pendulum/default.json

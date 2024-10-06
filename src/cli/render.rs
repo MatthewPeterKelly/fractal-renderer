@@ -15,6 +15,10 @@ pub fn render_fractal(
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             render_mandelbrot_set(inner_params, file_prefix)
         }
+        FractalParams::Julia(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("julia");
+            render_julia_set(inner_params, file_prefix)
+        }
         FractalParams::DrivenDampedPendulum(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
             render_driven_damped_pendulum_attractor(inner_params, file_prefix)
