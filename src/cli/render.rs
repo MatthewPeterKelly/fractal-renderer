@@ -1,3 +1,4 @@
+use crate::fractals::julia::render_julia_set;
 use crate::fractals::{
     barnsley_fern::render_barnsley_fern, common::FractalParams,
     driven_damped_pendulum::render_driven_damped_pendulum_attractor,

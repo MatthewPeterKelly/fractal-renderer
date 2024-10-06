@@ -165,7 +165,7 @@ pub fn julia_pixel_renderer(
     /////////////////////////////////////////////////////////////////////////
 
     // Create a reduced-resolution pixel map for the histogram samples:
-    let JuliaSequence = params
+    let hist_image_spec = params
         .image_specification
         .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
 
