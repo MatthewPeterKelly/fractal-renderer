@@ -73,6 +73,10 @@ mod tests {
                 "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
             ),
             (
+                "julia/default_regression_test",
+                "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
+            ),
+            (
                 "barnsley_fern/default_regression_test",
                 "a4605eabb0ecaec01d3decc4191430143b36e36820a1ec5a186c836ed7364dd4",
             ),
