@@ -24,6 +24,7 @@ pub struct ColorMapParams {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JuliaParams {
     pub image_specification: ImageSpecification,
+    pub constant_term: [f64; 2],
     // Convergence criteria
     pub escape_radius_squared: f64,
     pub max_iter_count: u32,
@@ -47,10 +48,10 @@ pub struct JuliaSequence {
 }
 
 impl JuliaSequence {
-    fn new(point: &nalgebra::Vector2<f64>) -> JuliaSequence {
+    fn new(point: &nalgebra::Vector2<f64>, constant_term: &[f64; 2]) -> JuliaSequence {
         let mut value = JuliaSequence {
-            x0: -0.4, // HACK:  initial C value,
-            y0: 0.6,  //HACK:  initial C value,
+            x0: constant_term[0],
+            y0: constant_term[1],
             x: point[0],
             y: point[1],
             x_sqr: point[0] * point[0],
@@ -128,11 +129,12 @@ impl JuliaSequence {
     /// @return: normalized (smooth) iteration count if the point escapes, otherwise None().
     pub fn normalized_log_escape_count(
         test_point: &nalgebra::Vector2<f64>,
+        constant_term: &[f64; 2],
         escape_radius_squared: f64,
         max_iter_count: u32,
         refinement_count: u32,
     ) -> Option<f32> {
-        let mut escape_sequence = JuliaSequence::new(test_point);
+        let mut escape_sequence = JuliaSequence::new(test_point, constant_term);
 
         if refinement_count == 0 {
             if escape_sequence.step_until_condition(max_iter_count, escape_radius_squared) {
@@ -160,6 +162,7 @@ pub fn julia_pixel_renderer(
     let escape_radius_squared = params.escape_radius_squared;
     let max_iter_count = params.max_iter_count;
     let refinement_count = params.refinement_count;
+    let constant_term = params.constant_term;
     let background_color = Rgb(params.color_map.background_color_rgb);
 
     /////////////////////////////////////////////////////////////////////////
@@ -181,6 +184,7 @@ pub fn julia_pixel_renderer(
             let y = pixel_mapper.height.map(j);
             let maybe_value = JuliaSequence::normalized_log_escape_count(
                 &nalgebra::Vector2::new(x, y),
+                &constant_term,
                 escape_radius_squared,
                 max_iter_count,
                 refinement_count,
@@ -212,6 +216,7 @@ pub fn julia_pixel_renderer(
         move |point: &nalgebra::Vector2<f64>| {
             let maybe_value = JuliaSequence::normalized_log_escape_count(
                 point,
+                &constant_term,
                 escape_radius_squared,
                 max_iter_count,
                 refinement_count,
