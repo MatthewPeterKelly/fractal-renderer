@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     barnsley_fern::BarnsleyFernParams, driven_damped_pendulum::DrivenDampedPendulumParams,
-    mandelbrot::MandelbrotParams, serpinsky::SerpinskyParams, julia::JuliaParams,
+    julia::JuliaParams, mandelbrot::MandelbrotParams, serpinsky::SerpinskyParams,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
