@@ -1,5 +1,5 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+    color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
@@ -12,14 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ColorMapParams {
-    pub keyframes: Vec<ColorMapKeyFrame>,
-    pub lookup_table_count: usize,
-    pub background_color_rgb: [u8; 3],
-    pub histogram_bin_count: usize,
-    pub histogram_sample_count: usize,
-}
+use super::quadratic_map::ColorMapParams;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
