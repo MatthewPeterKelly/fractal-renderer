@@ -12,20 +12,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
 
-use super::quadratic_map::{ColorMapParams, QuadraticMapSequence};
+use super::quadratic_map::{ColorMapParams, ConvergenceParams, QuadraticMapSequence};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MandelbrotParams {
     pub image_specification: ImageSpecification,
-    // Convergence criteria
-    pub escape_radius_squared: f64,
-    pub max_iter_count: u32,
-    pub refinement_count: u32,
-    // All details related to coloring:
+    pub convergence_params: ConvergenceParams,
     pub color_map: ColorMapParams,
 }
 
-const ZERO_INITIAL_POINT: [f64; 2] = [0.0,0.0];
+const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
 
 pub fn mandelbrot_pixel_renderer(
     params: &MandelbrotParams,
@@ -34,9 +30,7 @@ pub fn mandelbrot_pixel_renderer(
     Histogram,
     CumulativeDistributionFunction,
 ) {
-    let escape_radius_squared = params.escape_radius_squared;
-    let max_iter_count = params.max_iter_count;
-    let refinement_count = params.refinement_count;
+    let convergence_params = params.convergence_params.clone();
     let background_color = Rgb(params.color_map.background_color_rgb);
 
     /////////////////////////////////////////////////////////////////////////
@@ -48,7 +42,7 @@ pub fn mandelbrot_pixel_renderer(
 
     let mut histogram = Histogram::new(
         params.color_map.histogram_bin_count,
-        QuadraticMapSequence::log_iter_count(params.max_iter_count as f32),
+        QuadraticMapSequence::log_iter_count(params.convergence_params.max_iter_count as f32),
     );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
@@ -59,9 +53,7 @@ pub fn mandelbrot_pixel_renderer(
             let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
                 &ZERO_INITIAL_POINT,
                 &[x, y],
-                escape_radius_squared,
-                max_iter_count,
-                refinement_count,
+                &convergence_params,
             );
 
             if let Some(value) = maybe_value {
@@ -91,9 +83,7 @@ pub fn mandelbrot_pixel_renderer(
             let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
                 &ZERO_INITIAL_POINT,
                 &[point[0], point[1]],
-                escape_radius_squared,
-                max_iter_count,
-                refinement_count,
+                &convergence_params,
             );
             if let Some(value) = maybe_value {
                 color_map.compute_pixel(value)

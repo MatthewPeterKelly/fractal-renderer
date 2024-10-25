@@ -5,9 +5,11 @@
       "center": [-1.1829228435558685, 0.23731598555572875],
       "width": 0.05
     },
-    "escape_radius_squared": 5,
-    "max_iter_count": 4000,
-    "refinement_count": 5,
+    "convergence_params": {
+      "escape_radius_squared": 5.0,
+      "max_iter_count": 4000,
+      "refinement_count": 5
+    },
     "color_map": {
       "keyframes": [
         {

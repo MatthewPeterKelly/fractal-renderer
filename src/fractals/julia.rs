@@ -12,18 +12,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
 
-use super::quadratic_map::{ColorMapParams, QuadraticMapSequence};
-
+use super::quadratic_map::{ColorMapParams, ConvergenceParams, QuadraticMapSequence};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JuliaParams {
     pub image_specification: ImageSpecification,
     pub constant_term: [f64; 2],
-    // Convergence criteria
-    pub escape_radius_squared: f64,
-    pub max_iter_count: u32,
-    pub refinement_count: u32,
-    // All details related to coloring:
+    pub convergence_params: ConvergenceParams,
     pub color_map: ColorMapParams,
 }
 
@@ -34,9 +29,7 @@ pub fn julia_pixel_renderer(
     Histogram,
     CumulativeDistributionFunction,
 ) {
-    let escape_radius_squared = params.escape_radius_squared;
-    let max_iter_count = params.max_iter_count;
-    let refinement_count = params.refinement_count;
+    let convergence_params = params.convergence_params.clone();
     let constant_term = params.constant_term;
     let background_color = Rgb(params.color_map.background_color_rgb);
 
@@ -49,7 +42,7 @@ pub fn julia_pixel_renderer(
 
     let mut histogram = Histogram::new(
         params.color_map.histogram_bin_count,
-        QuadraticMapSequence::log_iter_count(params.max_iter_count as f32),
+        QuadraticMapSequence::log_iter_count(params.convergence_params.max_iter_count as f32),
     );
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
@@ -60,9 +53,7 @@ pub fn julia_pixel_renderer(
             let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
                 &[x, y],
                 &constant_term,
-                escape_radius_squared,
-                max_iter_count,
-                refinement_count,
+                &convergence_params,
             );
 
             if let Some(value) = maybe_value {
@@ -92,9 +83,7 @@ pub fn julia_pixel_renderer(
             let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
                 &[point[0], point[1]],
                 &constant_term,
-                escape_radius_squared,
-                max_iter_count,
-                refinement_count,
+                &convergence_params,
             );
             if let Some(value) = maybe_value {
                 color_map.compute_pixel(value)

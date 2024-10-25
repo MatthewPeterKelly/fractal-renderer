@@ -11,6 +11,12 @@ pub struct ColorMapParams {
     pub histogram_sample_count: usize,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConvergenceParams {
+    pub escape_radius_squared: f64,
+    pub max_iter_count: u32,
+    pub refinement_count: u32,
+}
 
 /**
  * Data structure for storing the internal state of the mandelbrot sequence calculation.
@@ -58,6 +64,7 @@ impl QuadraticMapSequence {
     }
 
     // Z = Z*Z + C
+    // Note:  This implementation is somewhat faster than the directly writing the above equation with the `Complex` number type.
     fn step(&mut self) {
         self.y = (self.x + self.x) * self.y + self.y0;
         self.x = self.x_sqr - self.y_sqr + self.x0;
@@ -112,14 +119,15 @@ impl QuadraticMapSequence {
     pub fn normalized_log_escape_count(
         test_point: &[f64; 2],
         constant_term: &[f64; 2],
-        escape_radius_squared: f64,
-        max_iter_count: u32,
-        refinement_count: u32,
+        convergence_params: &ConvergenceParams,
     ) -> Option<f32> {
         let mut escape_sequence = QuadraticMapSequence::new(test_point, constant_term);
 
-        if refinement_count == 0 {
-            if escape_sequence.step_until_condition(max_iter_count, escape_radius_squared) {
+        if convergence_params.refinement_count == 0 {
+            if escape_sequence.step_until_condition(
+                convergence_params.max_iter_count,
+                convergence_params.escape_radius_squared,
+            ) {
                 return Some(Self::log_iter_count(escape_sequence.iter_count as f32));
             } else {
                 return None;
@@ -127,9 +135,9 @@ impl QuadraticMapSequence {
         }
 
         escape_sequence.compute_normalized_log_escape(
-            max_iter_count,
-            escape_radius_squared,
-            refinement_count,
+            convergence_params.max_iter_count,
+            convergence_params.escape_radius_squared,
+            convergence_params.refinement_count,
         )
     }
 }

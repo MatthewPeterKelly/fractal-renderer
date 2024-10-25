@@ -34,9 +34,14 @@ fn run_command(command: &str, args: &[&str]) {
         .args(args)
         .status()
         .expect("failed to execute process");
-    assert!(status.success(), "Command {:?} failed", command);
-}
 
+    assert!(
+        status.success(),
+        "Command {:?} with args {:?} failed",
+        command,
+        args
+    );
+}
 fn run_cargo_release_with_two_args(one: &str, two: &str) {
     run_command("cargo", &["run", "--release", "--", one, two]);
 }
