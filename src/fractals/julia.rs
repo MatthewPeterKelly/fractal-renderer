@@ -1,18 +1,16 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification,
     },
-    lookup_table::LookupTable,
 };
 use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use crate::core::stopwatch::Stopwatch;
 
-use super::quadratic_map::{ColorMapParams, ConvergenceParams, QuadraticMapSequence};
+use super::quadratic_map::{pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JuliaParams {
@@ -31,68 +29,14 @@ pub fn julia_pixel_renderer(
 ) {
     let convergence_params = params.convergence_params.clone();
     let constant_term = params.constant_term;
-    let background_color = Rgb(params.color_map.background_color_rgb);
-
-    /////////////////////////////////////////////////////////////////////////
-
-    // Create a reduced-resolution pixel map for the histogram samples:
-    let hist_image_spec = params
-        .image_specification
-        .scale_to_total_pixel_count(params.color_map.histogram_sample_count as i32);
-
-    let mut histogram = Histogram::new(
-        params.color_map.histogram_bin_count,
-        QuadraticMapSequence::log_iter_count(params.convergence_params.max_iter_count as f32),
-    );
-    let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-    for i in 0..hist_image_spec.resolution[0] {
-        let x = pixel_mapper.width.map(i);
-        for j in 0..hist_image_spec.resolution[1] {
-            let y = pixel_mapper.height.map(j);
-            let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
-                &[x, y],
+    pixel_renderer(&params.image_specification, &params.color_map,
+            move |point: &[f64; 2]| {
+            QuadraticMapSequence::normalized_log_escape_count(
+                point,
                 &constant_term,
                 &convergence_params,
-            );
-
-            if let Some(value) = maybe_value {
-                histogram.insert(value);
-            }
-        }
-    }
-
-    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(&histogram);
-
-    let base_color_map = ColorMap::new(&params.color_map.keyframes, LinearInterpolator {});
-
-    let color_map = ColorMapLookUpTable {
-        table: LookupTable::new(
-            [cdf.min_data, cdf.max_data],
-            params.color_map.lookup_table_count,
-            |query: f32| {
-                let mapped_query = cdf.percentile(query);
-                base_color_map.compute_pixel(mapped_query)
-            },
-        ),
-    };
-
-    (
-        move |point: &nalgebra::Vector2<f64>| {
-            let maybe_value = QuadraticMapSequence::normalized_log_escape_count(
-                &[point[0], point[1]],
-                &constant_term,
-                &convergence_params,
-            );
-            if let Some(value) = maybe_value {
-                color_map.compute_pixel(value)
-            } else {
-                background_color
-            }
-        },
-        histogram,
-        cdf,
+            )
+        }, QuadraticMapSequence::log_iter_count(params.convergence_params.max_iter_count as f32),
     )
 }
 

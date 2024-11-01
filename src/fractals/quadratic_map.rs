@@ -1,6 +1,7 @@
+use image::Rgb;
 use serde::{Deserialize, Serialize};
 
-use crate::core::color_map::ColorMapKeyFrame;
+use crate::core::{color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{ImageSpecification, PixelMapper}, lookup_table::LookupTable};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ColorMapParams {
@@ -140,4 +141,74 @@ impl QuadraticMapSequence {
             convergence_params.refinement_count,
         )
     }
+}
+
+
+pub fn pixel_renderer<T>(
+    image_specification: &ImageSpecification,
+    color_map: &ColorMapParams,
+    iterative_map: T,
+    max_mapped_value: f32,
+) -> (
+    impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+    Histogram,
+    CumulativeDistributionFunction,
+)
+where
+    T: Fn(&[f64; 2]) -> Option<f32> + std::marker::Sync,
+{
+    let background_color = Rgb(color_map.background_color_rgb);
+
+    /////////////////////////////////////////////////////////////////////////
+
+    // Create a reduced-resolution pixel map for the histogram samples:
+    let hist_image_spec =
+        image_specification
+        .scale_to_total_pixel_count(color_map.histogram_sample_count as i32);
+
+    let mut histogram = Histogram::new(
+        color_map.histogram_bin_count,
+        max_mapped_value,
+    );
+    let pixel_mapper = PixelMapper::new(&hist_image_spec);
+
+    for i in 0..hist_image_spec.resolution[0] {
+        let x = pixel_mapper.width.map(i);
+        for j in 0..hist_image_spec.resolution[1] {
+            let y = pixel_mapper.height.map(j);
+            let maybe_value: Option<f32> = iterative_map(&[x, y]);
+            if let Some(value) = maybe_value {
+                histogram.insert(value);
+            }
+        }
+    }
+
+    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
+    let cdf = CumulativeDistributionFunction::new(&histogram);
+
+    let base_color_map = ColorMap::new(&color_map.keyframes, LinearInterpolator {});
+
+    let color_map = ColorMapLookUpTable {
+        table: LookupTable::new(
+            [cdf.min_data, cdf.max_data],
+            color_map.lookup_table_count,
+            |query: f32| {
+                let mapped_query = cdf.percentile(query);
+                base_color_map.compute_pixel(mapped_query)
+            },
+        ),
+    };
+
+    (
+        move |point: &nalgebra::Vector2<f64>| {
+            let maybe_value: Option<f32> = iterative_map(&[point[0], point[1]]);
+            if let Some(value) = maybe_value {
+                color_map.compute_pixel(value)
+            } else {
+                background_color
+            }
+        },
+        histogram,
+        cdf,
+    )
 }
