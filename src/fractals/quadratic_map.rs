@@ -1,7 +1,16 @@
 use image::Rgb;
 use serde::{Deserialize, Serialize};
 
-use crate::core::{color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper}, lookup_table::LookupTable, stopwatch::Stopwatch};
+use crate::core::{
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+    file_io::{serialize_to_json_or_panic, FilePrefix},
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+    },
+    lookup_table::LookupTable,
+    stopwatch::Stopwatch,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
@@ -143,7 +152,6 @@ impl QuadraticMapSequence {
     }
 }
 
-
 pub fn pixel_renderer<T>(
     image_specification: &ImageSpecification,
     color_map: &ColorMapParams,
@@ -163,13 +171,9 @@ where
 
     // Create a reduced-resolution pixel map for the histogram samples:
     let hist_image_spec =
-        image_specification
-        .scale_to_total_pixel_count(color_map.histogram_sample_count as i32);
+        image_specification.scale_to_total_pixel_count(color_map.histogram_sample_count as i32);
 
-    let mut histogram = Histogram::new(
-        color_map.histogram_bin_count,
-        max_mapped_value,
-    );
+    let mut histogram = Histogram::new(color_map.histogram_bin_count, max_mapped_value);
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
     for i in 0..hist_image_spec.resolution[0] {
@@ -213,7 +217,7 @@ where
     )
 }
 
-pub trait Renderable: Serialize + std::fmt::Debug + Clone  {
+pub trait Renderable: Serialize + std::fmt::Debug + Clone {
     fn renderer(
         self,
     ) -> (
@@ -246,8 +250,7 @@ pub fn render<T: Renderable>(
 
     stopwatch.record_split("build renderer".to_owned());
 
-    let raw_data =
-        generate_scalar_image(&image_specification, pixel_renderer, Rgb([0, 0, 0]));
+    let raw_data = generate_scalar_image(&image_specification, pixel_renderer, Rgb([0, 0, 0]));
 
     stopwatch.record_split("compute quadratic sequences".to_owned());
 
