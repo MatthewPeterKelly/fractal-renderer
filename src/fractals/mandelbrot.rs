@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence, Renderable};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MandelbrotParams {
     pub image_specification: ImageSpecification,
     pub convergence_params: ConvergenceParams,
@@ -21,7 +21,7 @@ const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
 impl Renderable for MandelbrotParams {
 
      fn renderer(
-        &self
+        self
     ) -> (
         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
         Histogram,

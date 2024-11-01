@@ -14,11 +14,11 @@ pub fn render_fractal(
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            quadratic_map::render(inner_params.as_ref(), file_prefix)
+            quadratic_map::render(inner_params.as_ref().clone(), file_prefix)
         }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
-            quadratic_map::render(inner_params.as_ref(), file_prefix)
+            quadratic_map::render(inner_params.as_ref().clone(), file_prefix)
         }
         FractalParams::DrivenDampedPendulum(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");

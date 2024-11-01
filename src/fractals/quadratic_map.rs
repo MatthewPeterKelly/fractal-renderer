@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator}, file_io::{serialize_to_json_or_panic, FilePrefix}, histogram::{CumulativeDistributionFunction, Histogram}, image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper}, lookup_table::LookupTable, stopwatch::Stopwatch};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
     pub keyframes: Vec<ColorMapKeyFrame>,
     pub lookup_table_count: usize,
@@ -213,9 +213,9 @@ where
     )
 }
 
-pub trait Renderable: Serialize + std::fmt::Debug  {
+pub trait Renderable: Serialize + std::fmt::Debug + Clone  {
     fn renderer(
-        &self,
+        self,
     ) -> (
         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
         Histogram,
@@ -226,7 +226,7 @@ pub trait Renderable: Serialize + std::fmt::Debug  {
 }
 
 pub fn render<T: Renderable>(
-    params: &T,
+    params: T,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
@@ -241,12 +241,13 @@ pub fn render<T: Renderable>(
 
     stopwatch.record_split("basic setup".to_owned());
 
+    let image_specification = params.image_specification().clone();
     let (pixel_renderer, histogram, cdf) = params.renderer();
 
     stopwatch.record_split("build renderer".to_owned());
 
     let raw_data =
-        generate_scalar_image(params.image_specification(), pixel_renderer, Rgb([0, 0, 0]));
+        generate_scalar_image(&image_specification, pixel_renderer, Rgb([0, 0, 0]));
 
     stopwatch.record_split("compute quadratic sequences".to_owned());
 
