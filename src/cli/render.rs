@@ -1,8 +1,9 @@
 use crate::fractals::julia::render_julia_set;
+use crate::fractals::quadratic_map::render;
 use crate::fractals::{
     barnsley_fern::render_barnsley_fern, common::FractalParams,
     driven_damped_pendulum::render_driven_damped_pendulum_attractor,
-    mandelbrot::render_mandelbrot_set, serpinsky::render_serpinsky,
+    serpinsky::render_serpinsky,
 };
 
 use crate::core::file_io::FilePrefix;
@@ -14,7 +15,7 @@ pub fn render_fractal(
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            render_mandelbrot_set(inner_params, file_prefix)
+            render(inner_params.as_ref(), file_prefix)
         }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
