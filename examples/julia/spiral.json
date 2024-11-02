@@ -1,10 +1,11 @@
 {
-  "Mandelbrot": {
+  "Julia": {
     "image_specification": {
-      "resolution": [1600, 1200],
-      "center": [-0.7, 0],
-      "width": 3.08
+      "resolution": [1600, 900],
+      "center": [0, 0],
+      "width": 3.8
     },
+    "constant_term": [-0.8, 0.156],
     "convergence_params": {
       "escape_radius_squared": 4.0,
       "max_iter_count": 4096,
@@ -17,11 +18,7 @@
           "rgb_raw": [50, 0, 100]
         },
         {
-          "query": 0.92,
-          "rgb_raw": [20, 0, 220]
-        },
-        {
-          "query": 0.97,
+          "query": 0.95,
           "rgb_raw": [0, 50, 230]
         },
         {

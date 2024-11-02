@@ -34,9 +34,14 @@ fn run_command(command: &str, args: &[&str]) {
         .args(args)
         .status()
         .expect("failed to execute process");
-    assert!(status.success(), "Command {:?} failed", command);
-}
 
+    assert!(
+        status.success(),
+        "Command {:?} with args {:?} failed",
+        command,
+        args
+    );
+}
 fn run_cargo_release_with_two_args(one: &str, two: &str) {
     run_command("cargo", &["run", "--release", "--", one, two]);
 }
@@ -71,6 +76,10 @@ mod tests {
             (
                 "mandelbrot/default_regression_test",
                 "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
+            ),
+            (
+                "julia/default_regression_test",
+                "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
             ),
             (
                 "barnsley_fern/default_regression_test",

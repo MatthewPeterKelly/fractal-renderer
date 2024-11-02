@@ -10,15 +10,14 @@ use super::quadratic_map::{
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MandelbrotParams {
+pub struct JuliaParams {
     pub image_specification: ImageSpecification,
+    pub constant_term: [f64; 2],
     pub convergence_params: ConvergenceParams,
     pub color_map: ColorMapParams,
 }
 
-const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
-
-impl Renderable for MandelbrotParams {
+impl Renderable for JuliaParams {
     fn renderer(
         self,
     ) -> (
@@ -27,13 +26,14 @@ impl Renderable for MandelbrotParams {
         CumulativeDistributionFunction,
     ) {
         let convergence_params = self.convergence_params.clone();
+        let constant_term = self.constant_term;
         pixel_renderer(
             &self.image_specification,
             &self.color_map,
             move |point: &[f64; 2]| {
                 QuadraticMapSequence::normalized_log_escape_count(
-                    &ZERO_INITIAL_POINT,
                     point,
+                    &constant_term,
                     &convergence_params,
                 )
             },

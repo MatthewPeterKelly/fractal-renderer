@@ -43,6 +43,7 @@ mod tests {
             "/driven_damped_pendulum",
             "/mandelbrot",
             "/serpinsky",
+            "/julia",
         ] {
             parse_all_parameter_files_or_panic::<FractalParams>(&format!("examples/{}", sub_dir));
         }

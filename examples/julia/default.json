@@ -1,10 +1,11 @@
 {
-  "Mandelbrot": {
+  "Julia": {
     "image_specification": {
       "resolution": [1600, 1200],
-      "center": [-0.7, 0],
-      "width": 3.08
+      "center": [0, 0],
+      "width": 3.2
     },
+    "constant_term": [-0.4, 0.6],
     "convergence_params": {
       "escape_radius_squared": 4.0,
       "max_iter_count": 4096,
@@ -14,14 +15,14 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [50, 0, 100]
+          "rgb_raw": [0, 0, 0]
         },
         {
-          "query": 0.92,
-          "rgb_raw": [20, 0, 220]
+          "query": 0.65,
+          "rgb_raw": [0, 0, 0]
         },
         {
-          "query": 0.97,
+          "query": 0.95,
           "rgb_raw": [0, 50, 230]
         },
         {
