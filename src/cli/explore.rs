@@ -63,6 +63,10 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
         }
     };
 
+    // TODO:  move this up into the match branch, and then dynamic dispatch on the grid type
+    // Then properly set up the image resolution here
+    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
+
     let window = {
         let logical_size = LogicalSize::new(
             image_spec.resolution[0] as f64,
@@ -88,8 +92,6 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
     let mut keyboard_action_effect_modifier = 1.0f32;
 
-    // Then properly set up the image resolution here
-    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
@@ -203,6 +205,12 @@ struct PixelGrid {
     update_required: bool, // used to mark when the image_specification has changed.
     file_prefix: FilePrefix, // used for writing intermediate image frames to file
 }
+
+/**
+ * I think an answer here is to cache the renderer object into the pixel grid, making that
+ * type explicit. Then dynamic dispatch on the call to update, rather on the call to the
+ * renderer itself.
+ */
 
 impl PixelGrid {
     fn new<F>(
