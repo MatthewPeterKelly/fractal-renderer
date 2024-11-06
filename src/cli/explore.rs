@@ -13,10 +13,10 @@ use crate::{
         file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         image_utils::{
             create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
-            ImageSpecification, PixelMapper,
+            ImageSpecification, PixelMapper, Renderable,
         },
     },
-    fractals::{common::FractalParams, quadratic_map::RenderableWithHistogram},
+    fractals::common::FractalParams
 };
 
 // Parameters for GUI key-press interactions
@@ -40,7 +40,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let (renderer, _, _) = inner_params.clone().renderer_with_histogram();
+            let renderer= inner_params.clone().renderer();
             (renderer, inner_params.image_specification.clone())
         }
         _ => {

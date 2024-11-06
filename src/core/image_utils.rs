@@ -116,11 +116,8 @@ impl ViewRectangle {
     }
 }
 
-
 pub trait Renderable: Serialize + std::fmt::Debug + Clone {
-    fn renderer(
-        self,
-    ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
+    fn renderer(self) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
 
     fn image_specification(&self) -> &ImageSpecification;
 }
