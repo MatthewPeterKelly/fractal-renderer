@@ -1,3 +1,4 @@
+use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -113,6 +114,15 @@ impl ViewRectangle {
 
         ViewRectangle { center, dimensions }
     }
+}
+
+
+pub trait Renderable: Serialize + std::fmt::Debug + Clone {
+    fn renderer(
+        self,
+    ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
+
+    fn image_specification(&self) -> &ImageSpecification;
 }
 
 /**

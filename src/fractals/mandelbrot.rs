@@ -18,6 +18,8 @@ pub struct MandelbrotParams {
 
 const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
 
+
+// TODO:  split out each impl block for base and derived trait
 impl RenderableWithHistogram for MandelbrotParams {
     fn renderer_with_histogram(
         self,

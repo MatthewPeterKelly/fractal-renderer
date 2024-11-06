@@ -6,7 +6,7 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper, Renderable,
     },
     lookup_table::LookupTable,
     stopwatch::Stopwatch,
@@ -217,7 +217,7 @@ where
     )
 }
 
-pub trait RenderableWithHistogram: Serialize + std::fmt::Debug + Clone {
+pub trait RenderableWithHistogram: Renderable {
     fn renderer_with_histogram(
         self,
     ) -> (
@@ -225,41 +225,7 @@ pub trait RenderableWithHistogram: Serialize + std::fmt::Debug + Clone {
         Histogram,
         CumulativeDistributionFunction,
     );
-
-    fn image_specification(&self) -> &ImageSpecification;
 }
-
-// pub trait SimpleRenderable: Serialize + std::fmt::Debug + Clone {
-//     fn renderer(
-//         self,
-//     ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
-
-//     fn image_specification(&self) -> &ImageSpecification;
-// }
-
-// pub trait Renderable: SimpleRenderable {
-//     fn renderer(
-//         self,
-//     ) -> (
-//         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-//         Histogram,
-//         CumulativeDistributionFunction,
-//     );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 pub fn render<T: RenderableWithHistogram>(

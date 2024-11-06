@@ -1,6 +1,6 @@
 use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::ImageSpecification,
+    image_utils::{ImageSpecification, Renderable},
 };
 use image::Rgb;
 use serde::{Deserialize, Serialize};
@@ -40,8 +40,33 @@ impl RenderableWithHistogram for JuliaParams {
             QuadraticMapSequence::log_iter_count(self.convergence_params.max_iter_count as f32),
         )
     }
+}
+
+impl Renderable for JuliaParams {
+    fn renderer(
+        self,
+    ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync
+     {
+        let convergence_params = self.convergence_params.clone();
+        let constant_term = self.constant_term;
+       let (renderer,_hist,_cdf) =  pixel_renderer(
+            &self.image_specification,
+            &self.color_map,
+            move |point: &[f64; 2]| {
+                QuadraticMapSequence::normalized_log_escape_count(
+                    point,
+                    &constant_term,
+                    &convergence_params,
+                )
+            },
+            QuadraticMapSequence::log_iter_count(self.convergence_params.max_iter_count as f32),
+        );
+        renderer
+
+    }
 
     fn image_specification(&self) -> &ImageSpecification {
         &self.image_specification
     }
 }
+
