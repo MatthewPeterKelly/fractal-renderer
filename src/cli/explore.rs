@@ -16,7 +16,7 @@ use crate::{
             ImageSpecification, PixelMapper,
         },
     },
-    fractals::{common::FractalParams, quadratic_map::Renderable},
+    fractals::{common::FractalParams, quadratic_map::RenderableWithHistogram},
 };
 
 // Parameters for GUI key-press interactions
@@ -40,7 +40,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let (renderer, _, _) = inner_params.clone().renderer();
+            let (renderer, _, _) = inner_params.clone().renderer_with_histogram();
             (renderer, inner_params.image_specification.clone())
         }
         _ => {

@@ -6,7 +6,7 @@ use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
-    pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence, Renderable,
+    pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence, RenderableWithHistogram,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -17,8 +17,8 @@ pub struct JuliaParams {
     pub color_map: ColorMapParams,
 }
 
-impl Renderable for JuliaParams {
-    fn renderer(
+impl RenderableWithHistogram for JuliaParams {
+    fn renderer_with_histogram(
         self,
     ) -> (
         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,

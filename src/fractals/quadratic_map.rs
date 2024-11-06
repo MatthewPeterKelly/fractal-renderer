@@ -217,8 +217,8 @@ where
     )
 }
 
-pub trait Renderable: Serialize + std::fmt::Debug + Clone {
-    fn renderer(
+pub trait RenderableWithHistogram: Serialize + std::fmt::Debug + Clone {
+    fn renderer_with_histogram(
         self,
     ) -> (
         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
@@ -229,7 +229,40 @@ pub trait Renderable: Serialize + std::fmt::Debug + Clone {
     fn image_specification(&self) -> &ImageSpecification;
 }
 
-pub fn render<T: Renderable>(
+// pub trait SimpleRenderable: Serialize + std::fmt::Debug + Clone {
+//     fn renderer(
+//         self,
+//     ) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
+
+//     fn image_specification(&self) -> &ImageSpecification;
+// }
+
+// pub trait Renderable: SimpleRenderable {
+//     fn renderer(
+//         self,
+//     ) -> (
+//         impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+//         Histogram,
+//         CumulativeDistributionFunction,
+//     );
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pub fn render<T: RenderableWithHistogram>(
     params: T,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -246,7 +279,7 @@ pub fn render<T: Renderable>(
     stopwatch.record_split("basic setup".to_owned());
 
     let image_specification = params.image_specification().clone();
-    let (pixel_renderer, histogram, cdf) = params.renderer();
+    let (pixel_renderer, histogram, cdf) = params.renderer_with_histogram();
 
     stopwatch.record_split("build renderer".to_owned());
 
