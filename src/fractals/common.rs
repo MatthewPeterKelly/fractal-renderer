@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::core::image_utils::Renderable;
+
 use super::{
     barnsley_fern::BarnsleyFernParams, driven_damped_pendulum::DrivenDampedPendulumParams,
     julia::JuliaParams, mandelbrot::MandelbrotParams, serpinsky::SerpinskyParams,

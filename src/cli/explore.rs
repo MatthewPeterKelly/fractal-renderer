@@ -41,7 +41,21 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             let renderer= inner_params.clone().renderer();
-            (renderer, inner_params.image_specification.clone())
+            (renderer, inner_params.image_specification().clone())
+        }
+
+/// The problem here is that we're *returning* a `impl` trait, which has a static type, and that is mismatched
+/// between the two branches. No good. We need to return the same type. This isn't a problem in the render pipeline
+/// because the match doesn't return anything -- it renders an image. We could do the same thing here, but it would
+/// require restructuring the code a bit. Alternatively, we could allow the type of the renderer to be erased. I
+/// think this would be fine if the dynamic dispatch is done once per render, but not so good if we had to do it for every
+/// pixel.
+
+
+        FractalParams::Julia(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("julia");
+            let renderer= inner_params.clone().renderer();
+            (renderer, inner_params.image_specification().clone())
         }
         _ => {
             println!("ERROR:  Unsupported fractal parameter type. Aborting.");
