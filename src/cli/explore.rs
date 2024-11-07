@@ -16,7 +16,7 @@ use crate::{
             ImageSpecification, PixelMapper, Renderable,
         },
     },
-    fractals::common::FractalParams
+    fractals::common::FractalParams,
 };
 
 // Parameters for GUI key-press interactions
@@ -40,21 +40,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let renderer= inner_params.clone().renderer();
-            (renderer, inner_params.image_specification().clone())
-        }
-
-/// The problem here is that we're *returning* a `impl` trait, which has a static type, and that is mismatched
-/// between the two branches. No good. We need to return the same type. This isn't a problem in the render pipeline
-/// because the match doesn't return anything -- it renders an image. We could do the same thing here, but it would
-/// require restructuring the code a bit. Alternatively, we could allow the type of the renderer to be erased. I
-/// think this would be fine if the dynamic dispatch is done once per render, but not so good if we had to do it for every
-/// pixel.
-
-
-        FractalParams::Julia(inner_params) => {
-            file_prefix.create_and_step_into_sub_directory("julia");
-            let renderer= inner_params.clone().renderer();
+            let renderer = inner_params.clone().renderer();
             (renderer, inner_params.image_specification().clone())
         }
         _ => {
@@ -62,10 +48,6 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             panic!();
         }
     };
-
-    // TODO:  move this up into the match branch, and then dynamic dispatch on the grid type
-    // Then properly set up the image resolution here
-    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
 
     let window = {
         let logical_size = LogicalSize::new(
@@ -92,6 +74,9 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
     let mut keyboard_action_effect_modifier = 1.0f32;
 
+    // TODO:  move this up into the match branch, and then dynamic dispatch on the grid type
+    // Then properly set up the image resolution here
+    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {

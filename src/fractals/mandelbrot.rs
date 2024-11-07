@@ -41,7 +41,6 @@ impl RenderableWithHistogram for MandelbrotParams {
             QuadraticMapSequence::log_iter_count(self.convergence_params.max_iter_count as f32),
         )
     }
-
 }
 
 impl Renderable for MandelbrotParams {
