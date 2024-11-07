@@ -7,6 +7,10 @@ use super::{file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
 /// used by the "explore" GUI to interact with the different fractals.
 pub trait RenderWindow {
+
+    /// Provides access to the current image specification for the window
+    fn image_specification(&self) -> &ImageSpecification;
+
     /// Recenters the view to a specific point in the 2D space.
     ///
     /// # Parameters
@@ -31,7 +35,9 @@ pub trait RenderWindow {
 
     /// Recompute the entire fractal if any internal parameters have changed. This should be
     /// a no-op if called with no internal changes.
-    fn update(&mut self);
+    ///
+    /// # Return: true if the buffer was updated, false if the call was a no-op.
+    fn update(&mut self) -> bool;
 
     /// Renders the internal buffer state to the screen. Typically `update()` would be called
     /// before `draw()`.
@@ -67,7 +73,6 @@ impl<F> PixelGrid<F>
 where
     F: PointRenderFn,
 {
-    /// Creates a new `PixelGrid` instance with the given `file_prefix`, `image_specification`, and `pixel_renderer`.
     pub fn new(
         file_prefix: FilePrefix,
         image_specification: ImageSpecification,
@@ -84,23 +89,17 @@ where
         grid.update();
         grid
     }
-
-    /// Updates the grid by generating the image data using `pixel_renderer`.
-    pub fn update(&mut self) {
-        generate_scalar_image_in_place(
-            &self.image_specification,
-            &self.pixel_renderer,
-            &mut self.scratch_buffer,
-        );
-        std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-        self.update_required = false;
-    }
 }
 
 impl<F> RenderWindow for PixelGrid<F>
 where
     F: PointRenderFn,
 {
+
+    fn image_specification(&self) -> &ImageSpecification {
+        &self.image_specification
+    }
+
     fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
         self.image_specification.center = *center;
         self.update_required = true;
@@ -120,8 +119,18 @@ where
         self.update_required = true;
     }
 
-    fn update(&mut self) {
-        self.update();
+    fn update(&mut self) -> bool {
+        if self.update_required {
+            generate_scalar_image_in_place(
+                &self.image_specification,
+                &self.pixel_renderer,
+                &mut self.scratch_buffer,
+            );
+            std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
+            self.update_required = false;
+            return true;
+        }
+        return false;
     }
 
     fn draw(&self, screen: &mut [u8]) {

@@ -14,7 +14,7 @@ use crate::{
         image_utils::{
             create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
             ImageSpecification, PixelMapper, PointRenderFn, Renderable,
-        },
+        }, render_window::{PixelGrid, RenderWindow},
     },
     fractals::common::FractalParams,
 };
@@ -37,12 +37,23 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let mut input = WinitInputHelper::new();
 
     // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec) = match params {
+    let mut render_window: Box<dyn RenderWindow> = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let renderer = inner_params.clone().point_renderer();
-            (renderer, inner_params.image_specification().clone())
-        }
+            Box::new(PixelGrid::new(
+                file_prefix,
+                inner_params.image_specification().clone(),
+                inner_params.clone().point_renderer(),
+            ))
+        },
+        FractalParams::Julia(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("julia");
+            Box::new(PixelGrid::new(
+                file_prefix,
+                inner_params.image_specification().clone(),
+                inner_params.clone().point_renderer(),
+            ))
+        },
         _ => {
             println!("ERROR:  Unsupported fractal parameter type. Aborting.");
             panic!();
@@ -51,8 +62,8 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
     let window = {
         let logical_size = LogicalSize::new(
-            image_spec.resolution[0] as f64,
-            image_spec.resolution[1] as f64,
+            render_window.image_specification().resolution[0] as f64,
+            render_window.image_specification().resolution[1] as f64,
         );
         WindowBuilder::new()
             .with_title("Fractal Explorer")
@@ -66,23 +77,19 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         Pixels::new(
-            image_spec.resolution[0],
-            image_spec.resolution[1],
+            render_window.image_specification().resolution[0],
+            render_window.image_specification().resolution[1],
             surface_texture,
         )?
     };
 
     let mut keyboard_action_effect_modifier = 1.0f32;
 
-    // TODO:  move this up into the match branch, and then dynamic dispatch on the grid type
-    // Then properly set up the image resolution here
-    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
-
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(pixels.frame_mut());
+            render_window.draw(pixels.frame_mut());
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -101,35 +108,35 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
             // Zoom control --> W and S keys
             if input.key_pressed(VirtualKeyCode::W) {
-                pixel_grid
+                render_window
                     .zoom(1.0 - keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
             }
             if input.key_pressed(VirtualKeyCode::S) {
-                pixel_grid
+                render_window
                     .zoom(1.0 + keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
             }
 
             // Pan control --> arrow keys
             if input.key_pressed(VirtualKeyCode::Up) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     0f32,
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Down) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     0f32,
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Left) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Right) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
@@ -156,9 +163,9 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
             // Recenter the window on the mouse click location.
             if input.mouse_pressed(0) {
-                let pixel_mapper = PixelMapper::new(&pixel_grid.image_specification);
+                let pixel_mapper = PixelMapper::new(render_window.image_specification());
                 let point = pixel_mapper.map(&mouse_click_coordinates);
-                pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
+                render_window.recenter(&nalgebra::Vector2::new(point.0, point.1));
             }
 
             // Resize the window
@@ -170,13 +177,12 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 }
             }
 
-            if pixel_grid.update_required {
-                pixel_grid.update(&pixel_renderer);
+            if render_window.update() {
                 window.request_redraw();
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file();
+                render_window.render_to_file();
             }
         }
     });
