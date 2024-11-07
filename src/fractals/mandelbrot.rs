@@ -1,6 +1,6 @@
 use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::{ImageSpecification, Renderable},
+    image_utils::{ImageSpecification, PointRenderFn, Renderable},
 };
 use image::Rgb;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ impl RenderableWithHistogram for MandelbrotParams {
     fn renderer_with_histogram(
         self,
     ) -> (
-        impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        impl PointRenderFn,
         Histogram,
         CumulativeDistributionFunction,
     ) {
@@ -44,7 +44,7 @@ impl RenderableWithHistogram for MandelbrotParams {
 }
 
 impl Renderable for MandelbrotParams {
-    fn renderer(self) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
+    fn renderer(self) -> impl PointRenderFn {
         let (renderer, _hist, _cdf) = self.renderer_with_histogram();
         renderer
     }

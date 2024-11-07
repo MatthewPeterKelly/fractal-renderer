@@ -22,7 +22,7 @@ impl RenderableWithHistogram for JuliaParams {
     fn renderer_with_histogram(
         self,
     ) -> (
-        impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        impl PointRenderFn,
         Histogram,
         CumulativeDistributionFunction,
     ) {
@@ -44,7 +44,7 @@ impl RenderableWithHistogram for JuliaParams {
 }
 
 impl Renderable for JuliaParams {
-    fn renderer(self) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync {
+    fn renderer(self) -> impl PointRenderFn {
         let (renderer, _hist, _cdf) = self.renderer_with_histogram();
         renderer
     }

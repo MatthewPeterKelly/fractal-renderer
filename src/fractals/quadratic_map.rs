@@ -6,8 +6,7 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        Renderable,
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper, PointRenderFn, Renderable
     },
     lookup_table::LookupTable,
     stopwatch::Stopwatch,
@@ -159,7 +158,7 @@ pub fn pixel_renderer<T>(
     iterative_map: T,
     max_mapped_value: f32,
 ) -> (
-    impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+    impl PointRenderFn,
     Histogram,
     CumulativeDistributionFunction,
 )
@@ -222,7 +221,7 @@ pub trait RenderableWithHistogram: Renderable {
     fn renderer_with_histogram(
         self,
     ) -> (
-        impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        impl PointRenderFn,
         Histogram,
         CumulativeDistributionFunction,
     );

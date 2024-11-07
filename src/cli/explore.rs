@@ -238,7 +238,7 @@ impl PixelGrid {
      */
     fn update<F>(&mut self, pixel_renderer: F)
     where
-        F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        F: PointRenderFn,
     {
         generate_scalar_image_in_place(
             &self.image_specification,

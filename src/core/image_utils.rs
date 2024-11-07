@@ -120,7 +120,7 @@ pub trait PointRenderFn: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
 impl<T> PointRenderFn for T where T: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
 
 pub trait Renderable: Serialize + std::fmt::Debug + Clone {
-    fn renderer(self) -> impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync;
+    fn renderer(self) -> impl PointRenderFn;
 
     fn image_specification(&self) -> &ImageSpecification;
 }
