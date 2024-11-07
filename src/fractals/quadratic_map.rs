@@ -6,7 +6,8 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper, PointRenderFn, Renderable
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+        PointRenderFn, Renderable,
     },
     lookup_table::LookupTable,
     stopwatch::Stopwatch,

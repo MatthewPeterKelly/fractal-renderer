@@ -12,7 +12,8 @@ use crate::{
     core::{
         file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         image_utils::{
-            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic, ImageSpecification, PixelMapper, PointRenderFn, Renderable
+            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
+            ImageSpecification, PixelMapper, PointRenderFn, Renderable,
         },
     },
     fractals::common::FractalParams,
@@ -39,7 +40,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let (pixel_renderer, image_spec) = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let renderer = inner_params.clone().renderer();
+            let renderer = inner_params.clone().point_renderer();
             (renderer, inner_params.image_specification().clone())
         }
         _ => {
@@ -201,8 +202,7 @@ impl PixelGrid {
         file_prefix: FilePrefix,
         image_specification: ImageSpecification,
         pixel_renderer: F,
-    ) -> Self
-    {
+    ) -> Self {
         let mut grid = Self {
             display_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
             scratch_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),

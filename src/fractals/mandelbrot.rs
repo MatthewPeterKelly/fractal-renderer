@@ -2,7 +2,6 @@ use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{ImageSpecification, PointRenderFn, Renderable},
 };
-use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
@@ -44,7 +43,7 @@ impl RenderableWithHistogram for MandelbrotParams {
 }
 
 impl Renderable for MandelbrotParams {
-    fn renderer(self) -> impl PointRenderFn {
+    fn point_renderer(self) -> impl PointRenderFn {
         let (renderer, _hist, _cdf) = self.renderer_with_histogram();
         renderer
     }
