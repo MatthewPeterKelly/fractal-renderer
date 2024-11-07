@@ -12,8 +12,7 @@ use crate::{
     core::{
         file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
         image_utils::{
-            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
-            ImageSpecification, PixelMapper, Renderable,
+            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic, ImageSpecification, PixelMapper, PointRenderFn, Renderable
         },
     },
     fractals::common::FractalParams,
@@ -198,13 +197,11 @@ struct PixelGrid {
  */
 
 impl PixelGrid {
-    fn new<F>(
+    fn new<F: PointRenderFn>(
         file_prefix: FilePrefix,
         image_specification: ImageSpecification,
         pixel_renderer: F,
     ) -> Self
-    where
-        F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
     {
         let mut grid = Self {
             display_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
