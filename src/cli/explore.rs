@@ -1,4 +1,5 @@
-use image::Rgb;
+use std::any::type_name;
+
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -10,11 +11,9 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     core::{
-        file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
-        image_utils::{
-            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
-            ImageSpecification, PixelMapper, PointRenderFn, Renderable,
-        }, render_window::{PixelGrid, RenderWindow},
+        file_io::FilePrefix,
+        image_utils::{PixelMapper, Renderable},
+        render_window::{PixelGrid, RenderWindow},
     },
     fractals::common::FractalParams,
 };
@@ -36,7 +35,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
-    // Read the parameters file here. For now, only support Mandelbrot set.
+    // Read the parameters file here and convert it into a `RenderWindow`.
     let mut render_window: Box<dyn RenderWindow> = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
@@ -45,7 +44,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 inner_params.image_specification().clone(),
                 inner_params.clone().point_renderer(),
             ))
-        },
+        }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
             Box::new(PixelGrid::new(
@@ -53,9 +52,12 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 inner_params.image_specification().clone(),
                 inner_params.clone().point_renderer(),
             ))
-        },
+        }
         _ => {
-            println!("ERROR:  Unsupported fractal parameter type. Aborting.");
+            println!(
+                "ERROR: Parameter type `{}` does not yet implement the `RenderWindow` trait!  Aborting.",
+                type_name::<FractalParams>()
+            );
             panic!();
         }
     };

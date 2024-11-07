@@ -1,13 +1,18 @@
 use image::Rgb;
 use nalgebra::Vector2;
 
-use super::{file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix}, image_utils::{create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic, ImageSpecification, PointRenderFn}};
+use super::{
+    file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
+    image_utils::{
+        create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
+        ImageSpecification, PointRenderFn,
+    },
+};
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
 /// used by the "explore" GUI to interact with the different fractals.
 pub trait RenderWindow {
-
     /// Provides access to the current image specification for the window
     fn image_specification(&self) -> &ImageSpecification;
 
@@ -54,13 +59,13 @@ pub trait RenderWindow {
     fn render_to_file(&self);
 }
 
-
-
-
-
+/// The `PixelGrid` is a generic implementation of the `RenderWindow`, which
+/// supports all "solve by pixel" fractals. The key idea here is that we can
+/// use generics to improve speed on the "per-pixel" calculations, but then
+/// use runtime polymorphism (`dyn`) on the "once per image" updates for the
+/// `explore` interface. This helps to keep the rendering pipeline efficient.
 #[derive(Clone, Debug)]
-pub struct PixelGrid<F: PointRenderFn>
-{
+pub struct PixelGrid<F: PointRenderFn> {
     display_buffer: Vec<Vec<Rgb<u8>>>,
     scratch_buffer: Vec<Vec<Rgb<u8>>>,
     image_specification: ImageSpecification,
@@ -95,7 +100,6 @@ impl<F> RenderWindow for PixelGrid<F>
 where
     F: PointRenderFn,
 {
-
     fn image_specification(&self) -> &ImageSpecification {
         &self.image_specification
     }
@@ -130,7 +134,7 @@ where
             self.update_required = false;
             return true;
         }
-        return false;
+        false
     }
 
     fn draw(&self, screen: &mut [u8]) {
