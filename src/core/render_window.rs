@@ -1,7 +1,7 @@
 use image::Rgb;
 use nalgebra::Vector2;
 
-use super::{file_io::FilePrefix, image_utils::{create_buffer, ImageSpecification, PointRenderFn}};
+use super::{file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix}, image_utils::{create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic, ImageSpecification, PointRenderFn}};
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -53,22 +53,22 @@ pub trait RenderWindow {
 
 
 #[derive(Clone, Debug)]
-struct PixelGrid {
-    display_buffer: Vec<Vec<Rgb<u8>>>, // rendered to the screen on `draw()`
-    scratch_buffer: Vec<Vec<Rgb<u8>>>, // updated in-place on `update()`
+pub struct PixelGrid<F: PointRenderFn>
+{
+    display_buffer: Vec<Vec<Rgb<u8>>>,
+    scratch_buffer: Vec<Vec<Rgb<u8>>>,
     image_specification: ImageSpecification,
-    update_required: bool, // used to mark when the image_specification has changed.
-    file_prefix: FilePrefix, // used for writing intermediate image frames to file
+    update_required: bool,
+    file_prefix: FilePrefix,
+    pixel_renderer: F,
 }
 
-/**
- * I think an answer here is to cache the renderer object into the pixel grid, making that
- * type explicit. Then dynamic dispatch on the call to update, rather on the call to the
- * renderer itself.
- */
-
-impl PixelGrid {
-    fn new<F: PointRenderFn>(
+impl<F> PixelGrid<F>
+where
+    F: PointRenderFn,
+{
+    /// Creates a new `PixelGrid` instance with the given `file_prefix`, `image_specification`, and `pixel_renderer`.
+    pub fn new(
         file_prefix: FilePrefix,
         image_specification: ImageSpecification,
         pixel_renderer: F,
@@ -79,13 +79,28 @@ impl PixelGrid {
             image_specification,
             update_required: true,
             file_prefix,
+            pixel_renderer,
         };
-        grid.update(&pixel_renderer);
+        grid.update();
         grid
     }
 
+    /// Updates the grid by generating the image data using `pixel_renderer`.
+    pub fn update(&mut self) {
+        generate_scalar_image_in_place(
+            &self.image_specification,
+            &self.pixel_renderer,
+            &mut self.scratch_buffer,
+        );
+        std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
+        self.update_required = false;
+    }
 }
-impl RenderWindow for PixelGrid {
+
+impl<F> RenderWindow for PixelGrid<F>
+where
+    F: PointRenderFn,
+{
     fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
         self.image_specification.center = *center;
         self.update_required = true;
@@ -105,28 +120,11 @@ impl RenderWindow for PixelGrid {
         self.update_required = true;
     }
 
-    /**
-     *  Computes the fractal; stored in a double buffer.
-     */
-    fn update<F>(&mut self, pixel_renderer: F)
-    where
-        F: PointRenderFn,
-    {
-        generate_scalar_image_in_place(
-            &self.image_specification,
-            pixel_renderer,
-            &mut self.scratch_buffer,
-        );
-        std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-        self.update_required = false;
+    fn update(&mut self) {
+        self.update();
     }
 
-    /**
-     *  Renders data from the double buffer to the screen.
-     */
     fn draw(&self, screen: &mut [u8]) {
-        // The screen buffer should be 4x the size of our buffer because it has RGBA channels
-        // where as we only have a scalar channel that is mapped through a color map.
         debug_assert_eq!(
             screen.len(),
             (4 * self.image_specification.resolution[0] * self.image_specification.resolution[1])
@@ -145,22 +143,17 @@ impl RenderWindow for PixelGrid {
     fn render_to_file(&self) {
         let datetime = date_time_string();
 
-        // TODO:  eventually generalize this to write the entire parameter struct:
-        // https://github.com/MatthewPeterKelly/fractal-renderer/issues/68
         serialize_to_json_or_panic(
             self.file_prefix
                 .full_path_with_suffix(&format!("_{}.json", datetime)),
             &self.image_specification,
         );
 
-        // Save the image to a file, deducing the type from the file name
-        // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
         let mut imgbuf = image::ImageBuffer::new(
             self.image_specification.resolution[0],
             self.image_specification.resolution[1],
         );
 
-        // Iterate over the coordinates and pixels of the image
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
             *pixel = self.display_buffer[x as usize][y as usize];
         }
