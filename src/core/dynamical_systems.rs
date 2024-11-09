@@ -2,18 +2,19 @@
 
 #[cfg(test)]
 use nalgebra::Vector2;
+
 #[cfg(test)]
 pub struct SimpleLinearControl {
     pub xi: f64,    // damping ratio
     pub omega: f64, // natural frequency
 }
+
 #[cfg(test)]
 impl SimpleLinearControl {
     /// Constant that is used to map between the rise time and omega (natural frequency)
     /// for a critically damped (xi == 1.0) system:
     ///
     /// CRITICALLY_DAMPED_RISE_TIME_SCALE_FACTOR = rise_time * omega;
-    #[cfg(test)]
     pub const CRITICALLY_DAMPED_RISE_TIME_SCALE_FACTOR: f64 = 3.357908561477796;
 
     /// Computes x(t) for critically damped, overdamped, and underdamped cases

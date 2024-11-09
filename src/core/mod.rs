@@ -1,5 +1,6 @@
 pub mod chaos_game;
 pub mod color_map;
+pub mod controller;
 pub mod dynamical_systems;
 pub mod file_io;
 pub mod histogram;
