@@ -1,4 +1,5 @@
-use image::Rgb;
+use std::any::type_name;
+
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -10,13 +11,11 @@ use winit_input_helper::WinitInputHelper;
 
 use crate::{
     core::{
-        file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
-        image_utils::{
-            create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
-            ImageSpecification, PixelMapper,
-        },
+        file_io::FilePrefix,
+        image_utils::{PixelMapper, Renderable},
+        render_window::{PixelGrid, RenderWindow},
     },
-    fractals::{common::FractalParams, quadratic_map::Renderable},
+    fractals::common::FractalParams,
 };
 
 // Parameters for GUI key-press interactions
@@ -36,23 +35,37 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
 
-    // Read the parameters file here. For now, only support Mandelbrot set.
-    let (pixel_renderer, image_spec) = match params {
+    // Read the parameters file here and convert it into a `RenderWindow`.
+    let mut render_window: Box<dyn RenderWindow> = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            let (renderer, _, _) = inner_params.clone().renderer();
-            (renderer, inner_params.image_specification.clone())
+            Box::new(PixelGrid::new(
+                file_prefix,
+                inner_params.image_specification().clone(),
+                inner_params.clone().point_renderer(),
+            ))
+        }
+        FractalParams::Julia(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("julia");
+            Box::new(PixelGrid::new(
+                file_prefix,
+                inner_params.image_specification().clone(),
+                inner_params.clone().point_renderer(),
+            ))
         }
         _ => {
-            println!("ERROR:  Unsupported fractal parameter type. Aborting.");
+            println!(
+                "ERROR: Parameter type `{}` does not yet implement the `RenderWindow` trait!  Aborting.",
+                type_name::<FractalParams>()
+            );
             panic!();
         }
     };
 
     let window = {
         let logical_size = LogicalSize::new(
-            image_spec.resolution[0] as f64,
-            image_spec.resolution[1] as f64,
+            render_window.image_specification().resolution[0] as f64,
+            render_window.image_specification().resolution[1] as f64,
         );
         WindowBuilder::new()
             .with_title("Fractal Explorer")
@@ -66,22 +79,19 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         Pixels::new(
-            image_spec.resolution[0],
-            image_spec.resolution[1],
+            render_window.image_specification().resolution[0],
+            render_window.image_specification().resolution[1],
             surface_texture,
         )?
     };
 
     let mut keyboard_action_effect_modifier = 1.0f32;
 
-    // Then properly set up the image resolution here
-    let mut pixel_grid = PixelGrid::new(file_prefix, image_spec, &pixel_renderer);
-
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
         if let Event::RedrawRequested(_) = event {
-            pixel_grid.draw(pixels.frame_mut());
+            render_window.draw(pixels.frame_mut());
             if pixels.render().is_err() {
                 println!("ERROR:  unable to render pixels. Aborting.");
                 *control_flow = ControlFlow::Exit;
@@ -100,35 +110,35 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
             // Zoom control --> W and S keys
             if input.key_pressed(VirtualKeyCode::W) {
-                pixel_grid
+                render_window
                     .zoom(1.0 - keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
             }
             if input.key_pressed(VirtualKeyCode::S) {
-                pixel_grid
+                render_window
                     .zoom(1.0 + keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
             }
 
             // Pan control --> arrow keys
             if input.key_pressed(VirtualKeyCode::Up) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     0f32,
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Down) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     0f32,
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Left) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
             }
             if input.key_pressed(VirtualKeyCode::Right) {
-                pixel_grid.pan_view(&nalgebra::Vector2::<f32>::new(
+                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
                     keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
                     0f32,
                 ));
@@ -155,9 +165,9 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
 
             // Recenter the window on the mouse click location.
             if input.mouse_pressed(0) {
-                let pixel_mapper = PixelMapper::new(&pixel_grid.image_specification);
+                let pixel_mapper = PixelMapper::new(render_window.image_specification());
                 let point = pixel_mapper.map(&mouse_click_coordinates);
-                pixel_grid.recenter(&nalgebra::Vector2::new(point.0, point.1));
+                render_window.recenter(&nalgebra::Vector2::new(point.0, point.1));
             }
 
             // Resize the window
@@ -169,130 +179,13 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 }
             }
 
-            if pixel_grid.update_required {
-                pixel_grid.update(&pixel_renderer);
+            if render_window.update() {
                 window.request_redraw();
             }
 
             if input.key_pressed_os(VirtualKeyCode::Space) {
-                pixel_grid.render_to_file();
+                render_window.render_to_file();
             }
         }
     });
-}
-
-#[derive(Clone, Debug)]
-struct PixelGrid {
-    display_buffer: Vec<Vec<Rgb<u8>>>, // rendered to the screen on `draw()`
-    scratch_buffer: Vec<Vec<Rgb<u8>>>, // updated in-place on `update()`
-    image_specification: ImageSpecification,
-    update_required: bool, // used to mark when the image_specification has changed.
-    file_prefix: FilePrefix, // used for writing intermediate image frames to file
-}
-
-impl PixelGrid {
-    fn new<F>(
-        file_prefix: FilePrefix,
-        image_specification: ImageSpecification,
-        pixel_renderer: F,
-    ) -> Self
-    where
-        F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-    {
-        let mut grid = Self {
-            display_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
-            scratch_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
-            image_specification,
-            update_required: true,
-            file_prefix,
-        };
-        grid.update(&pixel_renderer);
-        grid
-    }
-
-    fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
-        self.image_specification.center = *center;
-        self.update_required = true;
-    }
-
-    fn pan_view(&mut self, view_fraction: &nalgebra::Vector2<f32>) {
-        let x_delta = view_fraction[0] as f64 * self.image_specification.width;
-        let y_delta = view_fraction[1] as f64 * self.image_specification.height();
-        self.recenter(&nalgebra::Vector2::new(
-            self.image_specification.center[0] + x_delta,
-            self.image_specification.center[1] + y_delta,
-        ));
-    }
-
-    fn zoom(&mut self, scale: f32) {
-        self.image_specification.width *= scale as f64;
-        self.update_required = true;
-    }
-
-    /**
-     *  Computes the fractal; stored in a double buffer.
-     */
-    fn update<F>(&mut self, pixel_renderer: F)
-    where
-        F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-    {
-        generate_scalar_image_in_place(
-            &self.image_specification,
-            pixel_renderer,
-            &mut self.scratch_buffer,
-        );
-        std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-        self.update_required = false;
-    }
-
-    /**
-     *  Renders data from the double buffer to the screen.
-     */
-    fn draw(&self, screen: &mut [u8]) {
-        // The screen buffer should be 4x the size of our buffer because it has RGBA channels
-        // where as we only have a scalar channel that is mapped through a color map.
-        debug_assert_eq!(
-            screen.len(),
-            (4 * self.image_specification.resolution[0] * self.image_specification.resolution[1])
-                as usize
-        );
-        let array_skip = self.image_specification.resolution[0] as usize;
-        for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
-            let j = flat_index / array_skip;
-            let i = flat_index % array_skip;
-            let raw_pixel = self.display_buffer[i][j];
-            let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
-            pixel.copy_from_slice(&color);
-        }
-    }
-
-    fn render_to_file(&self) {
-        let datetime = date_time_string();
-
-        // TODO:  eventually generalize this to write the entire parameter struct:
-        // https://github.com/MatthewPeterKelly/fractal-renderer/issues/68
-        serialize_to_json_or_panic(
-            self.file_prefix
-                .full_path_with_suffix(&format!("_{}.json", datetime)),
-            &self.image_specification,
-        );
-
-        // Save the image to a file, deducing the type from the file name
-        // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-        let mut imgbuf = image::ImageBuffer::new(
-            self.image_specification.resolution[0],
-            self.image_specification.resolution[1],
-        );
-
-        // Iterate over the coordinates and pixels of the image
-        for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            *pixel = self.display_buffer[x as usize][y as usize];
-        }
-
-        write_image_to_file_or_panic(
-            self.file_prefix
-                .full_path_with_suffix(&format!("_{}.png", datetime)),
-            |f| imgbuf.save(f),
-        );
-    }
 }

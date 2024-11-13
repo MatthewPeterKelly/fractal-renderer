@@ -1,3 +1,4 @@
+use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -113,6 +114,19 @@ impl ViewRectangle {
 
         ViewRectangle { center, dimensions }
     }
+}
+
+/// The PointRenderFn is a type alias for a lambda function that can map from a
+/// point in "real space" to a RGB pixel value.
+pub trait PointRenderFn: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
+impl<T> PointRenderFn for T where T: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
+
+/// The Renderable trait represents an object that can provide a point render function
+/// and an image specification.
+pub trait Renderable: Serialize + std::fmt::Debug + Clone {
+    fn point_renderer(self) -> impl PointRenderFn;
+
+    fn image_specification(&self) -> &ImageSpecification;
 }
 
 /**

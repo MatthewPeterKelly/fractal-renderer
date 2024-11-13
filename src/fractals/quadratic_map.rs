@@ -7,6 +7,7 @@ use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
+        PointRenderFn, Renderable,
     },
     lookup_table::LookupTable,
     stopwatch::Stopwatch,
@@ -158,7 +159,7 @@ pub fn pixel_renderer<T>(
     iterative_map: T,
     max_mapped_value: f32,
 ) -> (
-    impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+    impl PointRenderFn,
     Histogram,
     CumulativeDistributionFunction,
 )
@@ -217,19 +218,17 @@ where
     )
 }
 
-pub trait Renderable: Serialize + std::fmt::Debug + Clone {
-    fn renderer(
+pub trait RenderableWithHistogram: Renderable {
+    fn renderer_with_histogram(
         self,
     ) -> (
-        impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        impl PointRenderFn,
         Histogram,
         CumulativeDistributionFunction,
     );
-
-    fn image_specification(&self) -> &ImageSpecification;
 }
 
-pub fn render<T: Renderable>(
+pub fn render<T: RenderableWithHistogram>(
     params: T,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -246,7 +245,7 @@ pub fn render<T: Renderable>(
     stopwatch.record_split("basic setup".to_owned());
 
     let image_specification = params.image_specification().clone();
-    let (pixel_renderer, histogram, cdf) = params.renderer();
+    let (pixel_renderer, histogram, cdf) = params.renderer_with_histogram();
 
     stopwatch.record_split("build renderer".to_owned());
 

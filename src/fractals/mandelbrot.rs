@@ -1,12 +1,12 @@
 use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::ImageSpecification,
+    image_utils::{ImageSpecification, PointRenderFn, Renderable},
 };
-use image::Rgb;
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
-    pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence, Renderable,
+    pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence,
+    RenderableWithHistogram,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -18,11 +18,11 @@ pub struct MandelbrotParams {
 
 const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
 
-impl Renderable for MandelbrotParams {
-    fn renderer(
+impl RenderableWithHistogram for MandelbrotParams {
+    fn renderer_with_histogram(
         self,
     ) -> (
-        impl Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
+        impl PointRenderFn,
         Histogram,
         CumulativeDistributionFunction,
     ) {
@@ -39,6 +39,13 @@ impl Renderable for MandelbrotParams {
             },
             QuadraticMapSequence::log_iter_count(self.convergence_params.max_iter_count as f32),
         )
+    }
+}
+
+impl Renderable for MandelbrotParams {
+    fn point_renderer(self) -> impl PointRenderFn {
+        let (renderer, _hist, _cdf) = self.renderer_with_histogram();
+        renderer
     }
 
     fn image_specification(&self) -> &ImageSpecification {

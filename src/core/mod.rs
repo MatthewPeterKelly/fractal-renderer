@@ -5,4 +5,5 @@ pub mod histogram;
 pub mod image_utils;
 pub mod lookup_table;
 pub mod ode_solvers;
+pub mod render_window;
 pub mod stopwatch;
