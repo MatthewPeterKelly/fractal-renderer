@@ -130,6 +130,8 @@ impl PointTracker {
         self.target = target;
     }
 
+    /// Updates the simulation, potentially running several update steps,
+    /// bringing the state up to the current time.
     pub fn update_and_return_pos(&mut self, time: f64) -> f64 {
         let delta_time = time - self.time;
         let num_steps = (delta_time / self.max_time_step).ceil();
