@@ -8,6 +8,8 @@ Long-term goal: add support for zoom sequences and other fractals, along with (m
 
 ## Usage Examples:
 
+### Render Command:
+
 ```
 cargo run --release -- render ./examples/mandelbrot/default.json
 ```
@@ -32,11 +34,13 @@ cargo run --release -- render ./examples/serpinsky/triangle.json
 ```
 
 ```
-cargo run --release -- explore ./examples/mandelbrot/default.json
+cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
 ```
 
+### Explore Command
+
 ```
-cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
+cargo run --release -- explore ./examples/mandelbrot/default.json
 ```
 
 ## Autoformatting:
