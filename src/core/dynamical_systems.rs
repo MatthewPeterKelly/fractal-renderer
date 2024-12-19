@@ -4,7 +4,9 @@
 use nalgebra::Vector2;
 
 pub struct SimpleLinearControl {
-    pub xi: f64,    // damping ratio
+    #[cfg(test)]
+    pub xi: f64, // damping ratio
+    #[cfg(test)]
     pub omega: f64, // natural frequency
 }
 
