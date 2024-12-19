@@ -1,14 +1,13 @@
-#[cfg(test)]
+use serde::{Deserialize, Serialize};
+
 use crate::core::dynamical_systems::SimpleLinearControl;
 
-#[derive(Debug, Clone, Copy)]
-#[cfg(test)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PointState {
     pub pos: f64,
     pub vel: f64,
 }
 
-#[cfg(test)]
 impl PointState {
     pub fn time_step_physics(&mut self, delta_time: f64, acc: f64) {
         // Symplectic Euler's method... stable first order ODE step.
@@ -18,23 +17,19 @@ impl PointState {
 }
 
 #[derive(Clone, Debug)]
-#[cfg(test)]
 pub enum Target {
     Position { pos_ref: f64, max_vel: f64 },
     Velocity { vel_ref: f64 },
 }
 
-#[derive(Debug, Clone, Copy)]
-#[cfg(test)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 
 pub struct Controller {
     pub gains: PointState,
     pub vel_err_int: f64, // velocity error integrator state
 }
 
-#[cfg(test)]
 impl Controller {
-    #[cfg(test)]
     pub fn gains_from_damping_and_natural_frequency(
         damping_ratio: f64,
         natural_frequency: f64,
@@ -44,7 +39,6 @@ impl Controller {
         PointState { pos: kp, vel: kd }
     }
 
-    #[cfg(test)]
     pub fn from_rise_time(rise_time: f64) -> Controller {
         // See the `test_closed_loop_controller_critically_damped_rise_time()`
         // test in `ode_solvers` for an idea of how the 3.357... value is found.
@@ -54,7 +48,6 @@ impl Controller {
         ))
     }
 
-    #[cfg(test)]
     pub fn new(gains: PointState) -> Controller {
         Controller {
             gains,
@@ -71,7 +64,6 @@ impl Controller {
     /// Note: the "integral" gain on the velocity controller does not have
     /// a proper "anti-wind-up" feature, because we assume that the command
     /// acceleration will be applied perfectly to the state by PointTracker.
-    #[cfg(test)]
     pub fn update_and_compute_acceleration(
         &mut self,
         state: &PointState,
@@ -103,7 +95,6 @@ impl Controller {
 }
 
 #[derive(Clone, Debug)]
-#[cfg(test)]
 pub struct PointTracker {
     controller: Controller,
     state: PointState,
@@ -112,7 +103,6 @@ pub struct PointTracker {
     max_time_step: f64,
 }
 
-#[cfg(test)]
 impl PointTracker {
     pub const MINIMUM_INTEGRATION_STEP_COUNT_PER_RISE_TIME: f64 = 5.0;
 
@@ -130,8 +120,10 @@ impl PointTracker {
         self.target = target;
     }
 
-    /// Updates the simulation, potentially running several update steps,
-    /// bringing the state up to the current time.
+    pub fn state(&self) -> &PointState {
+        &self.state
+    }
+
     pub fn update_and_return_pos(&mut self, time: f64) -> f64 {
         let delta_time = time - self.time;
         let num_steps = (delta_time / self.max_time_step).ceil();
@@ -167,7 +159,7 @@ mod tests {
         let mut tracker = PointTracker::new(time_init, pos_init, rise_time);
 
         // Select a velocity limit that we will actually hit...
-        // ... but then run long enough to actually hit the target.
+        // ... but then run long enough to actually hit the target position.
 
         let pos_ref = -0.4;
         let max_vel = 8.0;

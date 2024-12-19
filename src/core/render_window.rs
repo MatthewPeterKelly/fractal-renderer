@@ -1,5 +1,4 @@
 use image::Rgb;
-use nalgebra::Vector2;
 
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
@@ -7,6 +6,7 @@ use super::{
         create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
         ImageSpecification, PointRenderFn,
     },
+    view_control::{CenterCommand, ViewControl, ZoomVelocityCommand},
 };
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
@@ -16,33 +16,16 @@ pub trait RenderWindow {
     /// Provides access to the current image specification for the window
     fn image_specification(&self) -> &ImageSpecification;
 
-    /// Recenters the view to a specific point in the 2D space.
-    ///
-    /// # Parameters
-    ///
-    /// - `center`: A reference to a `Vector2<f64>` specifying the new center coordinates.
-    fn recenter(&mut self, center: &Vector2<f64>);
-
-    /// Pans the view by a specified fraction of the view's current size.
-    ///
-    /// # Parameters
-    ///
-    /// - `view_fraction`: A `Vector2<f32>`, normalized by the current window size.
-    ///   For example, passing [1,0] would move the image center by exactly one window width.
-    fn pan_view(&mut self, view_fraction: &Vector2<f32>);
-
-    /// Zooms the view by a given scaling factor.
-    ///
-    /// # Parameters
-    ///
-    /// - `scale`: A `f32`, representing the ratio of the desired to current window width.
-    fn zoom(&mut self, scale: f32);
-
     /// Recompute the entire fractal if any internal parameters have changed. This should be
     /// a no-op if called with no internal changes.
     ///
     /// # Return: true if the buffer was updated, false if the call was a no-op.
-    fn update(&mut self) -> bool;
+    fn update(
+        &mut self,
+        time: f64,
+        center_command: CenterCommand,
+        zoom_command: ZoomVelocityCommand,
+    ) -> bool;
 
     /// Renders the internal buffer state to the screen. Typically `update()` would be called
     /// before `draw()`.
@@ -68,8 +51,7 @@ pub trait RenderWindow {
 pub struct PixelGrid<F: PointRenderFn> {
     display_buffer: Vec<Vec<Rgb<u8>>>,
     scratch_buffer: Vec<Vec<Rgb<u8>>>,
-    image_specification: ImageSpecification,
-    update_required: bool,
+    view_control: ViewControl,
     file_prefix: FilePrefix,
     pixel_renderer: F,
 }
@@ -79,20 +61,26 @@ where
     F: PointRenderFn,
 {
     pub fn new(
+        time: f64,
         file_prefix: FilePrefix,
-        image_specification: ImageSpecification,
+        view_control: ViewControl,
         pixel_renderer: F,
     ) -> Self {
-        let mut grid = Self {
-            display_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
-            scratch_buffer: create_buffer(Rgb([0, 0, 0]), &image_specification.resolution),
-            image_specification,
-            update_required: true,
+        let mut pixel_grid = Self {
+            display_buffer: create_buffer(
+                Rgb([0, 0, 0]),
+                &view_control.image_specification().resolution,
+            ),
+            scratch_buffer: create_buffer(
+                Rgb([0, 0, 0]),
+                &view_control.image_specification().resolution,
+            ),
+            view_control,
             file_prefix,
             pixel_renderer,
         };
-        grid.update();
-        grid
+        pixel_grid.update(time, CenterCommand::Idle(), ZoomVelocityCommand::zero());
+        pixel_grid
     }
 }
 
@@ -101,37 +89,29 @@ where
     F: PointRenderFn,
 {
     fn image_specification(&self) -> &ImageSpecification {
-        &self.image_specification
+        self.view_control.image_specification()
     }
 
-    fn recenter(&mut self, center: &nalgebra::Vector2<f64>) {
-        self.image_specification.center = *center;
-        self.update_required = true;
-    }
+    // TODO:  consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
 
-    fn pan_view(&mut self, view_fraction: &nalgebra::Vector2<f32>) {
-        let x_delta = view_fraction[0] as f64 * self.image_specification.width;
-        let y_delta = view_fraction[1] as f64 * self.image_specification.height();
-        self.recenter(&nalgebra::Vector2::new(
-            self.image_specification.center[0] + x_delta,
-            self.image_specification.center[1] + y_delta,
-        ));
-    }
+    fn update(
+        &mut self,
+        time: f64,
+        center_command: CenterCommand,
+        zoom_command: ZoomVelocityCommand,
+    ) -> bool {
+        self.view_control.update(time, center_command, zoom_command);
 
-    fn zoom(&mut self, scale: f32) {
-        self.image_specification.width *= scale as f64;
-        self.update_required = true;
-    }
+        let update_required = true;
 
-    fn update(&mut self) -> bool {
-        if self.update_required {
+        if update_required {
+            let image_resolution = self.image_specification().clone();
             generate_scalar_image_in_place(
-                &self.image_specification,
+                &image_resolution,
                 &self.pixel_renderer,
                 &mut self.scratch_buffer,
             );
             std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-            self.update_required = false;
             return true;
         }
         false
@@ -140,10 +120,10 @@ where
     fn draw(&self, screen: &mut [u8]) {
         debug_assert_eq!(
             screen.len(),
-            (4 * self.image_specification.resolution[0] * self.image_specification.resolution[1])
-                as usize
+            (4 * self.image_specification().resolution[0]
+                * self.image_specification().resolution[1]) as usize
         );
-        let array_skip = self.image_specification.resolution[0] as usize;
+        let array_skip = self.image_specification().resolution[0] as usize;
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
@@ -159,12 +139,12 @@ where
         serialize_to_json_or_panic(
             self.file_prefix
                 .full_path_with_suffix(&format!("_{}.json", datetime)),
-            &self.image_specification,
+            &self.image_specification(),
         );
 
         let mut imgbuf = image::ImageBuffer::new(
-            self.image_specification.resolution[0],
-            self.image_specification.resolution[1],
+            self.image_specification().resolution[0],
+            self.image_specification().resolution[1],
         );
 
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {

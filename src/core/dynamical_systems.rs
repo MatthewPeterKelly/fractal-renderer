@@ -3,13 +3,13 @@
 #[cfg(test)]
 use nalgebra::Vector2;
 
-#[cfg(test)]
 pub struct SimpleLinearControl {
-    pub xi: f64,    // damping ratio
+    #[cfg(test)]
+    pub xi: f64, // damping ratio
+    #[cfg(test)]
     pub omega: f64, // natural frequency
 }
 
-#[cfg(test)]
 impl SimpleLinearControl {
     /// Constant that is used to map between the rise time and omega (natural frequency)
     /// for a critically damped (xi == 1.0) system:

@@ -12,16 +12,92 @@ use winit_input_helper::WinitInputHelper;
 use crate::{
     core::{
         file_io::FilePrefix,
-        image_utils::{PixelMapper, Renderable},
+        image_utils::{ImageSpecification, PixelMapper, Renderable},
         render_window::{PixelGrid, RenderWindow},
+        stopwatch::Stopwatch,
+        view_control::{
+            CenterCommand, CenterTargetCommand, CenterVelocityCommand, ScalarDirection,
+            ViewControl, ZoomVelocityCommand,
+        },
     },
     fractals::common::FractalParams,
 };
 
-// Parameters for GUI key-press interactions
-const VIEW_FRACTION_STEP_PER_KEY_PRESS: f32 = 0.05;
-const ZOOM_SCALE_FACTOR_PER_KEY_PRESS: f32 = 0.05;
-const KEY_PRESS_SENSITIVITY_MODIFIER: f32 = 1.2;
+const RISE_TIME: f64 = 0.1; // seconds
+const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
+const PAN_RATE: f64 = 0.2; // window width per second
+
+fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
+    if neg_flag == pos_flag {
+        ScalarDirection::Zero()
+    } else if pos_flag {
+        ScalarDirection::Pos()
+    } else {
+        ScalarDirection::Neg()
+    }
+}
+
+fn zoom_velocity_command_from_key_press(input: &WinitInputHelper) -> ZoomVelocityCommand {
+    // Zoom control --> W and S keys
+    ZoomVelocityCommand {
+        zoom_direction: direction_from_key_pair(
+            input.key_held(VirtualKeyCode::W),
+            input.key_held(VirtualKeyCode::S),
+        ),
+    }
+}
+
+fn view_center_command_from_key_press(input: &WinitInputHelper) -> CenterCommand {
+    // Pan Up/Down control --> W and S keys
+    let pan_up_down_command = direction_from_key_pair(
+        input.key_held(VirtualKeyCode::Down),
+        input.key_held(VirtualKeyCode::Up),
+    );
+    let pan_left_right_command = direction_from_key_pair(
+        input.key_held(VirtualKeyCode::Left),
+        input.key_held(VirtualKeyCode::Right),
+    );
+
+    let center_velocity = CenterVelocityCommand {
+        center_direction: [pan_left_right_command, pan_up_down_command],
+    };
+
+    // If the user gave no input, then interpret this as "Idle", not "immediately stop".
+    if center_velocity == CenterVelocityCommand::zero() {
+        CenterCommand::Idle()
+    } else {
+        CenterCommand::Velocity(center_velocity)
+    }
+}
+
+fn view_center_command_from_user_input(
+    input: &WinitInputHelper,
+    pixels: &Pixels,
+    image_specification: &ImageSpecification,
+) -> CenterCommand {
+    // Check for mouse click --> used to command a view target
+    if input.mouse_pressed(0) {
+        // Figure out where the mouse click happened.
+        let mouse_click_coordinates = input
+            .mouse()
+            .map(|(mx, my)| {
+                let (mx_i, my_i) = pixels
+                    .window_pos_to_pixel((mx, my))
+                    .unwrap_or_else(|pos| pixels.clamp_pixel_pos(pos));
+                (mx_i as u32, my_i as u32)
+            })
+            .unwrap_or_default();
+
+        let pixel_mapper = PixelMapper::new(image_specification);
+        let point = pixel_mapper.map(&mouse_click_coordinates);
+        CenterCommand::Target(CenterTargetCommand {
+            view_center: [point.0, point.1],
+        })
+    } else {
+        // No mouse click, so let's see if the user wants to pan/zoom with the keyboard:
+        view_center_command_from_key_press(input)
+    }
+}
 
 /**
  * Create a simple GUI window that can be used to explore a fractal.
@@ -34,22 +110,38 @@ const KEY_PRESS_SENSITIVITY_MODIFIER: f32 = 1.2;
 pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> Result<(), Error> {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
+    let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
 
     // Read the parameters file here and convert it into a `RenderWindow`.
+    let time = stopwatch.total_elapsed_seconds();
     let mut render_window: Box<dyn RenderWindow> = match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             Box::new(PixelGrid::new(
+                stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                inner_params.image_specification().clone(),
+                ViewControl::new(
+                    time,
+                    PAN_RATE,
+                    ZOOM_RATE,
+                    RISE_TIME,
+                    inner_params.image_specification(),
+                ),
                 inner_params.clone().point_renderer(),
             ))
         }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
             Box::new(PixelGrid::new(
+                stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                inner_params.image_specification().clone(),
+                ViewControl::new(
+                    time,
+                    PAN_RATE,
+                    ZOOM_RATE,
+                    RISE_TIME,
+                    inner_params.image_specification(),
+                ),
                 inner_params.clone().point_renderer(),
             ))
         }
@@ -85,8 +177,6 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
         )?
     };
 
-    let mut keyboard_action_effect_modifier = 1.0f32;
-
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
         // The one and only event that winit_input_helper doesn't have for us...
@@ -108,67 +198,13 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 return;
             }
 
-            // Zoom control --> W and S keys
-            if input.key_pressed(VirtualKeyCode::W) {
-                render_window
-                    .zoom(1.0 - keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
-            }
-            if input.key_pressed(VirtualKeyCode::S) {
-                render_window
-                    .zoom(1.0 + keyboard_action_effect_modifier * ZOOM_SCALE_FACTOR_PER_KEY_PRESS);
-            }
+            let center_command = view_center_command_from_user_input(
+                &input,
+                &pixels,
+                render_window.image_specification(),
+            );
 
-            // Pan control --> arrow keys
-            if input.key_pressed(VirtualKeyCode::Up) {
-                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
-                    0f32,
-                    keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
-                ));
-            }
-            if input.key_pressed(VirtualKeyCode::Down) {
-                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
-                    0f32,
-                    -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
-                ));
-            }
-            if input.key_pressed(VirtualKeyCode::Left) {
-                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
-                    -keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
-                    0f32,
-                ));
-            }
-            if input.key_pressed(VirtualKeyCode::Right) {
-                render_window.pan_view(&nalgebra::Vector2::<f32>::new(
-                    keyboard_action_effect_modifier * VIEW_FRACTION_STEP_PER_KEY_PRESS,
-                    0f32,
-                ));
-            }
-
-            // Pan/Zoom sensitivity --> A and D keys
-            if input.key_pressed(VirtualKeyCode::A) {
-                keyboard_action_effect_modifier /= KEY_PRESS_SENSITIVITY_MODIFIER;
-            }
-            if input.key_pressed(VirtualKeyCode::D) {
-                keyboard_action_effect_modifier *= KEY_PRESS_SENSITIVITY_MODIFIER;
-            }
-
-            // Figure out where the mouse click happened.
-            let mouse_click_coordinates = input
-                .mouse()
-                .map(|(mx, my)| {
-                    let (mx_i, my_i) = pixels
-                        .window_pos_to_pixel((mx, my))
-                        .unwrap_or_else(|pos| pixels.clamp_pixel_pos(pos));
-                    (mx_i as u32, my_i as u32)
-                })
-                .unwrap_or_default();
-
-            // Recenter the window on the mouse click location.
-            if input.mouse_pressed(0) {
-                let pixel_mapper = PixelMapper::new(render_window.image_specification());
-                let point = pixel_mapper.map(&mouse_click_coordinates);
-                render_window.recenter(&nalgebra::Vector2::new(point.0, point.1));
-            }
+            let zoom_command = zoom_velocity_command_from_key_press(&input);
 
             // Resize the window
             if let Some(size) = input.window_resized() {
@@ -179,7 +215,11 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 }
             }
 
-            if render_window.update() {
+            if render_window.update(
+                stopwatch.total_elapsed_seconds(),
+                center_command,
+                zoom_command,
+            ) {
                 window.request_redraw();
             }
 

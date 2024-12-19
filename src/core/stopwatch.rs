@@ -40,6 +40,10 @@ impl Stopwatch {
         self.start_split.elapsed()
     }
 
+    pub fn total_elapsed_seconds(&self) -> f64 {
+        self.total_elapsed().as_secs_f64()
+    }
+
     pub fn record_split(&mut self, name: String) -> Duration {
         let duration = self.split_elapsed();
         self.start_split = Instant::now();
