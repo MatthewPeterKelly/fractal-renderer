@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-#[derive(Default)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct Histogram {
     pub bin_count: Vec<u32>,
     pub data_to_index_scale: f32,
@@ -11,7 +11,7 @@ pub struct Histogram {
  * Fast and simple histogram for non-negative data.
  */
 impl Histogram {
-    // Constructor
+    /// Constructor
     pub fn new(num_bins: usize, max_val: f32) -> Self {
         assert!(num_bins > 0, "`num_bins` must be positive!");
         assert!(max_val > 0.0, "`max_val` must be positive!");
@@ -23,7 +23,16 @@ impl Histogram {
         }
     }
 
-    // Insert a data point into the histogram
+    /// Resets the state of the histogram to be the same as it was
+    /// after being initially constructed.
+    #[cfg(test)] // Suppress unused warning - we'll use this later.
+    pub fn reset(&mut self) {
+        for elem in self.bin_count.iter_mut() {
+            *elem = 0;
+        }
+    }
+
+    /// Insert a data point into the histogram
     pub fn insert(&mut self, data: f32) {
         if data < 0.0 {
             self.bin_count[0] += 1;
@@ -37,27 +46,23 @@ impl Histogram {
         }
     }
 
+    /// @return: the total number of data points that have been inserted
+    /// into the histogram. This is the sum of the count in all bins.
     pub fn total_count(&self) -> u32 {
         self.bin_count.iter().sum()
     }
 
-    /**
-     * @return: the lower edge of the specified bin (inclusive)
-     */
+    /// @return: the lower edge of the specified bin (inclusive)
     pub fn lower_edge(&self, bin_index: usize) -> f32 {
         self.bin_width * (bin_index as f32)
     }
 
-    /**
-     * @return: the upper edge of the specified bin (exclusive)
-     */
+    /// @return: the upper edge of the specified bin (exclusive)
     pub fn upper_edge(&self, bin_index: usize) -> f32 {
         self.bin_width * ((bin_index + 1) as f32)
     }
 
-    /**
-     * Print the histogram stats to the writer
-     */
+    /// Print the histogram stats to the writer
     pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(writer, "Histogram:")?;
         let total = self.total_count();
@@ -81,7 +86,7 @@ impl Histogram {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CumulativeDistributionFunction {
     pub offset: Vec<f32>, // n_bins
     pub scale: Vec<f32>,  // n_bins
@@ -190,6 +195,21 @@ mod tests {
         hist.insert(-1.5);
 
         assert_eq!(hist.bin_count, vec![2, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_histogram_reset() {
+        let mut hist = super::Histogram::new(3, 12.34);
+
+        let hist_copy = hist.clone();
+
+        hist.insert(2.0);
+        hist.insert(-1.5);
+        hist.insert(100.0);
+        hist.insert(100.0);
+
+        hist.reset();
+        assert_eq!(hist, hist_copy);
     }
 
     #[test]
