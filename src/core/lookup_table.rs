@@ -61,7 +61,7 @@ mod tests {
         let query_to_data = |x: f32| (x * 2.0) as i32;
 
         // Create a LookupTable with a query domain from 0.0 to 10.0 and 11 entries
-        let lookup_table = LookupTable::new([2.0, 12.0], 11, query_to_data);
+        let mut lookup_table = LookupTable::new([2.0, 12.0], 11, query_to_data);
 
         // Check the length of the table_entries vector
         assert_eq!(lookup_table.table_entries.len(), 11);
@@ -75,5 +75,20 @@ mod tests {
         assert_eq!(lookup_table.lookup(0.0), 4);
         assert_eq!(lookup_table.lookup(-2.5), 4);
         assert_eq!(lookup_table.lookup(15.0), 24);
+
+        // Check that the reset logic works
+        // Define a query to data function
+        let query_to_data = |x: f32| (1.0 + x * 3.0) as i32;
+        lookup_table.reset([3.0, 5.0], query_to_data);
+
+        // Test lookup method for in-bound queries
+        assert_eq!(lookup_table.lookup(3.0), 10);
+        assert_eq!(lookup_table.lookup(4.0), 13);
+        assert_eq!(lookup_table.lookup(5.0), 16);
+
+        // Test lookup method for out-of-bound queries
+        assert_eq!(lookup_table.lookup(0.0), 10);
+        assert_eq!(lookup_table.lookup(-2.5), 10);
+        assert_eq!(lookup_table.lookup(15.0), 16);
     }
 }
