@@ -1,3 +1,4 @@
+use image::Rgb;
 use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,7 @@ pub trait Interpolator {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
+#[derive(Default)]
 pub struct ColorMap<F: Interpolator> {
     queries: Vec<f32>,
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
@@ -126,6 +128,7 @@ where
     }
 }
 
+#[derive(Default)]
 pub struct StepInterpolator {
     pub threshold: f32,
 }
@@ -145,6 +148,7 @@ impl Interpolator for StepInterpolator {
     }
 }
 
+#[derive(Default)]
 pub struct LinearInterpolator {}
 
 impl Interpolator for LinearInterpolator {
@@ -178,6 +182,14 @@ pub struct ColorMapLookUpTable {
     pub table: LookupTable<image::Rgb<u8>>,
 }
 
+impl Default for ColorMapLookUpTable {
+    fn default() -> Self {
+        Self {
+            table: LookupTable::new([0.0, 1.0], 1, |_| Rgb([0, 0, 0])),
+        }
+    }
+}
+
 impl ColorMapLookUpTable {
     pub fn new<F: ColorMapper>(color_map: &F, entry_count: usize) -> ColorMapLookUpTable {
         ColorMapLookUpTable {
@@ -186,6 +198,13 @@ impl ColorMapLookUpTable {
             }),
         }
     }
+
+    // pub fn reset<F>(&mut self, query_domain: [f32; 2], query_to_data: F)
+    // where
+    //     F: Fn(f32) -> image::Rgb<u8>,
+    // {
+    //     self.table.reset(query_domain, query_to_data);
+    // }
 }
 
 impl ColorMapper for ColorMapLookUpTable {

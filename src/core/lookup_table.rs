@@ -1,40 +1,50 @@
 use iter_num_tools::lin_space;
-use more_asserts::{assert_ge, assert_gt};
 
+#[derive(Default)]
 pub struct LookupTable<T: Clone> {
     table_entries: Vec<T>,
     query_offset: f32,
-    quear_to_index_scale: f32,
+    query_to_index_scale: f32,
 }
 
 impl<T: Clone> LookupTable<T> {
+    /// Allocates a new table and populates it with values from a lambda function
     pub fn new<F>(query_domain: [f32; 2], entry_count: usize, query_to_data: F) -> LookupTable<T>
     where
         F: Fn(f32) -> T,
     {
-        assert_ge!(query_domain[1], query_domain[0]);
-        assert_gt!(entry_count, 0);
-
-        let queries = lin_space(query_domain[0]..=query_domain[1], entry_count);
-        let mut table_entries: Vec<T> = Vec::with_capacity(entry_count);
-        for query in queries {
-            table_entries.push(query_to_data(query));
-        }
-
-        let quear_to_index_scale = (entry_count as f32) / (query_domain[1] - query_domain[0]);
-
-        LookupTable {
-            table_entries,
-            query_offset: query_domain[0],
-            quear_to_index_scale,
-        }
+        assert!(entry_count > 0);
+        let nominal_value = query_to_data(0.5 * (query_domain[0] + query_domain[1]));
+        let mut lookup_table = LookupTable {
+            table_entries: vec![nominal_value; entry_count],
+            query_offset: 0.0,
+            query_to_index_scale: 1.0,
+        };
+        lookup_table.reset(query_domain, query_to_data);
+        lookup_table
     }
 
-    /**
-     * @return the table entry corresponding to the query. Out-of-bound requests will be clamped to the domain of the table.
-     */
+    /// Updates the table in-place, without allocating. Overwrites all data in the existing table.
+    pub fn reset<F>(&mut self, query_domain: [f32; 2], query_to_data: F)
+    where
+        F: Fn(f32) -> T,
+    {
+        assert!(query_domain[1] > query_domain[0]);
+
+        let entry_count = self.table_entries.len();
+        let queries = lin_space(query_domain[0]..=query_domain[1], entry_count);
+
+        for (i, query) in queries.enumerate() {
+            self.table_entries[i] = query_to_data(query);
+        }
+
+        self.query_offset = query_domain[0];
+        self.query_to_index_scale = (entry_count as f32) / (query_domain[1] - query_domain[0]);
+    }
+
+    /// @return the table entry corresponding to the query. Out-of-bound requests will be clamped to the domain of the table.
     pub fn lookup(&self, query: f32) -> T {
-        let index = (((query - self.query_offset) * self.quear_to_index_scale) as i32)
+        let index = (((query - self.query_offset) * self.query_to_index_scale) as i32)
             .clamp(0, self.table_entries.len() as i32 - 1);
         self.table_entries[index as usize].clone()
     }
