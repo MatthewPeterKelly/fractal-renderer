@@ -219,7 +219,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
         self.histogram.reset();
         let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-        // TODO:  parallelize!
+        // TODO:  parallelize!   https://github.com/MatthewPeterKelly/fractal-renderer/issues/104
         for i in 0..hist_image_spec.resolution[0] {
             let x = pixel_mapper.width.map(i);
             for j in 0..hist_image_spec.resolution[1] {
