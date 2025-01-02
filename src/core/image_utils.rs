@@ -370,7 +370,7 @@ where
  */
 pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
     spec: &ImageSpecification,
-    pixel_renderer: F, // Renderable
+    pixel_renderer: F,
     raw_data: &mut Vec<Vec<E>>,
 ) where
     F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
@@ -388,9 +388,6 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
     );
-
-    // pixel_renderer.set_image_specification();  // TODO
-    // then grab the pixel renderer here.
 
     raw_data.par_iter_mut().enumerate().for_each(|(x, row)| {
         let re = pixel_map_width.map(x as u32);
