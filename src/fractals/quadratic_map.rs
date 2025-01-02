@@ -1,5 +1,6 @@
 use image::Rgb;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
@@ -7,9 +8,8 @@ use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        PointRenderFn, Renderable,
+        Renderable,
     },
-    lookup_table::LookupTable,
     stopwatch::Stopwatch,
 };
 
@@ -153,100 +153,158 @@ impl QuadraticMapSequence {
     }
 }
 
-pub fn pixel_renderer<T>(
-    image_specification: &ImageSpecification,
-    color_map: &ColorMapParams,
-    iterative_map: T,
-    max_mapped_value: f32,
-) -> (
-    impl PointRenderFn,
-    Histogram,
-    CumulativeDistributionFunction,
-)
-where
-    T: Fn(&[f64; 2]) -> Option<f32> + std::marker::Sync,
-{
-    let background_color = Rgb(color_map.background_color_rgb);
+pub trait QuadraticMapParams: Serialize + Clone + Debug {
+    /// Access the current image specification.
+    fn image_specification(&self) -> &ImageSpecification;
 
-    /////////////////////////////////////////////////////////////////////////
+    /// Update the image specification.
+    fn set_image_specification(&mut self, image_specification: ImageSpecification);
 
-    // Create a reduced-resolution pixel map for the histogram samples:
-    let hist_image_spec =
-        image_specification.scale_to_total_pixel_count(color_map.histogram_sample_count as i32);
+    /// Access the convergence parameters.
+    fn convergence_params(&self) -> &ConvergenceParams;
 
-    let mut histogram = Histogram::new(color_map.histogram_bin_count, max_mapped_value);
-    let pixel_mapper = PixelMapper::new(&hist_image_spec);
+    /// Access the color map parameters.
+    fn color_map(&self) -> &ColorMapParams;
 
-    for i in 0..hist_image_spec.resolution[0] {
-        let x = pixel_mapper.width.map(i);
-        for j in 0..hist_image_spec.resolution[1] {
-            let y = pixel_mapper.height.map(j);
-            let maybe_value: Option<f32> = iterative_map(&[x, y]);
-            if let Some(value) = maybe_value {
-                histogram.insert(value);
+    // Actually evaluate the fractal.
+    fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
+}
+
+pub struct QuadraticMap<T: QuadraticMapParams> {
+    pub fractal_params: T,
+    pub histogram: Histogram,
+    pub cdf: CumulativeDistributionFunction,
+    pub color_map: ColorMapLookUpTable,
+    pub inner_color_map: ColorMap<LinearInterpolator>,
+    pub background_color: Rgb<u8>,
+}
+
+impl<T: QuadraticMapParams> QuadraticMap<T> {
+    pub fn new(fractal_params: T) -> QuadraticMap<T> {
+        let inner_color_map =
+            ColorMap::new(&fractal_params.color_map().keyframes, LinearInterpolator {});
+        let mut quadratic_map = QuadraticMap {
+            fractal_params: fractal_params.clone(),
+            histogram: Histogram::default(),
+            cdf: CumulativeDistributionFunction::default(),
+            color_map: ColorMapLookUpTable::from_color_map(
+                &inner_color_map,
+                fractal_params.color_map().lookup_table_count,
+            ),
+            inner_color_map,
+            background_color: Rgb(fractal_params.color_map().background_color_rgb),
+        };
+        quadratic_map.histogram = Histogram::new(
+            quadratic_map.fractal_params.color_map().histogram_bin_count,
+            QuadraticMapSequence::log_iter_count(
+                quadratic_map
+                    .fractal_params
+                    .convergence_params()
+                    .max_iter_count as f32,
+            ),
+        );
+        quadratic_map.cdf = CumulativeDistributionFunction::new(&quadratic_map.histogram);
+        quadratic_map.update_color_map();
+        quadratic_map
+    }
+
+    fn update_color_map(&mut self) {
+        let hist_image_spec = self
+            .fractal_params
+            .image_specification()
+            .scale_to_total_pixel_count(
+                self.fractal_params.color_map().histogram_sample_count as i32,
+            );
+
+        self.histogram.reset();
+        let pixel_mapper = PixelMapper::new(&hist_image_spec);
+
+        // TODO:  parallelize!   https://github.com/MatthewPeterKelly/fractal-renderer/issues/104
+        for i in 0..hist_image_spec.resolution[0] {
+            let x = pixel_mapper.width.map(i);
+            for j in 0..hist_image_spec.resolution[1] {
+                let y = pixel_mapper.height.map(j);
+                let maybe_value: Option<f32> =
+                    self.fractal_params.normalized_log_escape_count(&[x, y]);
+                if let Some(value) = maybe_value {
+                    self.histogram.insert(value);
+                }
             }
+        }
+
+        self.cdf.reset(&self.histogram);
+
+        // Aliases to let the borrow checker verify that we're all good here.
+        let cdf_ref = &self.cdf;
+        let inner_map_ref = &self.inner_color_map;
+
+        self.color_map
+            .reset([cdf_ref.min_data, cdf_ref.max_data], &|query: f32| {
+                let mapped_query = cdf_ref.percentile(query);
+                inner_map_ref.compute_pixel(mapped_query)
+            });
+    }
+}
+
+impl<T> Renderable for QuadraticMap<T>
+where
+    T: QuadraticMapParams + Sync,
+{
+    type Params = T;
+
+    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+        self.fractal_params
+            .set_image_specification(image_specification);
+        self.update_color_map();
+    }
+
+    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.histogram.display(writer)?;
+        self.cdf.display(writer)?;
+        std::io::Result::Ok(())
+    }
+
+    fn params(&self) -> &Self::Params {
+        &self.fractal_params
+    }
+
+    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> Rgb<u8> {
+        let maybe_escape_count = self
+            .fractal_params
+            .normalized_log_escape_count(&[point[0], point[1]]);
+        if let Some(value) = maybe_escape_count {
+            self.color_map.compute_pixel(value)
+        } else {
+            self.background_color
         }
     }
 
-    // Now compute the CDF from the histogram, which will allow us to normalize the color distribution
-    let cdf = CumulativeDistributionFunction::new(&histogram);
-
-    let base_color_map = ColorMap::new(&color_map.keyframes, LinearInterpolator {});
-
-    let color_map = ColorMapLookUpTable {
-        table: LookupTable::new(
-            [cdf.min_data, cdf.max_data],
-            color_map.lookup_table_count,
-            |query: f32| {
-                let mapped_query = cdf.percentile(query);
-                base_color_map.compute_pixel(mapped_query)
-            },
-        ),
-    };
-
-    (
-        move |point: &nalgebra::Vector2<f64>| {
-            let maybe_value: Option<f32> = iterative_map(&[point[0], point[1]]);
-            if let Some(value) = maybe_value {
-                color_map.compute_pixel(value)
-            } else {
-                background_color
-            }
-        },
-        histogram,
-        cdf,
-    )
+    fn image_specification(&self) -> &ImageSpecification {
+        self.fractal_params.image_specification()
+    }
 }
 
-pub trait RenderableWithHistogram: Renderable {
-    fn renderer_with_histogram(
-        self,
-    ) -> (
-        impl PointRenderFn,
-        Histogram,
-        CumulativeDistributionFunction,
-    );
-}
-
-pub fn render<T: RenderableWithHistogram>(
-    params: T,
+pub fn render<T: Renderable>(
+    renderable: T,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
 
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
-        params.image_specification().resolution[0],
-        params.image_specification().resolution[1],
+        renderable.image_specification().resolution[0],
+        renderable.image_specification().resolution[1],
     );
 
-    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
+    serialize_to_json_or_panic(
+        file_prefix.full_path_with_suffix(".json"),
+        renderable.params(),
+    );
 
     stopwatch.record_split("basic setup".to_owned());
 
-    let image_specification = params.image_specification().clone();
-    let (pixel_renderer, histogram, cdf) = params.renderer_with_histogram();
-
+    let image_specification = renderable.image_specification().clone();
+    let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
     stopwatch.record_split("build renderer".to_owned());
 
     let raw_data = generate_scalar_image(&image_specification, pixel_renderer, Rgb([0, 0, 0]));
@@ -266,8 +324,7 @@ pub fn render<T: RenderableWithHistogram>(
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
     stopwatch.display(&mut diagnostics_file)?;
-    histogram.display(&mut diagnostics_file)?;
-    cdf.display(&mut diagnostics_file)?;
+    renderable.write_diagnostics(&mut diagnostics_file)?;
 
     Ok(())
 }
