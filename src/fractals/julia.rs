@@ -1,12 +1,8 @@
-use crate::core::{
-    histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::{ImageSpecification, PointRenderFn, Renderable},
-};
+use crate::core::image_utils::ImageSpecification;
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
-    pixel_renderer, ColorMapParams, ConvergenceParams, QuadraticMapSequence,
-    RenderableWithHistogram,
+    ColorMapParams, ConvergenceParams, QuadraticMapParams, QuadraticMapSequence,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -17,38 +13,28 @@ pub struct JuliaParams {
     pub color_map: ColorMapParams,
 }
 
-impl RenderableWithHistogram for JuliaParams {
-    fn renderer_with_histogram(
-        self,
-    ) -> (
-        impl PointRenderFn,
-        Histogram,
-        CumulativeDistributionFunction,
-    ) {
-        let convergence_params = self.convergence_params.clone();
-        let constant_term = self.constant_term;
-        pixel_renderer(
-            &self.image_specification,
-            &self.color_map,
-            move |point: &[f64; 2]| {
-                QuadraticMapSequence::normalized_log_escape_count(
-                    point,
-                    &constant_term,
-                    &convergence_params,
-                )
-            },
-            QuadraticMapSequence::log_iter_count(self.convergence_params.max_iter_count as f32),
-        )
-    }
-}
-
-impl Renderable for JuliaParams {
-    fn point_renderer(self) -> impl PointRenderFn {
-        let (renderer, _hist, _cdf) = self.renderer_with_histogram();
-        renderer
-    }
-
+impl QuadraticMapParams for JuliaParams {
     fn image_specification(&self) -> &ImageSpecification {
         &self.image_specification
+    }
+
+    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+        self.image_specification = image_specification;
+    }
+
+    fn convergence_params(&self) -> &ConvergenceParams {
+        &self.convergence_params
+    }
+
+    fn color_map(&self) -> &ColorMapParams {
+        &self.color_map
+    }
+
+    fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32> {
+        QuadraticMapSequence::normalized_log_escape_count(
+            point,
+            &self.constant_term,
+            &self.convergence_params,
+        )
     }
 }

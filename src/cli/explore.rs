@@ -12,7 +12,7 @@ use winit_input_helper::WinitInputHelper;
 use crate::{
     core::{
         file_io::FilePrefix,
-        image_utils::{ImageSpecification, PixelMapper, Renderable},
+        image_utils::{ImageSpecification, PixelMapper},
         render_window::{PixelGrid, RenderWindow},
         stopwatch::Stopwatch,
         view_control::{
@@ -20,7 +20,7 @@ use crate::{
             ViewControl, ZoomVelocityCommand,
         },
     },
-    fractals::common::FractalParams,
+    fractals::{common::FractalParams, quadratic_map::QuadraticMap},
 };
 
 const RISE_TIME: f64 = 0.1; // seconds
@@ -125,9 +125,9 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                     PAN_RATE,
                     ZOOM_RATE,
                     RISE_TIME,
-                    inner_params.image_specification(),
+                    &inner_params.image_specification,
                 ),
-                inner_params.clone().point_renderer(),
+                QuadraticMap::new((**inner_params).clone()),
             ))
         }
         FractalParams::Julia(inner_params) => {
@@ -140,9 +140,9 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                     PAN_RATE,
                     ZOOM_RATE,
                     RISE_TIME,
-                    inner_params.image_specification(),
+                    &inner_params.image_specification,
                 ),
-                inner_params.clone().point_renderer(),
+                QuadraticMap::new((**inner_params).clone()),
             ))
         }
         _ => {

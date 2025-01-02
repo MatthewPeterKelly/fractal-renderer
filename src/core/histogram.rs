@@ -25,7 +25,6 @@ impl Histogram {
 
     /// Resets the state of the histogram to be the same as it was
     /// after being initially constructed.
-    #[cfg(test)] // Suppress unused warning - we'll use this later.
     pub fn reset(&mut self) {
         for elem in self.bin_count.iter_mut() {
             *elem = 0;

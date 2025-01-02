@@ -2,10 +2,7 @@ use image::Rgb;
 
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
-    image_utils::{
-        create_buffer, generate_scalar_image_in_place, write_image_to_file_or_panic,
-        ImageSpecification, PointRenderFn,
-    },
+    image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
     view_control::{CenterCommand, ViewControl, ZoomVelocityCommand},
 };
 
@@ -48,24 +45,19 @@ pub trait RenderWindow {
 /// use runtime polymorphism (`dyn`) on the "once per image" updates for the
 /// `explore` interface. This helps to keep the rendering pipeline efficient.
 #[derive(Clone, Debug)]
-pub struct PixelGrid<F: PointRenderFn> {
+pub struct PixelGrid<F: Renderable> {
     display_buffer: Vec<Vec<Rgb<u8>>>,
     scratch_buffer: Vec<Vec<Rgb<u8>>>,
     view_control: ViewControl,
     file_prefix: FilePrefix,
-    pixel_renderer: F,
+    renderer: F,
 }
 
 impl<F> PixelGrid<F>
 where
-    F: PointRenderFn,
+    F: Renderable,
 {
-    pub fn new(
-        time: f64,
-        file_prefix: FilePrefix,
-        view_control: ViewControl,
-        pixel_renderer: F,
-    ) -> Self {
+    pub fn new(time: f64, file_prefix: FilePrefix, view_control: ViewControl, renderer: F) -> Self {
         let mut pixel_grid = Self {
             display_buffer: create_buffer(
                 Rgb([0, 0, 0]),
@@ -77,7 +69,7 @@ where
             ),
             view_control,
             file_prefix,
-            pixel_renderer,
+            renderer,
         };
         pixel_grid.update(time, CenterCommand::Idle(), ZoomVelocityCommand::zero());
         pixel_grid
@@ -86,7 +78,7 @@ where
 
 impl<F> RenderWindow for PixelGrid<F>
 where
-    F: PointRenderFn,
+    F: Renderable,
 {
     fn image_specification(&self) -> &ImageSpecification {
         self.view_control.image_specification()
@@ -105,12 +97,9 @@ where
         let update_required = true;
 
         if update_required {
-            let image_resolution = self.image_specification().clone();
-            generate_scalar_image_in_place(
-                &image_resolution,
-                &self.pixel_renderer,
-                &mut self.scratch_buffer,
-            );
+            self.renderer
+                .set_image_specification(self.image_specification().clone());
+            self.renderer.render_to_buffer(&mut self.scratch_buffer);
             std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
             return true;
         }

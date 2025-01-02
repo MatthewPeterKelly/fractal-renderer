@@ -1,7 +1,11 @@
 use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fmt::Debug;
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ImageSpecification {
@@ -116,17 +120,39 @@ impl ViewRectangle {
     }
 }
 
-/// The PointRenderFn is a type alias for a lambda function that can map from a
-/// point in "real space" to a RGB pixel value.
-pub trait PointRenderFn: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
-impl<T> PointRenderFn for T where T: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
-
 /// The Renderable trait represents an object that can provide a point render function
 /// and an image specification.
-pub trait Renderable: Serialize + std::fmt::Debug + Clone {
-    fn point_renderer(self) -> impl PointRenderFn;
+pub trait Renderable: Sync {
+    /// The type of parameters that describe the renderable object.
+    type Params: Serialize + Debug;
 
+    /// Evaluates the pixel color at a specified point in the fractal.
+    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> Rgb<u8>;
+
+    /// Access the current image specification for the renderable object.
     fn image_specification(&self) -> &ImageSpecification;
+
+    /// Set the image specification for the renderable object. This may be an
+    /// expensive operation, e.g. for the quadratic map objects this will trigger the
+    /// color map histogram to be recomputed from scratch.
+    fn set_image_specification(&mut self, image_specification: ImageSpecification);
+
+    /// Write diagnostics information, typically to a log file, for the renderable object.
+    /// This might include, e.g. parameters or a histogram summary.
+    fn write_diagnostics<W: Write>(&self, writer: &mut W) -> io::Result<()>;
+
+    /// @return a reference to the internal parametrs of the renderable object, which
+    /// can then be serialized to a JSON file.
+    fn params(&self) -> &Self::Params;
+
+    /// Renders into the provided buffer.
+    fn render_to_buffer(&self, buffer: &mut Vec<Vec<Rgb<u8>>>) {
+        generate_scalar_image_in_place(
+            self.image_specification(),
+            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            buffer,
+        );
+    }
 }
 
 /**
@@ -344,7 +370,7 @@ where
  */
 pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
     spec: &ImageSpecification,
-    pixel_renderer: F,
+    pixel_renderer: F, // Renderable
     raw_data: &mut Vec<Vec<E>>,
 ) where
     F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
@@ -362,6 +388,10 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
     );
+
+    // pixel_renderer.set_image_specification();  // TODO
+    // then grab the pixel renderer here.
+
     raw_data.par_iter_mut().enumerate().for_each(|(x, row)| {
         let re = pixel_map_width.map(x as u32);
         assert_eq!(

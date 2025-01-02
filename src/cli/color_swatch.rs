@@ -66,14 +66,14 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         },
         NamedColorMapper {
             name: "user-defined, lookup table 16 entries".to_owned(),
-            color_map: Box::new(ColorMapLookUpTable::new(
+            color_map: Box::new(ColorMapLookUpTable::from_color_map(
                 &ColorMap::new(&params.keyframes, LinearInterpolator {}),
                 16,
             )),
         },
         NamedColorMapper {
             name: "user-defined, lookup table 1024 entries".to_owned(),
-            color_map: Box::new(ColorMapLookUpTable::new(
+            color_map: Box::new(ColorMapLookUpTable::from_color_map(
                 &ColorMap::new(&params.keyframes, LinearInterpolator {}),
                 1024,
             )),

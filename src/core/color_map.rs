@@ -35,7 +35,6 @@ pub trait Interpolator {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
-#[derive(Default)]
 pub struct ColorMap<F: Interpolator> {
     queries: Vec<f32>,
     rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
@@ -108,8 +107,8 @@ impl<F: Interpolator> ColorMap<F> {
                 .queries
                 .partition_point(|test_query| query >= *test_query);
             let idx_low = idx_upp - 1;
-            let alpha =
-                (query - self.queries[idx_low]) / (self.queries[idx_upp] - self.queries[idx_low]);
+            let val_low = self.queries[idx_low];
+            let alpha = (query - val_low) / (self.queries[idx_upp] - val_low);
             self.interpolator.interpolate(
                 alpha,
                 &self.rgb_colors[idx_low],
@@ -182,26 +181,32 @@ pub struct ColorMapLookUpTable {
     pub table: LookupTable<image::Rgb<u8>>,
 }
 
-impl Default for ColorMapLookUpTable {
-    fn default() -> Self {
-        Self {
-            table: LookupTable::new([0.0, 1.0], 1, |_| Rgb([0, 0, 0])),
-        }
-    }
-}
-
 impl ColorMapLookUpTable {
-    pub fn new<F: ColorMapper>(color_map: &F, entry_count: usize) -> ColorMapLookUpTable {
+    pub fn from_color_map<F: ColorMapper>(
+        color_map: &F,
+        entry_count: usize,
+    ) -> ColorMapLookUpTable {
+        ColorMapLookUpTable::new(entry_count, [0.0, 1.0], &|query: f32| {
+            color_map.compute_pixel(query)
+        })
+    }
+
+    pub fn new<F>(entry_count: usize, query_domain: [f32; 2], color_map: &F) -> ColorMapLookUpTable
+    where
+        F: Fn(f32) -> image::Rgb<u8>,
+    {
         let mut map = ColorMapLookUpTable {
             table: LookupTable::new([0.0, 1.0], entry_count, |_| Rgb([0, 0, 0])),
         };
-        map.reset(color_map);
+        map.reset(query_domain, color_map);
         map
     }
 
-    pub fn reset<F: ColorMapper>(&mut self, color_map: &F) {
-        self.table
-            .reset([0.0, 1.0], |query: f32| color_map.compute_pixel(query));
+    pub fn reset<F>(&mut self, query_domain: [f32; 2], color_map: &F)
+    where
+        F: Fn(f32) -> image::Rgb<u8>,
+    {
+        self.table.reset(query_domain, color_map);
     }
 }
 
@@ -242,7 +247,9 @@ mod tests {
             blue: 255.0,
         };
 
-        let mut table = ColorMapLookUpTable::new(&simple_color_map, 40);
+        let mut table = ColorMapLookUpTable::new(40, [0.0, 1.0], &|query: f32| {
+            simple_color_map.compute_pixel(query)
+        });
 
         // We only have 40 entries... so we don't actually hit the "perfect middle"
         let mapped_half = 131;
@@ -262,7 +269,9 @@ mod tests {
             green: 0.0, // drop green from the output of the map
             blue: 255.0,
         };
-        table.reset(&simple_color_map);
+        table.reset([0.0, 1.0], &|query: f32| {
+            simple_color_map.compute_pixel(query)
+        });
 
         assert_eq!(table.compute_pixel(0.0), Rgb([0, 0, 0]));
         assert_eq!(table.compute_pixel(1.0), Rgb([255, 0, 255]));
