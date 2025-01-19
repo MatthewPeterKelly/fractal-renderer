@@ -71,7 +71,7 @@ where
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
             file_prefix,
-            renderer: Arc::new(Mutex::new(renderer)), // Wrap renderer in Arc<Mutex>
+            renderer: Arc::new(Mutex::new(renderer)),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
