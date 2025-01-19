@@ -65,7 +65,11 @@ impl Histogram {
     pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(writer, "Histogram:")?;
         let total = self.total_count();
-        let percent_scale = 100.0 / (total as f32);
+        let percent_scale = if total == 0 {
+            0.0
+        } else {
+            100.0 / (total as f32)
+        };
         writeln!(writer, "  total count: {}", total)?;
         for i in 0..self.bin_count.len() {
             let count = self.bin_count[i];
@@ -114,10 +118,20 @@ impl CumulativeDistributionFunction {
         self.scale.resize(n_bins, 0.0f32);
         let mut accumulated_count = 0;
 
+        self.data_to_index_scale = histogram.data_to_index_scale;
+        self.min_data = histogram.lower_edge(0);
+        self.max_data = histogram.upper_edge(n_bins - 1);
+
+        if histogram.total_count() == 0 {
+            self.offset.iter_mut().for_each(|x| *x = 0.5);
+            self.scale.iter_mut().for_each(|x| *x = 0.0);
+            return;
+        }
+
         // x = data (input)
         // y = value (output, fraction within population)
-        let mut y_low = 0.0;
         let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f32);
+        let mut y_low = 0.0;
         for i in 0..n_bins {
             accumulated_count += histogram.bin_count[i];
             let y_upp = (accumulated_count as f32) * scale_bin_count_to_fraction;
@@ -127,14 +141,13 @@ impl CumulativeDistributionFunction {
             self.scale[i] = dy_dx;
             y_low = y_upp; // for the next iteration
         }
-        self.data_to_index_scale = histogram.data_to_index_scale;
-        self.min_data = histogram.lower_edge(0);
-        self.max_data = histogram.upper_edge(n_bins - 1);
     }
 
     /**
      * @param value: data point, same units as would be used in the histogram
      * @return: fractional position within the population of the histogram on [0,1]
+     *
+     * Note:  if the histogram is empty, then all in-domain queries return 0.5;
      */
     pub fn percentile(&self, data: f32) -> f32 {
         if data <= self.min_data {
@@ -176,9 +189,11 @@ mod tests {
 
     use approx::assert_relative_eq;
 
+    use super::{CumulativeDistributionFunction, Histogram};
+
     #[test]
     fn test_histogram_insert_positive_data() {
-        let mut hist = super::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(2.5);
         hist.insert(6.8);
@@ -188,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_negative_data() {
-        let mut hist = super::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(-3.0);
         hist.insert(-1.5);
@@ -198,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_histogram_reset() {
-        let mut hist = super::Histogram::new(3, 12.34);
+        let mut hist = Histogram::new(3, 12.34);
 
         let hist_copy = hist.clone();
 
@@ -213,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_at_max_val() {
-        let mut hist = super::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(10.0);
 
@@ -222,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_greater_than_max_val() {
-        let mut hist = super::Histogram::new(5, 10.0);
+        let mut hist = Histogram::new(5, 10.0);
 
         hist.insert(12.5);
 
@@ -232,29 +247,45 @@ mod tests {
     #[test]
     fn test_histogram_insert_with_zero_num_bins() {
         // This should panic due to the assertion in the constructor
-        assert!(std::panic::catch_unwind(|| super::Histogram::new(0, 10.0)).is_err());
+        assert!(std::panic::catch_unwind(|| Histogram::new(0, 10.0)).is_err());
     }
 
     #[test]
     fn test_histogram_insert_with_zero_max_val() {
         // This should panic due to the assertion in the constructor
-        assert!(std::panic::catch_unwind(|| super::Histogram::new(5, 0.0)).is_err());
+        assert!(std::panic::catch_unwind(|| Histogram::new(5, 0.0)).is_err());
     }
 
     #[test]
     fn test_histogram_text_display() {
-        let mut hist = super::Histogram::new(3, 4.0);
+        let mut hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
         println!("Histogram:");
         hist.display(&mut io::stdout())
             .expect("Failed to display on screen");
+        let cdf = CumulativeDistributionFunction::new(&hist);
+        println!("CDF:");
+        cdf.display(&mut io::stdout())
+            .expect("Failed to displayCDF on screen");
+    }
+
+    #[test]
+    fn test_histogram_empty_text_display() {
+        let hist = Histogram::new(3, 4.0);
+        println!("Histogram:");
+        hist.display(&mut io::stdout())
+            .expect("Failed to display histogram on screen");
+        let cdf = CumulativeDistributionFunction::new(&hist);
+        println!("CDF:");
+        cdf.display(&mut io::stdout())
+            .expect("Failed to displayCDF on screen");
     }
 
     #[test]
     fn test_histogram_file_display() {
-        let mut hist = super::Histogram::new(3, 9.0);
+        let mut hist = Histogram::new(3, 9.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -265,11 +296,15 @@ mod tests {
         let mut buf_writer = io::BufWriter::new(file);
         hist.display(&mut buf_writer)
             .expect("Failed to write to file");
+        let cdf = CumulativeDistributionFunction::new(&hist);
+        println!("CDF:");
+        cdf.display(&mut buf_writer)
+            .expect("Failed to displayCDF to file");
     }
 
     #[test]
     fn test_histogram_utilities() {
-        let mut hist = super::Histogram::new(3, 6.0);
+        let mut hist = Histogram::new(3, 6.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -292,7 +327,7 @@ mod tests {
     #[test]
     fn test_cdf_uniform() {
         let max_value = 6.0;
-        let mut hist = super::Histogram::new(3, max_value);
+        let mut hist = Histogram::new(3, max_value);
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
@@ -311,8 +346,26 @@ mod tests {
     }
 
     #[test]
+    fn test_cdf_empty() {
+        let max_value = 5.0;
+        let hist = Histogram::new(3, max_value);
+        let cdf = CumulativeDistributionFunction::new(&hist);
+
+        let tol = 1e-6;
+
+        // No data in the histogram, so the CDF isn't really defined. But we don't
+        // want it to crash when evaluated. Here the answer we picked is zero or
+        // one if out of bounds, or 0.5 if in the valid domain.
+        assert_eq!(cdf.percentile(-0.2), 0.0);
+        assert_eq!(cdf.percentile(7.0), 1.0);
+        for data in iter_num_tools::lin_space((0.0 + tol)..=(max_value - tol), 4) {
+            assert_relative_eq!(cdf.percentile(data), 0.5, epsilon = tol);
+        }
+    }
+
+    #[test]
     fn test_cdf_skewed() {
-        let mut hist = super::Histogram::new(3, 6.0);
+        let mut hist = Histogram::new(3, 6.0);
         hist.insert(4.7);
         hist.insert(5.2);
         hist.insert(4.2);
@@ -339,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_cdf_interesting() {
-        let mut hist = super::Histogram::new(5, 25.0);
+        let mut hist = Histogram::new(5, 25.0);
         for _ in 0..3 {
             hist.insert(3.0);
         }
