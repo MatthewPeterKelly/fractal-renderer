@@ -122,7 +122,7 @@ impl ViewRectangle {
 
 /// The Renderable trait represents an object that can provide a point render function
 /// and an image specification.
-pub trait Renderable: Sync {
+pub trait Renderable: Sync + Send {
     /// The type of parameters that describe the renderable object.
     type Params: Serialize + Debug;
 

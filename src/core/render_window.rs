@@ -1,3 +1,8 @@
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+
 use image::Rgb;
 
 use super::{
@@ -46,46 +51,43 @@ pub trait RenderWindow {
 /// `explore` interface. This helps to keep the rendering pipeline efficient.
 #[derive(Clone, Debug)]
 pub struct PixelGrid<F: Renderable> {
-    display_buffer: Vec<Vec<Rgb<u8>>>,
-    scratch_buffer: Vec<Vec<Rgb<u8>>>,
+    display_buffer: Arc<Mutex<Vec<Vec<Rgb<u8>>>>>,
     view_control: ViewControl,
     file_prefix: FilePrefix,
-    renderer: F,
+    renderer: Arc<Mutex<F>>,
+    render_task_is_busy: Arc<AtomicBool>,
+    redraw_required: Arc<AtomicBool>,
 }
 
 impl<F> PixelGrid<F>
 where
-    F: Renderable,
+    F: Renderable + Send + Sync + 'static,
 {
     pub fn new(time: f64, file_prefix: FilePrefix, view_control: ViewControl, renderer: F) -> Self {
+        let resolution = view_control.image_specification().resolution;
+        let display_buffer = create_buffer(Rgb([0, 0, 0]), &resolution);
+
         let mut pixel_grid = Self {
-            display_buffer: create_buffer(
-                Rgb([0, 0, 0]),
-                &view_control.image_specification().resolution,
-            ),
-            scratch_buffer: create_buffer(
-                Rgb([0, 0, 0]),
-                &view_control.image_specification().resolution,
-            ),
+            display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
             file_prefix,
-            renderer,
+            renderer: Arc::new(Mutex::new(renderer)),
+            render_task_is_busy: Arc::new(AtomicBool::new(false)),
+            redraw_required: Arc::new(AtomicBool::new(false)),
         };
         pixel_grid.update(time, CenterCommand::Idle(), ZoomVelocityCommand::zero());
         pixel_grid
     }
 }
-
 impl<F> RenderWindow for PixelGrid<F>
 where
-    F: Renderable,
+    F: Renderable + 'static,
 {
     fn image_specification(&self) -> &ImageSpecification {
         self.view_control.image_specification()
     }
 
-    // TODO:  consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
-
+    // TODO: consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
     fn update(
         &mut self,
         time: f64,
@@ -97,13 +99,26 @@ where
         let update_required = true;
 
         if update_required {
-            self.renderer
-                .set_image_specification(self.image_specification().clone());
-            self.renderer.render_to_buffer(&mut self.scratch_buffer);
-            std::mem::swap(&mut self.scratch_buffer, &mut self.display_buffer);
-            return true;
+            // .swap() here returns previous value and atomically sets value to true.
+            if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                let display_buffer = self.display_buffer.clone();
+                let renderer = self.renderer.clone();
+                let image_specification = self.image_specification().clone();
+                let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
+                let redraw_required = self.redraw_required.clone();
+
+                std::thread::spawn(move || {
+                    let mut display_buffer_mut = display_buffer.lock().unwrap();
+                    let mut renderer_mut = renderer.lock().unwrap();
+                    renderer_mut.set_image_specification(image_specification);
+                    renderer_mut.render_to_buffer(&mut display_buffer_mut);
+                    render_task_is_busy.store(false, Ordering::Release);
+                    redraw_required.store(true, Ordering::Release);
+                });
+            }
         }
-        false
+
+        self.redraw_required.load(Ordering::Acquire)
     }
 
     fn draw(&self, screen: &mut [u8]) {
@@ -113,13 +128,15 @@ where
                 * self.image_specification().resolution[1]) as usize
         );
         let array_skip = self.image_specification().resolution[0] as usize;
+        let display_buffer = self.display_buffer.lock().unwrap();
         for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
             let j = flat_index / array_skip;
             let i = flat_index % array_skip;
-            let raw_pixel = self.display_buffer[i][j];
+            let raw_pixel = display_buffer[i][j];
             let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
             pixel.copy_from_slice(&color);
         }
+        self.redraw_required.store(false, Ordering::Release);
     }
 
     fn render_to_file(&self) {
@@ -136,8 +153,11 @@ where
             self.image_specification().resolution[1],
         );
 
-        for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            *pixel = self.display_buffer[x as usize][y as usize];
+        {
+            let display_buffer = self.display_buffer.lock().unwrap();
+            for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+                *pixel = display_buffer[x as usize][y as usize];
+            }
         }
 
         write_image_to_file_or_panic(

@@ -248,7 +248,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
 
 impl<T> Renderable for QuadraticMap<T>
 where
-    T: QuadraticMapParams + Sync,
+    T: QuadraticMapParams + Sync + Send,
 {
     type Params = T;
 
