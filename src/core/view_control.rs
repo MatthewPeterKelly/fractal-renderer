@@ -142,7 +142,6 @@ impl ViewControl {
         time: f64,
         pan_rate: f64,
         zoom_rate: f64,
-        rise_time: f64,
         image_specification: &ImageSpecification,
     ) -> Self {
         Self {
@@ -151,17 +150,17 @@ impl ViewControl {
             image_specification: image_specification.clone(),
             maybe_target_command: None,
             pan_control: [
-                PointTracker::new(time, image_specification.center[0], rise_time),
-                PointTracker::new(time, image_specification.center[1], rise_time),
+                PointTracker::new(time, image_specification.center[0]),
+                PointTracker::new(time, image_specification.center[1]),
             ],
-            zoom_control: PointTracker::new(time, image_specification.width.ln(), rise_time),
+            zoom_control: PointTracker::new(time, image_specification.width.ln()),
         }
     }
 
     pub fn view_center(&self) -> [f64; 2] {
         [
-            self.pan_control[0].state().pos,
-            self.pan_control[1].state().pos,
+            self.pan_control[0].position(),
+            self.pan_control[1].position(),
         ]
     }
 
