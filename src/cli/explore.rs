@@ -23,7 +23,6 @@ use crate::{
     fractals::{common::FractalParams, quadratic_map::QuadraticMap},
 };
 
-const RISE_TIME: f64 = 0.1; // seconds
 const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const PAN_RATE: f64 = 0.2; // window width per second
 
@@ -120,13 +119,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             Box::new(PixelGrid::new(
                 stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                ViewControl::new(
-                    time,
-                    PAN_RATE,
-                    ZOOM_RATE,
-                    RISE_TIME,
-                    &inner_params.image_specification,
-                ),
+                ViewControl::new(time, PAN_RATE, ZOOM_RATE, &inner_params.image_specification),
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
@@ -135,13 +128,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             Box::new(PixelGrid::new(
                 stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                ViewControl::new(
-                    time,
-                    PAN_RATE,
-                    ZOOM_RATE,
-                    RISE_TIME,
-                    &inner_params.image_specification,
-                ),
+                ViewControl::new(time, PAN_RATE, ZOOM_RATE, &inner_params.image_specification),
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
