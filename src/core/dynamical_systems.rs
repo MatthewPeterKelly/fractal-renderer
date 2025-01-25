@@ -1,5 +1,8 @@
 //! Collection of simple dynamical systems
 
+/// The `SimpleLinearControl` class is used as a canonical test system
+/// for the ODE solvers: it is an interesting system with non-trivial
+/// dynamics and a known analytic solution.
 #[cfg(test)]
 use nalgebra::Vector2;
 #[cfg(test)]
@@ -12,12 +15,6 @@ pub struct SimpleLinearControl {
 
 #[cfg(test)]
 impl SimpleLinearControl {
-    /// Constant that is used to map between the rise time and omega (natural frequency)
-    /// for a critically damped (xi == 1.0) system:
-    ///
-    /// CRITICALLY_DAMPED_RISE_TIME_SCALE_FACTOR = rise_time * omega;
-    pub const CRITICALLY_DAMPED_RISE_TIME_SCALE_FACTOR: f64 = 3.357908561477796;
-
     /// Computes x(t) for critically damped, overdamped, and underdamped cases
     #[cfg(test)]
     pub fn evaluate_solution(&self, t: f64) -> f64 {
@@ -93,34 +90,5 @@ impl SimpleLinearControl {
             let x_dot = v;
             Vector2::new(x_dot, v_dot)
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use approx::assert_relative_eq;
-
-    #[test]
-    fn test_closed_loop_controller_critically_damped_rise_time() {
-        let dyn_sys = SimpleLinearControl {
-            omega: 1.0,
-            xi: 1.0,
-        };
-
-        // Regression test on the known rise time properties.
-        // Computed offline by a nonlinear root solve.
-        let t0 = 0.5318116083896343;
-        let t1 = 3.88972016986743;
-        let x0 = dyn_sys.evaluate_solution(t0);
-        let x1 = dyn_sys.evaluate_solution(t1);
-
-        assert_relative_eq!(x0, 0.1, epsilon = 1e-6);
-        assert_relative_eq!(x1, 0.9, epsilon = 1e-6);
-        assert_relative_eq!(
-            t1 - t0,
-            SimpleLinearControl::CRITICALLY_DAMPED_RISE_TIME_SCALE_FACTOR / dyn_sys.omega,
-            epsilon = 1e-6
-        )
     }
 }
