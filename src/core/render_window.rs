@@ -51,13 +51,27 @@ pub trait RenderWindow {
 /// `explore` interface. This helps to keep the rendering pipeline efficient.
 #[derive(Clone, Debug)]
 pub struct PixelGrid<F: Renderable> {
+    // The render will write into this buffer, which is locked with a mutex
+    // during rendering. Once complete, it will be copied into the window
+    // pixel-by-pixel in the `draw()` method.
     display_buffer: Arc<Mutex<Vec<Vec<Rgb<u8>>>>>,
+
+    // Interprets the UI commands to pan and zoom, translating them into the image
+    // specification used by the renderer.
     view_control: ViewControl,
+
+    // Cache the file prefix so that we can use a consistent directory for writing
+    // images to disk while exploring the fractal.
     file_prefix: FilePrefix,
+
+    // Encapsulates all details required to render the image.
+    // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
     renderer: Arc<Mutex<F>>,
+
+    // Lock, used to ensure that we only run a single render background task.
     render_task_is_busy: Arc<AtomicBool>,
 
-    // TODO:  flag to go high when we need to recompute the render
+    // This flag is set high when we need to trigger another render pass.
     render_required: bool,
 
     // Set to `true` when rendering is complete and the display buffer needs
