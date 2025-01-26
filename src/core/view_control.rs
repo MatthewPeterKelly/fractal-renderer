@@ -263,6 +263,6 @@ impl ViewControl {
             &mut self.image_specification.width,
             self.zoom_control.update_and_return_pos(time).exp(),
         );
-        return view_was_modified;
+        view_was_modified
     }
 }
