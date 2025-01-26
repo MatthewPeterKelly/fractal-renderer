@@ -8,7 +8,7 @@ use image::Rgb;
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
     image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
-    view_control::{CenterCommand, ViewControl, ZoomVelocityCommand},
+    view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
@@ -56,6 +56,12 @@ pub struct PixelGrid<F: Renderable> {
     file_prefix: FilePrefix,
     renderer: Arc<Mutex<F>>,
     render_task_is_busy: Arc<AtomicBool>,
+
+    // TODO:  flag to go high when we need to recompute the render
+    render_required: bool,
+
+    // Set to `true` when rendering is complete and the display buffer needs
+    // to be copied to the screen.
     redraw_required: Arc<AtomicBool>,
 }
 
@@ -66,6 +72,9 @@ where
     pub fn new(time: f64, file_prefix: FilePrefix, view_control: ViewControl, renderer: F) -> Self {
         let resolution = view_control.image_specification().resolution;
         let display_buffer = create_buffer(Rgb([0, 0, 0]), &resolution);
+        let center_command = CenterCommand::Target(CenterTargetCommand {
+            view_center: view_control.image_specification().center.into(),
+        });
 
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
@@ -73,10 +82,37 @@ where
             file_prefix,
             renderer: Arc::new(Mutex::new(renderer)),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
+            render_required: true,
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
-        pixel_grid.update(time, CenterCommand::Idle(), ZoomVelocityCommand::zero());
         pixel_grid
+            .view_control
+            .update(time, center_command, ZoomVelocityCommand::zero());
+        pixel_grid.render();
+        pixel_grid
+    }
+
+    /// Renders the fractal, pixel-by-pixel, on a background thread(s).
+    fn render(&mut self) {
+        let display_buffer = self.display_buffer.clone();
+        let renderer = self.renderer.clone();
+        let image_specification = self.image_specification().clone();
+        let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
+        let redraw_required = self.redraw_required.clone();
+
+        std::thread::spawn(move || {
+            let start_time = std::time::Instant::now();
+
+            let mut display_buffer_mut = display_buffer.lock().unwrap();
+            let mut renderer_mut = renderer.lock().unwrap();
+            renderer_mut.set_image_specification(image_specification);
+            renderer_mut.render_to_buffer(&mut display_buffer_mut);
+
+            render_task_is_busy.store(false, Ordering::Release);
+            redraw_required.store(true, Ordering::Release);
+
+            println!("Rendered image in: {} ms", start_time.elapsed().as_millis());
+        });
     }
 }
 impl<F> RenderWindow for PixelGrid<F>
@@ -88,34 +124,29 @@ where
     }
 
     // TODO: consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
+    /// Updates the view command. If the renderer is available and the view port has changed,
+    /// then it will update the view.
     fn update(
         &mut self,
         time: f64,
         center_command: CenterCommand,
         zoom_command: ZoomVelocityCommand,
     ) -> bool {
-        self.view_control.update(time, center_command, zoom_command);
-
-        let update_required = true;
-
-        if update_required {
-            // .swap() here returns previous value and atomically sets value to true.
-            if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
-                let display_buffer = self.display_buffer.clone();
-                let renderer = self.renderer.clone();
-                let image_specification = self.image_specification().clone();
-                let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
-                let redraw_required = self.redraw_required.clone();
-
-                std::thread::spawn(move || {
-                    let mut display_buffer_mut = display_buffer.lock().unwrap();
-                    let mut renderer_mut = renderer.lock().unwrap();
-                    renderer_mut.set_image_specification(image_specification);
-                    renderer_mut.render_to_buffer(&mut display_buffer_mut);
-                    render_task_is_busy.store(false, Ordering::Release);
-                    redraw_required.store(true, Ordering::Release);
-                });
-            }
+        // There are two flags to keep track of here, which are used to carefully sequence
+        // the process of updating the window while keeping a fast main loop for tracking
+        // keyboard and mouse events while doing the expensive render in the background.
+        // The `render_required` flag indicates that the user updated the view port and the
+        // fractal must be recomputed. The `redraw_required` indicates that the renderer has
+        // updated the data in the `display_buffer` in the background and that it needs to
+        // be copied to the screen using the `draw` method. The `render_task_is_busy` flag
+        // is a lock that is used to ensure that we only attempt one render at a time, as
+        // this task will use all available CPU resources.
+        if self.view_control.update(time, center_command, zoom_command) {
+            self.render_required = true;
+        }
+        if self.render_required && !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+            self.render();
+            self.render_required = false;
         }
 
         self.redraw_required.load(Ordering::Acquire)
