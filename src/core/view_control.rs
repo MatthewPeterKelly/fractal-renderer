@@ -168,12 +168,16 @@ impl ViewControl {
         &self.image_specification
     }
 
+    /// Updates the view control by applying the center and zoom commands to the
+    /// simulated dynamics of the view onto the fractal.
+    ///
+    /// @return: true iff the update caused the view (center or scale) to change.
     pub fn update(
         &mut self,
         time: f64,
         center_command: CenterCommand,
         zoom_command: ZoomVelocityCommand,
-    ) -> &ImageSpecification {
+    ) -> bool {
         // Normalize the pan rate by the width --> invariant over zoom scales.
         let pan_rate = self.pan_rate * self.image_specification.width;
         match center_command {
@@ -239,10 +243,26 @@ impl ViewControl {
                 .apply_to_magnitude(self.zoom_rate),
         });
 
-        self.image_specification.center[0] = self.pan_control[0].update_and_return_pos(time);
-        self.image_specification.center[1] = self.pan_control[1].update_and_return_pos(time);
-        self.image_specification.width = self.zoom_control.update_and_return_pos(time).exp();
+        let mut view_was_modified = false;
+        let mut monitored_assignment = |prev_value: &mut f64, next_value: f64| {
+            if *prev_value != next_value {
+                view_was_modified = true;
+                *prev_value = next_value;
+            }
+        };
 
-        &self.image_specification
+        monitored_assignment(
+            &mut self.image_specification.center[0],
+            self.pan_control[0].update_and_return_pos(time),
+        );
+        monitored_assignment(
+            &mut self.image_specification.center[1],
+            self.pan_control[1].update_and_return_pos(time),
+        );
+        monitored_assignment(
+            &mut self.image_specification.width,
+            self.zoom_control.update_and_return_pos(time).exp(),
+        );
+        view_was_modified
     }
 }
