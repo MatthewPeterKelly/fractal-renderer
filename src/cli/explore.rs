@@ -24,7 +24,9 @@ use crate::{
 };
 
 const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
+const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
+const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
 
 fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     if neg_flag == pos_flag {
@@ -38,16 +40,29 @@ fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
 
 fn zoom_velocity_command_from_key_press(input: &WinitInputHelper) -> ZoomVelocityCommand {
     // Zoom control --> W and S keys
+    let direction = direction_from_key_pair(
+        input.key_held(VirtualKeyCode::W),
+        input.key_held(VirtualKeyCode::S),
+    );
+    if direction == ScalarDirection::Zero() {
+        // See if the user is doing a "fast zoom" instead:
+        return ZoomVelocityCommand {
+            zoom_direction: direction_from_key_pair(
+                input.key_held(VirtualKeyCode::D),
+                input.key_held(VirtualKeyCode::A),
+            ),
+            zoom_rate: FAST_ZOOM_RATE,
+        };
+    }
+
     ZoomVelocityCommand {
-        zoom_direction: direction_from_key_pair(
-            input.key_held(VirtualKeyCode::W),
-            input.key_held(VirtualKeyCode::S),
-        ),
+        zoom_direction: direction,
+        zoom_rate: ZOOM_RATE,
     }
 }
 
 fn view_center_command_from_key_press(input: &WinitInputHelper) -> CenterCommand {
-    // Pan Up/Down control --> W and S keys
+    // Pan control:  arrow keys
     let pan_up_down_command = direction_from_key_pair(
         input.key_held(VirtualKeyCode::Down),
         input.key_held(VirtualKeyCode::Up),
@@ -59,10 +74,11 @@ fn view_center_command_from_key_press(input: &WinitInputHelper) -> CenterCommand
 
     let center_velocity = CenterVelocityCommand {
         center_direction: [pan_left_right_command, pan_up_down_command],
+        pan_rate: PAN_RATE,
     };
 
     // If the user gave no input, then interpret this as "Idle", not "immediately stop".
-    if center_velocity == CenterVelocityCommand::zero() {
+    if center_velocity.center_direction == [ScalarDirection::Zero(), ScalarDirection::Zero()] {
         CenterCommand::Idle()
     } else {
         CenterCommand::Velocity(center_velocity)
@@ -91,6 +107,7 @@ fn view_center_command_from_user_input(
         let point = pixel_mapper.map(&mouse_click_coordinates);
         CenterCommand::Target(CenterTargetCommand {
             view_center: [point.0, point.1],
+            pan_rate: FAST_PAN_RATE,
         })
     } else {
         // No mouse click, so let's see if the user wants to pan/zoom with the keyboard:
@@ -119,7 +136,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             Box::new(PixelGrid::new(
                 stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                ViewControl::new(time, PAN_RATE, ZOOM_RATE, &inner_params.image_specification),
+                ViewControl::new(time, &inner_params.image_specification),
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
@@ -128,7 +145,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             Box::new(PixelGrid::new(
                 stopwatch.total_elapsed_seconds(),
                 file_prefix,
-                ViewControl::new(time, PAN_RATE, ZOOM_RATE, &inner_params.image_specification),
+                ViewControl::new(time, &inner_params.image_specification),
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
