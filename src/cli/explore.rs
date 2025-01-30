@@ -26,7 +26,7 @@ use crate::{
 const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
-const FAST_PAN_RATE: f64 = 0.5; // window width per second; uused for "click to go".
+const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
 
 fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     if neg_flag == pos_flag {
