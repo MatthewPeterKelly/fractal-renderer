@@ -88,6 +88,7 @@ where
         let display_buffer = create_buffer(Rgb([0, 0, 0]), &resolution);
         let center_command = CenterCommand::Target(CenterTargetCommand {
             view_center: view_control.image_specification().center.into(),
+            pan_rate: 0.0,
         });
 
         let mut pixel_grid = Self {
