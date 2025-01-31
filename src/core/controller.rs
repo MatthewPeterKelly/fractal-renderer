@@ -36,6 +36,12 @@ impl PointTracker {
         self.position
     }
 
+    /// Sets the position and clears any actively tracked target.
+    pub fn set_position(&mut self, position: f64) {
+        self.position = position;
+        self.target = Target::Velocity { vel_ref: 0.0 };
+    }
+
     pub fn update_and_return_pos(&mut self, time: f64) -> f64 {
         let delta_time = time - self.time;
         self.time += delta_time;

@@ -18,6 +18,9 @@ pub trait RenderWindow {
     /// Provides access to the current image specification for the window
     fn image_specification(&self) -> &ImageSpecification;
 
+    /// Resets the render window back to the view port that it was initialized with.
+    fn reset(&mut self);
+
     /// Recompute the entire fractal if any internal parameters have changed. This should be
     /// a no-op if called with no internal changes.
     ///
@@ -136,6 +139,11 @@ where
 {
     fn image_specification(&self) -> &ImageSpecification {
         self.view_control.image_specification()
+    }
+
+    fn reset(&mut self) {
+        self.view_control.reset();
+        self.render_required = true;
     }
 
     // TODO: consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
