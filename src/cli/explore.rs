@@ -115,6 +115,16 @@ fn view_center_command_from_user_input(
     }
 }
 
+fn reset_command_from_key_press(input: &WinitInputHelper) -> bool {
+    if input.key_held(VirtualKeyCode::R) {
+        return true;
+    }
+    if input.key_pressed(VirtualKeyCode::R) {
+        return true;
+    }
+    false
+}
+
 /**
  * Create a simple GUI window that can be used to explore a fractal.
  * Supported features:
@@ -219,6 +229,12 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 }
             }
 
+            // Check for reset requests
+            if reset_command_from_key_press(&input) {
+                render_window.reset();
+            }
+
+            // Now do the hard rendering math:
             if render_window.update(
                 stopwatch.total_elapsed_seconds(),
                 center_command,

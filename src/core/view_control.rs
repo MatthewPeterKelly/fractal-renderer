@@ -114,6 +114,7 @@ pub fn compute_directional_max_velocity(direction: Vector2<f64>, max_speed: f64)
 pub struct ViewControl {
     // State:
     pub image_specification: ImageSpecification,
+    pub initial_image_specification: ImageSpecification,
 
     // Internal controllers:
     pub pan_control: [PointTracker; 2],
@@ -136,12 +137,21 @@ impl ViewControl {
     pub fn new(time: f64, image_specification: &ImageSpecification) -> Self {
         Self {
             image_specification: image_specification.clone(),
+            initial_image_specification: image_specification.clone(),
             pan_control: [
                 PointTracker::new(time, image_specification.center[0]),
                 PointTracker::new(time, image_specification.center[1]),
             ],
             zoom_control: PointTracker::new(time, image_specification.width.ln()),
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.image_specification = self.initial_image_specification.clone();
+        self.pan_control[0].set_position(self.image_specification.center[0]);
+        self.pan_control[1].set_position(self.image_specification.center[1]);
+        self.zoom_control
+            .set_position(self.image_specification.width.ln());
     }
 
     pub fn view_center(&self) -> [f64; 2] {
