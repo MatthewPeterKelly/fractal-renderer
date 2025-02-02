@@ -2,8 +2,8 @@
     "Mandelbrot": {
         "image_specification": {
             "resolution": [
-                800,
-                600
+                1200,
+                800
             ],
             "center": [
                 -0.7,
@@ -13,8 +13,8 @@
         },
         "convergence_params": {
             "escape_radius_squared": 4.0,
-            "max_iter_count": 1024,
-            "refinement_count": 4
+            "max_iter_count": 1500,
+            "refinement_count": 5
         },
         "color_map": {
             "keyframes": [
@@ -51,14 +51,14 @@
                     ]
                 }
             ],
-            "lookup_table_count": 1024,
+            "lookup_table_count": 2048,
             "background_color_rgb": [
                 0,
                 0,
                 0
             ],
-            "histogram_bin_count": 24,
-            "histogram_sample_count": 10000
+            "histogram_bin_count": 256,
+            "histogram_sample_count": 20000
         }
     }
 }

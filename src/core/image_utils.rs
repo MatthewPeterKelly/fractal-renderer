@@ -389,19 +389,62 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         -spec.height(), // Image coordinates are upside down.
     );
 
-    raw_data.par_iter_mut().enumerate().for_each(|(x, row)| {
-        let re = pixel_map_width.map(x as u32);
-        assert_eq!(
-            row.len(),
-            spec.resolution[1] as usize,
-            "Inner dimension mismatch"
-        );
-        row.iter_mut().enumerate().for_each(|(y, elem)| {
-            let im = pixel_map_height.map(y as u32);
-            *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
+    let stride = 4; // TODO: param
+
+    raw_data
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(i, _)| i % stride == 0)
+        .for_each(|(x, row)| {
+            let re = pixel_map_width.map(x as u32);
+            assert_eq!(
+                row.len(),
+                spec.resolution[1] as usize,
+                "Inner dimension mismatch"
+            );
+            row.iter_mut()
+                .enumerate()
+                .step_by(stride)
+                .for_each(|(y, elem)| {
+                    let im = pixel_map_height.map(y as u32);
+                    *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
+                });
         });
-    });
 }
+
+// /// Image-space bilinear interpolation. Used in conjunction with the `stride` option above. If the
+// /// stride is larger than 1, we use bilinear interpolation to fill-in the missing data. This interpolation
+// /// can be much faster than the full rendering calculation, speeding up interactive modes.
+// fn bilinear_interpolation_parallel(grid: &mut Vec<Vec<f64>>, stride: usize) {
+//     let rows = grid.len();
+//     let cols = grid[0].len();
+
+//     // Process the interior region in parallel (bilinear interpolation)
+//     (0..(rows - stride)).into_par_iter().for_each(|x| {
+//         for y in 0..(cols - stride) {
+//             if x % stride == 0 && y % stride == 0 {
+//                 continue; // Skip known data points
+//             }
+
+//             let x0 = (x / stride) * stride;
+//             let x1 = x0 + stride;
+//             let y0 = (y / stride) * stride;
+//             let y1 = y0 + stride;
+
+//             let dx = (x - x0) as f64 / (x1 - x0) as f64;
+//             let dy = (y - y0) as f64 / (y1 - y0) as f64;
+
+//             // PROBLEM:  the borrow checker dies here.
+//             grid[x][y] = (1.0 - dx) * (1.0 - dy) * grid[x0][y0]
+//                 + dx * (1.0 - dy) * grid[x1][y0]
+//                 + (1.0 - dx) * dy * grid[x0][y1]
+//                 + dx * dy * grid[x1][y1];
+//         }
+//     });
+
+//     // TODO: copy the last few rows
+//     // TODO: copy the last few columns
+// }
 
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
 where
