@@ -170,7 +170,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut Histogram) {
+pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut Histogram) {
     let hist_image_spec = fractal_params
         .image_specification()
         .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
@@ -186,6 +186,13 @@ fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut
             }
         }
     }
+}
+
+pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Histogram {
+    Histogram::new(
+        params.color_map().histogram_bin_count,
+        QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
+    )
 }
 
 pub struct QuadraticMap<T: QuadraticMapParams> {
@@ -212,15 +219,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
             inner_color_map,
             background_color: Rgb(fractal_params.color_map().background_color_rgb),
         };
-        quadratic_map.histogram = Histogram::new(
-            quadratic_map.fractal_params.color_map().histogram_bin_count,
-            QuadraticMapSequence::log_iter_count(
-                quadratic_map
-                    .fractal_params
-                    .convergence_params()
-                    .max_iter_count as f32,
-            ),
-        );
+        quadratic_map.histogram = create_empty_histogram(&quadratic_map.fractal_params);
         quadratic_map.cdf = CumulativeDistributionFunction::new(&quadratic_map.histogram);
         quadratic_map.update_color_map();
         quadratic_map
