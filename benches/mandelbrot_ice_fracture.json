@@ -64,7 +64,7 @@
             0,
             0
         ],
-        "histogram_bin_count": 32,
+        "histogram_bin_count": 2048,
         "histogram_sample_count": 20000
     }
 }
