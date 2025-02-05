@@ -170,13 +170,12 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-fn populate_histogram<T: QuadraticMapParams>(
-    fractal_params: &T,
-    hist_image_spec: &ImageSpecification,
-    histogram: &mut Histogram,
-) {
-    histogram.reset();
-    let pixel_mapper = PixelMapper::new(hist_image_spec);
+fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut Histogram) {
+    let hist_image_spec = fractal_params
+        .image_specification()
+        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
+
+    let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
     for i in 0..hist_image_spec.resolution[0] {
         let x = pixel_mapper.width.map(i);
@@ -228,14 +227,8 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     }
 
     fn update_color_map(&mut self) {
-        let hist_image_spec = self
-            .fractal_params
-            .image_specification()
-            .scale_to_total_pixel_count(
-                self.fractal_params.color_map().histogram_sample_count as i32,
-            );
-
-        populate_histogram(&self.fractal_params, &hist_image_spec, &mut self.histogram);
+        self.histogram.reset();
+        populate_histogram(&self.fractal_params, &mut self.histogram);
 
         self.cdf.reset(&self.histogram);
 
