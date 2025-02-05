@@ -170,6 +170,25 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
+fn populate_histogram<T: QuadraticMapParams>(
+    fractal_params: &T,
+    hist_image_spec: &ImageSpecification,
+    histogram: &mut Histogram,
+) {
+    histogram.reset();
+    let pixel_mapper = PixelMapper::new(hist_image_spec);
+
+    for i in 0..hist_image_spec.resolution[0] {
+        let x = pixel_mapper.width.map(i);
+        for j in 0..hist_image_spec.resolution[1] {
+            let y = pixel_mapper.height.map(j);
+            if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
+                histogram.insert(value);
+            }
+        }
+    }
+}
+
 pub struct QuadraticMap<T: QuadraticMapParams> {
     pub fractal_params: T,
     pub histogram: Histogram,
@@ -216,21 +235,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
                 self.fractal_params.color_map().histogram_sample_count as i32,
             );
 
-        self.histogram.reset();
-        let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-        // TODO:  parallelize!   https://github.com/MatthewPeterKelly/fractal-renderer/issues/104
-        for i in 0..hist_image_spec.resolution[0] {
-            let x = pixel_mapper.width.map(i);
-            for j in 0..hist_image_spec.resolution[1] {
-                let y = pixel_mapper.height.map(j);
-                let maybe_value: Option<f32> =
-                    self.fractal_params.normalized_log_escape_count(&[x, y]);
-                if let Some(value) = maybe_value {
-                    self.histogram.insert(value);
-                }
-            }
-        }
+        populate_histogram(&self.fractal_params, &hist_image_spec, &mut self.histogram);
 
         self.cdf.reset(&self.histogram);
 
