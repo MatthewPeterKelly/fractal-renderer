@@ -8,13 +8,10 @@ use fractal_renderer::fractals::{
     quadratic_map::{create_empty_histogram, populate_histogram},
 };
 
-pub fn import_mandelbrot_params(path: &str) -> MandelbrotParams {
-    serde_json::from_str(&std::fs::read_to_string(path).expect("Unable to read param file"))
-        .unwrap()
-}
-
 pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
-    let mandelbrot_params = import_mandelbrot_params(path);
+    let mandelbrot_params: MandelbrotParams =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("Unable to read param file"))
+            .unwrap();
 
     let mut histogram = create_empty_histogram(&mandelbrot_params);
     c.bench_function(path, |b| {
