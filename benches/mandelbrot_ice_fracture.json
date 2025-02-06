@@ -58,13 +58,13 @@
                 ]
             }
         ],
-        "lookup_table_count": 2048,
+        "lookup_table_count": 2000,
         "background_color_rgb": [
             0,
             0,
             0
         ],
-        "histogram_bin_count": 2048,
-        "histogram_sample_count": 20000
+        "histogram_bin_count": 1000,
+        "histogram_sample_count": 100000
     }
 }
