@@ -13,18 +13,23 @@ pub fn import_mandelbrot_params(path: &str) -> MandelbrotParams {
         .unwrap()
 }
 
+pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
+    let mandelbrot_params = import_mandelbrot_params(path);
+
+    let mut histogram = create_empty_histogram(&mandelbrot_params);
+    c.bench_function(path, |b| {
+        b.iter(|| {
+            histogram.reset();
+            populate_histogram(&mandelbrot_params, &mut histogram);
+            black_box(&histogram);
+        });
+    });
+}
+
 fn benchmark(c: &mut Criterion) {
     {
-        let mandelbrot_params = import_mandelbrot_params("benches/mandelbrot_ice_fracture.json");
-
-        let mut histogram = create_empty_histogram(&mandelbrot_params);
-        c.bench_function("mandelbrot_histogram", |b| {
-            b.iter(|| {
-                histogram.reset();
-                populate_histogram(&mandelbrot_params, &mut histogram);
-                black_box(&histogram);
-            });
-        });
+        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_ice_fracture.json");
+        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_default.json");
     }
 }
 
