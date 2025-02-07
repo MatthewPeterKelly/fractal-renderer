@@ -170,6 +170,31 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
+pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut Histogram) {
+    let hist_image_spec = fractal_params
+        .image_specification()
+        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
+
+    let pixel_mapper = PixelMapper::new(&hist_image_spec);
+
+    for i in 0..hist_image_spec.resolution[0] {
+        let x = pixel_mapper.width.map(i);
+        for j in 0..hist_image_spec.resolution[1] {
+            let y = pixel_mapper.height.map(j);
+            if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
+                histogram.insert(value);
+            }
+        }
+    }
+}
+
+pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Histogram {
+    Histogram::new(
+        params.color_map().histogram_bin_count,
+        QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
+    )
+}
+
 pub struct QuadraticMap<T: QuadraticMapParams> {
     pub fractal_params: T,
     pub histogram: Histogram,
@@ -194,43 +219,15 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
             inner_color_map,
             background_color: Rgb(fractal_params.color_map().background_color_rgb),
         };
-        quadratic_map.histogram = Histogram::new(
-            quadratic_map.fractal_params.color_map().histogram_bin_count,
-            QuadraticMapSequence::log_iter_count(
-                quadratic_map
-                    .fractal_params
-                    .convergence_params()
-                    .max_iter_count as f32,
-            ),
-        );
+        quadratic_map.histogram = create_empty_histogram(&quadratic_map.fractal_params);
         quadratic_map.cdf = CumulativeDistributionFunction::new(&quadratic_map.histogram);
         quadratic_map.update_color_map();
         quadratic_map
     }
 
     fn update_color_map(&mut self) {
-        let hist_image_spec = self
-            .fractal_params
-            .image_specification()
-            .scale_to_total_pixel_count(
-                self.fractal_params.color_map().histogram_sample_count as i32,
-            );
-
         self.histogram.reset();
-        let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-        // TODO:  parallelize!   https://github.com/MatthewPeterKelly/fractal-renderer/issues/104
-        for i in 0..hist_image_spec.resolution[0] {
-            let x = pixel_mapper.width.map(i);
-            for j in 0..hist_image_spec.resolution[1] {
-                let y = pixel_mapper.height.map(j);
-                let maybe_value: Option<f32> =
-                    self.fractal_params.normalized_log_escape_count(&[x, y]);
-                if let Some(value) = maybe_value {
-                    self.histogram.insert(value);
-                }
-            }
-        }
+        populate_histogram(&self.fractal_params, &mut self.histogram);
 
         self.cdf.reset(&self.histogram);
 
