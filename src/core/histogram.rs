@@ -1,12 +1,9 @@
 use std::io::{self, Write};
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Debug)]
 pub struct Histogram {
-    bin_counts: Arc<Vec<AtomicU32>>,
+    bin_counts: Vec<AtomicU32>,
     data_to_index_scale: f32,
     bin_width: f32,
 }
@@ -21,7 +18,7 @@ impl Histogram {
         assert!(max_val > 0.0, "`max_val` must be positive!");
         let data_to_index_scale = (num_bins as f32) / max_val;
         Histogram {
-            bin_counts: Arc::new((0..num_bins).map(|_| AtomicU32::new(0)).collect()),
+            bin_counts: (0..num_bins).map(|_| AtomicU32::new(0)).collect(),
             data_to_index_scale,
             bin_width: 1.0 / data_to_index_scale,
         }
