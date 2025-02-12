@@ -26,14 +26,14 @@ impl Histogram {
 
     /// Resets the state of the histogram to be the same as it was
     /// after being initially constructed.
-    pub fn reset(&mut self) {
+    pub fn reset(&self) {
         for count in self.bin_counts.iter() {
             count.store(0, Ordering::Relaxed);
         }
     }
 
     /// Insert a data point into the histogram
-    pub fn insert(&mut self, data: f32) {
+    pub fn insert(&self, data: f32) {
         if data < 0.0 {
             self.increment_bin_count(0);
             return;
@@ -46,7 +46,7 @@ impl Histogram {
         }
     }
 
-    fn increment_bin_count(&mut self, index: usize) {
+    fn increment_bin_count(&self, index: usize) {
         self.bin_counts[index].fetch_add(1, Ordering::Relaxed);
     }
 
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_histogram_file_display() {
-        let mut hist = Histogram::new(3, 9.0);
+        let hist = Histogram::new(3, 9.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_cdf_interesting() {
-        let mut hist = Histogram::new(5, 25.0);
+        let hist = Histogram::new(5, 25.0);
         for _ in 0..3 {
             hist.insert(3.0);
         }

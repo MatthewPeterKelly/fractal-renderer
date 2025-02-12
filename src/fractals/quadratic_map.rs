@@ -1,7 +1,7 @@
 use image::Rgb;
-// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
@@ -171,46 +171,37 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: &mut Histogram) {
+pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
     let hist_image_spec = fractal_params
         .image_specification()
         .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-    for i in 0..hist_image_spec.resolution[0] {
-        let x = pixel_mapper.width.map(i);
-        for j in 0..hist_image_spec.resolution[1] {
-            let y = pixel_mapper.height.map(j);
-            if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
-                histogram.insert(value);
+    (0..hist_image_spec.resolution[0])
+        .into_par_iter()
+        .for_each(|i| {
+            let x = pixel_mapper.width.map(i);
+            for j in 0..hist_image_spec.resolution[1] {
+                let y = pixel_mapper.height.map(j);
+                if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
+                    histogram.insert(value);
+                }
             }
-        }
-    }
-
-    // (0..hist_image_spec.resolution[0])
-    //     .into_par_iter()
-    //     .for_each(|i| {
-    //         let x = pixel_mapper.width.map(i);
-    //         for j in 0..hist_image_spec.resolution[1] {
-    //             let y = pixel_mapper.height.map(j);
-    //             if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
-    //                 histogram.insert(value);
-    //             }
-    //         }
-    //     });
+        });
 }
 
-pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Histogram {
+pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
     Histogram::new(
         params.color_map().histogram_bin_count,
         QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
     )
+    .into()
 }
 
 pub struct QuadraticMap<T: QuadraticMapParams> {
     pub fractal_params: T,
-    pub histogram: Histogram,
+    pub histogram: Arc<Histogram>,
     pub cdf: CumulativeDistributionFunction,
     pub color_map: ColorMapLookUpTable,
     pub inner_color_map: ColorMap<LinearInterpolator>,
@@ -223,7 +214,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
             ColorMap::new(&fractal_params.color_map().keyframes, LinearInterpolator {});
         let mut quadratic_map = QuadraticMap {
             fractal_params: fractal_params.clone(),
-            histogram: Histogram::default(),
+            histogram: Histogram::default().into(),
             cdf: CumulativeDistributionFunction::default(),
             color_map: ColorMapLookUpTable::from_color_map(
                 &inner_color_map,
@@ -240,7 +231,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
 
     fn update_color_map(&mut self) {
         self.histogram.reset();
-        populate_histogram(&self.fractal_params, &mut self.histogram);
+        populate_histogram(&self.fractal_params, self.histogram.clone());
 
         self.cdf.reset(&self.histogram);
 
