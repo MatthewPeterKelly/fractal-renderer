@@ -1,4 +1,5 @@
 use image::Rgb;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -153,7 +154,7 @@ impl QuadraticMapSequence {
     }
 }
 
-pub trait QuadraticMapParams: Serialize + Clone + Debug {
+pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     /// Access the current image specification.
     fn image_specification(&self) -> &ImageSpecification;
 
@@ -177,15 +178,17 @@ pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: 
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
-    for i in 0..hist_image_spec.resolution[0] {
-        let x = pixel_mapper.width.map(i);
-        for j in 0..hist_image_spec.resolution[1] {
-            let y = pixel_mapper.height.map(j);
-            if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
-                histogram.insert(value);
+    (0..hist_image_spec.resolution[0])
+        .into_par_iter()
+        .for_each(|i| {
+            let x = pixel_mapper.width.map(i);
+            for j in 0..hist_image_spec.resolution[1] {
+                let y = pixel_mapper.height.map(j);
+                if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
+                    histogram.insert(value);
+                }
             }
-        }
-    }
+        });
 }
 
 pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Histogram {
