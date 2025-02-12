@@ -78,7 +78,7 @@ where
     // Scale back the colors toward the background, based on the subpixel sample data:
     let antialiasing_scale = 1.0 / ((subpixel_antialiasing * subpixel_antialiasing) as f32);
 
-    let mut histogram = Histogram::new(
+    let histogram = Histogram::new(
         (subpixel_antialiasing * subpixel_antialiasing + 1) as usize,
         1.0,
     );

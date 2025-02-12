@@ -1,10 +1,11 @@
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct Histogram {
-    pub bin_count: Vec<u32>,
-    pub data_to_index_scale: f32,
-    pub bin_width: f32,
+    bin_counts: Vec<AtomicU32>,
+    data_to_index_scale: f32,
+    bin_width: f32,
 }
 
 /**
@@ -17,7 +18,7 @@ impl Histogram {
         assert!(max_val > 0.0, "`max_val` must be positive!");
         let data_to_index_scale = (num_bins as f32) / max_val;
         Histogram {
-            bin_count: vec![0; num_bins],
+            bin_counts: (0..num_bins).map(|_| AtomicU32::new(0)).collect(),
             data_to_index_scale,
             bin_width: 1.0 / data_to_index_scale,
         }
@@ -25,30 +26,37 @@ impl Histogram {
 
     /// Resets the state of the histogram to be the same as it was
     /// after being initially constructed.
-    pub fn reset(&mut self) {
-        for elem in self.bin_count.iter_mut() {
-            *elem = 0;
+    pub fn reset(&self) {
+        for count in self.bin_counts.iter() {
+            count.store(0, Ordering::Relaxed);
         }
     }
 
     /// Insert a data point into the histogram
-    pub fn insert(&mut self, data: f32) {
+    pub fn insert(&self, data: f32) {
         if data < 0.0 {
-            self.bin_count[0] += 1;
+            self.increment_bin_count(0);
             return;
         }
         let index = (data * self.data_to_index_scale) as usize;
-        if index >= self.bin_count.len() {
-            *self.bin_count.last_mut().unwrap() += 1;
+        if index >= self.num_bins() {
+            self.increment_bin_count(self.num_bins() - 1);
         } else {
-            self.bin_count[index] += 1;
+            self.increment_bin_count(index);
         }
+    }
+
+    fn increment_bin_count(&self, index: usize) {
+        self.bin_counts[index].fetch_add(1, Ordering::Relaxed);
     }
 
     /// @return: the total number of data points that have been inserted
     /// into the histogram. This is the sum of the count in all bins.
     pub fn total_count(&self) -> u32 {
-        self.bin_count.iter().sum()
+        self.bin_counts
+            .iter()
+            .map(|bin| bin.load(Ordering::Relaxed))
+            .sum()
     }
 
     /// @return: the lower edge of the specified bin (inclusive)
@@ -71,8 +79,8 @@ impl Histogram {
             100.0 / (total as f32)
         };
         writeln!(writer, "  total count: {}", total)?;
-        for i in 0..self.bin_count.len() {
-            let count = self.bin_count[i];
+        for i in 0..self.bin_counts.len() {
+            let count = self.bin_count(i);
             let percent = (count as f32) * percent_scale;
             writeln!(
                 writer,
@@ -80,12 +88,28 @@ impl Histogram {
                 i,
                 self.lower_edge(i),
                 self.upper_edge(i),
-                self.bin_count[i],
+                count,
                 percent
             )?;
         }
         writeln!(writer)?;
         Ok(())
+    }
+
+    pub fn bin_count(&self, index: usize) -> u32 {
+        self.bin_counts[index].load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    pub fn bin_counts_vec(&self) -> Vec<u32> {
+        self.bin_counts
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect()
+    }
+
+    pub fn num_bins(&self) -> usize {
+        self.bin_counts.len()
     }
 }
 
@@ -100,7 +124,7 @@ pub struct CumulativeDistributionFunction {
 
 impl CumulativeDistributionFunction {
     pub fn new(histogram: &Histogram) -> CumulativeDistributionFunction {
-        let n_bins = histogram.bin_count.len();
+        let n_bins = histogram.num_bins();
         let mut cdf = CumulativeDistributionFunction {
             offset: Vec::with_capacity(n_bins),
             scale: Vec::with_capacity(n_bins),
@@ -113,7 +137,7 @@ impl CumulativeDistributionFunction {
     }
 
     pub fn reset(&mut self, histogram: &Histogram) {
-        let n_bins = histogram.bin_count.len();
+        let n_bins = histogram.num_bins();
         self.offset.resize(n_bins, 0.0f32);
         self.scale.resize(n_bins, 0.0f32);
         let mut accumulated_count = 0;
@@ -133,7 +157,7 @@ impl CumulativeDistributionFunction {
         let scale_bin_count_to_fraction = 1.0 / (histogram.total_count() as f32);
         let mut y_low = 0.0;
         for i in 0..n_bins {
-            accumulated_count += histogram.bin_count[i];
+            accumulated_count += histogram.bin_count(i);
             let y_upp = (accumulated_count as f32) * scale_bin_count_to_fraction;
             let x_low = histogram.lower_edge(i);
             let dy_dx = (y_upp - y_low) * histogram.data_to_index_scale;
@@ -193,55 +217,55 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_positive_data() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(2.5);
         hist.insert(6.8);
 
-        assert_eq!(hist.bin_count, vec![0, 1, 0, 1, 0]);
+        assert_eq!(hist.bin_counts_vec(), vec![0, 1, 0, 1, 0]);
     }
 
     #[test]
     fn test_histogram_insert_negative_data() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(-3.0);
         hist.insert(-1.5);
 
-        assert_eq!(hist.bin_count, vec![2, 0, 0, 0, 0]);
+        assert_eq!(hist.bin_counts_vec(), vec![2, 0, 0, 0, 0]);
     }
 
     #[test]
     fn test_histogram_reset() {
-        let mut hist = Histogram::new(3, 12.34);
-
-        let hist_copy = hist.clone();
+        let hist = Histogram::new(3, 12.34);
+        assert_eq!(hist.bin_counts_vec(), vec![0, 0, 0]);
 
         hist.insert(2.0);
         hist.insert(-1.5);
         hist.insert(100.0);
         hist.insert(100.0);
 
+        assert_eq!(hist.bin_counts_vec(), vec![2, 0, 2]);
         hist.reset();
-        assert_eq!(hist, hist_copy);
+        assert_eq!(hist.bin_counts_vec(), vec![0, 0, 0]);
     }
 
     #[test]
     fn test_histogram_insert_data_at_max_val() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(10.0);
 
-        assert_eq!(hist.bin_count, vec![0, 0, 0, 0, 1]);
+        assert_eq!(hist.bin_counts_vec(), vec![0, 0, 0, 0, 1]);
     }
 
     #[test]
     fn test_histogram_insert_data_greater_than_max_val() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(12.5);
 
-        assert_eq!(hist.bin_count, vec![0, 0, 0, 0, 1]);
+        assert_eq!(hist.bin_counts_vec(), vec![0, 0, 0, 0, 1]);
     }
 
     #[test]
@@ -258,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_histogram_text_display() {
-        let mut hist = Histogram::new(3, 4.0);
+        let hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
@@ -285,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_histogram_file_display() {
-        let mut hist = Histogram::new(3, 9.0);
+        let hist = Histogram::new(3, 9.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -304,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_histogram_utilities() {
-        let mut hist = Histogram::new(3, 6.0);
+        let hist = Histogram::new(3, 6.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -327,7 +351,7 @@ mod tests {
     #[test]
     fn test_cdf_uniform() {
         let max_value = 6.0;
-        let mut hist = Histogram::new(3, max_value);
+        let hist = Histogram::new(3, max_value);
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
@@ -365,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_cdf_skewed() {
-        let mut hist = Histogram::new(3, 6.0);
+        let hist = Histogram::new(3, 6.0);
         hist.insert(4.7);
         hist.insert(5.2);
         hist.insert(4.2);
@@ -392,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_cdf_interesting() {
-        let mut hist = Histogram::new(5, 25.0);
+        let hist = Histogram::new(5, 25.0);
         for _ in 0..3 {
             hist.insert(3.0);
         }

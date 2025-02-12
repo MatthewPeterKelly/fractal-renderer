@@ -13,21 +13,19 @@ pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
         serde_json::from_str(&std::fs::read_to_string(path).expect("Unable to read param file"))
             .unwrap();
 
-    let mut histogram = create_empty_histogram(&mandelbrot_params);
+    let histogram = create_empty_histogram(&mandelbrot_params);
     c.bench_function(path, |b| {
         b.iter(|| {
             histogram.reset();
-            populate_histogram(&mandelbrot_params, &mut histogram);
+            populate_histogram(&mandelbrot_params, histogram.clone());
             black_box(&histogram);
         });
     });
 }
 
 fn benchmark(c: &mut Criterion) {
-    {
-        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_ice_fracture.json");
-        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_default.json");
-    }
+    run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_ice_fracture.json");
+    run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_default.json");
 }
 
 criterion_group!(benches, benchmark);
