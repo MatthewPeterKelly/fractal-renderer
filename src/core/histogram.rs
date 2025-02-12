@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_positive_data() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(2.5);
         hist.insert(6.8);
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_negative_data() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(-3.0);
         hist.insert(-1.5);
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_histogram_reset() {
-        let mut hist = Histogram::new(3, 12.34);
+        let hist = Histogram::new(3, 12.34);
         assert_eq!(hist.bin_counts_vec(), vec![0, 0, 0]);
 
         hist.insert(2.0);
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_at_max_val() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(10.0);
 
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_histogram_insert_data_greater_than_max_val() {
-        let mut hist = Histogram::new(5, 10.0);
+        let hist = Histogram::new(5, 10.0);
 
         hist.insert(12.5);
 
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_histogram_text_display() {
-        let mut hist = Histogram::new(3, 4.0);
+        let hist = Histogram::new(3, 4.0);
         hist.insert(0.3);
         hist.insert(2.3);
         hist.insert(2.6);
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_histogram_utilities() {
-        let mut hist = Histogram::new(3, 6.0);
+        let hist = Histogram::new(3, 6.0);
         hist.insert(0.3);
         hist.insert(1.3);
         hist.insert(2.6);
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn test_cdf_uniform() {
         let max_value = 6.0;
-        let mut hist = Histogram::new(3, max_value);
+        let hist = Histogram::new(3, max_value);
         hist.insert(1.3);
         hist.insert(2.6);
         hist.insert(4.2);
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_cdf_skewed() {
-        let mut hist = Histogram::new(3, 6.0);
+        let hist = Histogram::new(3, 6.0);
         hist.insert(4.7);
         hist.insert(5.2);
         hist.insert(4.2);

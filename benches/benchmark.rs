@@ -24,10 +24,8 @@ pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
 }
 
 fn benchmark(c: &mut Criterion) {
-    {
-        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_ice_fracture.json");
-        run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_default.json");
-    }
+    run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_ice_fracture.json");
+    run_quadratic_map_histogram_benchmark(c, "benches/mandelbrot_default.json");
 }
 
 criterion_group!(benches, benchmark);
