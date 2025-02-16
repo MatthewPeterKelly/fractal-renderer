@@ -1,14 +1,8 @@
 {
   "DrivenDampedPendulum": {
     "image_specification": {
-      "resolution": [
-        1920,
-        1080
-      ],
-      "center": [
-        0,
-        0
-      ],
+      "resolution": [1920, 1080],
+      "center": [0, 0],
       "width": 16
     },
     "time_phase": {

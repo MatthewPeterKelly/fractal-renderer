@@ -1,73 +1,43 @@
 {
-    "image_specification": {
-        "resolution": [
-            1920,
-            1080
-        ],
-        "center": [
-            -1.3952321839526187,
-            0.018220366323002782
-        ],
-        "width": 0.013358361379321044
-    },
-    "convergence_params": {
-        "escape_radius_squared": 4.0,
-        "max_iter_count": 2000,
-        "refinement_count": 5
-    },
-    "color_map": {
-        "keyframes": [
-            {
-                "query": 0.0,
-                "rgb_raw": [
-                    0,
-                    0,
-                    250
-                ]
-            },
-            {
-                "query": 0.9,
-                "rgb_raw": [
-                    40,
-                    0,
-                    80
-                ]
-            },
-            {
-                "query": 0.94,
-                "rgb_raw": [
-                    255,
-                    125,
-                    0
-                ]
-            },
-            {
-                "query": 0.99,
-                "rgb_raw": [
-                    10,
-                    0,
-                    20
-                ]
-            },
-            {
-                "query": 1.0,
-                "rgb_raw": [
-                    255,
-                    150,
-                    150
-                ]
-            }
-        ],
-        "lookup_table_count": 2000,
-        "background_color_rgb": [
-            0,
-            0,
-            0
-        ],
-        "histogram_bin_count": 1000,
-        "histogram_sample_count": 100000
-    },
-    "render_options": {
-        "downsample_stride": 1
-    }
+  "image_specification": {
+    "resolution": [1920, 1080],
+    "center": [-1.3952321839526187, 0.018220366323002782],
+    "width": 0.013358361379321044
+  },
+  "convergence_params": {
+    "escape_radius_squared": 4.0,
+    "max_iter_count": 2000,
+    "refinement_count": 5
+  },
+  "color_map": {
+    "keyframes": [
+      {
+        "query": 0.0,
+        "rgb_raw": [0, 0, 250]
+      },
+      {
+        "query": 0.9,
+        "rgb_raw": [40, 0, 80]
+      },
+      {
+        "query": 0.94,
+        "rgb_raw": [255, 125, 0]
+      },
+      {
+        "query": 0.99,
+        "rgb_raw": [10, 0, 20]
+      },
+      {
+        "query": 1.0,
+        "rgb_raw": [255, 150, 150]
+      }
+    ],
+    "lookup_table_count": 2000,
+    "background_color_rgb": [0, 0, 0],
+    "histogram_bin_count": 1000,
+    "histogram_sample_count": 100000
+  },
+  "render_options": {
+    "downsample_stride": 1
+  }
 }

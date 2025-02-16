@@ -1,20 +1,11 @@
 {
   "Julia": {
     "image_specification": {
-      "resolution": [
-        1600,
-        900
-      ],
-      "center": [
-        0,
-        0
-      ],
+      "resolution": [1600, 900],
+      "center": [0, 0],
       "width": 3.8
     },
-    "constant_term": [
-      -0.8,
-      0.156
-    ],
+    "constant_term": [-0.8, 0.156],
     "convergence_params": {
       "escape_radius_squared": 4.0,
       "max_iter_count": 4096,
@@ -24,35 +15,19 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [
-            50,
-            0,
-            100
-          ]
+          "rgb_raw": [50, 0, 100]
         },
         {
           "query": 0.95,
-          "rgb_raw": [
-            0,
-            50,
-            230
-          ]
+          "rgb_raw": [0, 50, 230]
         },
         {
           "query": 1.0,
-          "rgb_raw": [
-            230,
-            245,
-            255
-          ]
+          "rgb_raw": [230, 245, 255]
         }
       ],
       "lookup_table_count": 2048,
-      "background_color_rgb": [
-        0,
-        0,
-        0
-      ],
+      "background_color_rgb": [0, 0, 0],
       "histogram_bin_count": 32,
       "histogram_sample_count": 40000
     }
