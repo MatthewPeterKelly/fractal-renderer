@@ -120,6 +120,21 @@ impl ViewRectangle {
     }
 }
 
+/// Parameters shared by multiple fractal types that control how the fractal is rendered
+/// to the screen.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RenderOptions {
+    /// If set to a value larger than 1, it indicates that some pixels should be skipped
+    /// to allow for faster rendering. This is a particularily useful feature when trying
+    /// to maintain a rapid frame-rate on larger images. It applies uniformly in both
+    /// dimensions of the image. For example, setting this value to `3` will cause the
+    /// image to be rendered in three-by-three blocks, with only one true "evaluation"
+    /// for that block. For now, this is implemented by a zero-order hold (eg. all nine
+    /// pixels are assigned the same value). Eventually we could use a better interpolation
+    /// routine.
+    pub downsample_stride: usize,
+}
+
 /// The Renderable trait represents an object that can provide a point render function
 /// and an image specification.
 pub trait Renderable: Sync + Send {
@@ -131,6 +146,9 @@ pub trait Renderable: Sync + Send {
 
     /// Access the current image specification for the renderable object.
     fn image_specification(&self) -> &ImageSpecification;
+
+    /// Access to the rendering options:
+    fn render_options(&self) -> &RenderOptions;
 
     /// Set the image specification for the renderable object. This may be an
     /// expensive operation, e.g. for the quadratic map objects this will trigger the
@@ -149,6 +167,7 @@ pub trait Renderable: Sync + Send {
     fn render_to_buffer(&self, buffer: &mut Vec<Vec<Rgb<u8>>>) {
         generate_scalar_image_in_place(
             self.image_specification(),
+            self.render_options(),
             |point: &nalgebra::Vector2<f64>| self.render_point(point),
             buffer,
         );
@@ -354,6 +373,7 @@ impl Default for SubpixelGridMask {
  */
 pub fn generate_scalar_image<F, E: Clone + Send>(
     spec: &ImageSpecification,
+    render_options: &RenderOptions,
     pixel_renderer: F,
     default_element: E,
 ) -> Vec<Vec<E>>
@@ -361,7 +381,7 @@ where
     F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
 {
     let mut raw_data: Vec<Vec<_>> = create_buffer(default_element, &spec.resolution);
-    generate_scalar_image_in_place(spec, pixel_renderer, &mut raw_data);
+    generate_scalar_image_in_place(spec, render_options, pixel_renderer, &mut raw_data);
     raw_data
 }
 
@@ -370,6 +390,7 @@ where
  */
 pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
     spec: &ImageSpecification,
+    render_options: &RenderOptions,
     pixel_renderer: F,
     raw_data: &mut Vec<Vec<E>>,
 ) where
@@ -389,7 +410,7 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         -spec.height(), // Image coordinates are upside down.
     );
 
-    let stride = 4; // TODO: param
+    let stride = render_options.downsample_stride;
 
     raw_data
         .par_iter_mut()

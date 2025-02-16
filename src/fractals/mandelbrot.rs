@@ -1,4 +1,4 @@
-use crate::core::image_utils::ImageSpecification;
+use crate::core::image_utils::{ImageSpecification, RenderOptions};
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
@@ -10,6 +10,7 @@ pub struct MandelbrotParams {
     pub image_specification: ImageSpecification,
     pub convergence_params: ConvergenceParams,
     pub color_map: ColorMapParams,
+    pub render_options: RenderOptions,
 }
 
 const ZERO_INITIAL_POINT: [f64; 2] = [0.0, 0.0];
@@ -29,6 +30,10 @@ impl QuadraticMapParams for MandelbrotParams {
 
     fn color_map(&self) -> &ColorMapParams {
         &self.color_map
+    }
+
+    fn render_options(&self) -> &RenderOptions {
+        &self.render_options
     }
 
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32> {

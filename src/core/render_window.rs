@@ -188,7 +188,12 @@ where
         let array_skip = self.image_specification().resolution[0] as usize;
         let display_buffer = self.display_buffer.lock().unwrap();
 
-        let stride = 4; // TODO: param
+        let stride = self
+            .renderer
+            .lock()
+            .unwrap()
+            .render_options()
+            .downsample_stride;
 
         screen
             .par_chunks_exact_mut(4)

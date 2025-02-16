@@ -1,4 +1,4 @@
-use crate::core::image_utils::ImageSpecification;
+use crate::core::image_utils::{ImageSpecification, RenderOptions};
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
@@ -11,6 +11,7 @@ pub struct JuliaParams {
     pub constant_term: [f64; 2],
     pub convergence_params: ConvergenceParams,
     pub color_map: ColorMapParams,
+    pub render_options: RenderOptions,
 }
 
 impl QuadraticMapParams for JuliaParams {
@@ -28,6 +29,10 @@ impl QuadraticMapParams for JuliaParams {
 
     fn color_map(&self) -> &ColorMapParams {
         &self.color_map
+    }
+
+    fn render_options(&self) -> &RenderOptions {
+        &self.render_options
     }
 
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32> {

@@ -9,7 +9,7 @@ use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        Renderable,
+        RenderOptions, Renderable,
     },
     stopwatch::Stopwatch,
 };
@@ -167,6 +167,9 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     /// Access the color map parameters.
     fn color_map(&self) -> &ColorMapParams;
 
+    /// Access to the rendering options:
+    fn render_options(&self) -> &RenderOptions;
+
     // Actually evaluate the fractal.
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
@@ -282,6 +285,10 @@ where
 
     fn image_specification(&self) -> &ImageSpecification {
         self.fractal_params.image_specification()
+    }
+
+    fn render_options(&self) -> &RenderOptions {
+        self.fractal_params.render_options()
     }
 }
 
