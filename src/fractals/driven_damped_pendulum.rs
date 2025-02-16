@@ -1,6 +1,8 @@
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
-    image_utils::{generate_scalar_image, write_image_to_file_or_panic, ImageSpecification},
+    image_utils::{
+        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, RenderOptions,
+    },
     ode_solvers::rk4_simulate,
     stopwatch::Stopwatch,
 };
@@ -25,7 +27,8 @@ pub struct DrivenDampedPendulumParams {
     // 1 == no antialiasing
     // 3 = some antialiasing (at 9x CPU time)
     // 7 = high antialiasing (at cost of 49x CPU time)
-    pub subpixel_antialiasing: u32,
+    pub subpixel_antialiasing: u32, // TODO:  move into render_options
+    pub render_options: RenderOptions,
 }
 
 /**
@@ -172,6 +175,7 @@ pub fn render_driven_damped_pendulum_attractor(
 
     let raw_data = generate_scalar_image(
         &params.image_specification,
+        &params.render_options,
         pixel_renderer,
         image::Rgb([0, 0, 0]),
     );

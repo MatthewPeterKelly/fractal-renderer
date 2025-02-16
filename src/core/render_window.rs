@@ -4,6 +4,10 @@ use std::sync::{
 };
 
 use image::Rgb;
+use rayon::{
+    iter::{IndexedParallelIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
@@ -119,8 +123,6 @@ where
         let redraw_required = self.redraw_required.clone();
 
         std::thread::spawn(move || {
-            let start_time = std::time::Instant::now();
-
             let mut display_buffer_mut = display_buffer.lock().unwrap();
             let mut renderer_mut = renderer.lock().unwrap();
             renderer_mut.set_image_specification(image_specification);
@@ -128,8 +130,6 @@ where
 
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
-
-            println!("Rendered image in: {} ms", start_time.elapsed().as_millis());
         });
     }
 }
@@ -183,13 +183,26 @@ where
         );
         let array_skip = self.image_specification().resolution[0] as usize;
         let display_buffer = self.display_buffer.lock().unwrap();
-        for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
-            let j = flat_index / array_skip;
-            let i = flat_index % array_skip;
-            let raw_pixel = display_buffer[i][j];
-            let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
-            pixel.copy_from_slice(&color);
-        }
+
+        let stride = self
+            .renderer
+            .lock()
+            .unwrap()
+            .render_options()
+            .downsample_stride;
+
+        screen
+            .par_chunks_exact_mut(4)
+            .enumerate()
+            .for_each(|(flat_index, pixel)| {
+                let j = stride * ((flat_index / array_skip) / stride);
+                let i = stride * ((flat_index % array_skip) / stride);
+                let raw_pixel = display_buffer[i][j];
+                pixel[0] = raw_pixel[0];
+                pixel[1] = raw_pixel[1];
+                pixel[2] = raw_pixel[2];
+                pixel[3] = 255;
+            });
         self.redraw_required.store(false, Ordering::Release);
     }
 

@@ -29,6 +29,9 @@
       "background_color_rgb": [0, 0, 0],
       "histogram_bin_count": 4,
       "histogram_sample_count": 64
+    },
+    "render_options": {
+      "downsample_stride": 1
     }
   }
 }
