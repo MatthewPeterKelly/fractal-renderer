@@ -315,7 +315,12 @@ pub fn render<T: Renderable>(
     let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
     stopwatch.record_split("build renderer".to_owned());
 
-    let raw_data = generate_scalar_image(&image_specification, pixel_renderer, Rgb([0, 0, 0]));
+    let raw_data = generate_scalar_image(
+        &image_specification,
+        renderable.render_options(),
+        pixel_renderer,
+        Rgb([0, 0, 0]),
+    );
 
     stopwatch.record_split("compute quadratic sequences".to_owned());
 
