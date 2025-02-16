@@ -1,8 +1,14 @@
 {
   "Mandelbrot": {
     "image_specification": {
-      "resolution": [1920, 1080],
-      "center": [-0.006893157175705378, 0.7381186687313246],
+      "resolution": [
+        1920,
+        1080
+      ],
+      "center": [
+        -0.006893157175705378,
+        0.7381186687313246
+      ],
       "width": 0.05
     },
     "convergence_params": {
@@ -14,29 +20,56 @@
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [10, 0, 60]
+          "rgb_raw": [
+            10,
+            0,
+            60
+          ]
         },
         {
           "query": 0.8,
-          "rgb_raw": [20, 0, 86]
+          "rgb_raw": [
+            20,
+            0,
+            86
+          ]
         },
         {
           "query": 0.92,
-          "rgb_raw": [20, 0, 160]
+          "rgb_raw": [
+            20,
+            0,
+            160
+          ]
         },
         {
           "query": 0.96,
-          "rgb_raw": [0, 50, 240]
+          "rgb_raw": [
+            0,
+            50,
+            240
+          ]
         },
         {
           "query": 1.0,
-          "rgb_raw": [230, 245, 255]
+          "rgb_raw": [
+            230,
+            245,
+            255
+          ]
         }
       ],
       "lookup_table_count": 512,
-      "background_color_rgb": [0, 0, 0],
+      "background_color_rgb": [
+        0,
+        0,
+        0
+      ],
       "histogram_bin_count": 32,
       "histogram_sample_count": 40000
     }
+  },
+  "render_options": {
+    "downsample_stride": 1
   }
 }
