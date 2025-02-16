@@ -123,8 +123,6 @@ where
         let redraw_required = self.redraw_required.clone();
 
         std::thread::spawn(move || {
-            let start_time = std::time::Instant::now();
-
             let mut display_buffer_mut = display_buffer.lock().unwrap();
             let mut renderer_mut = renderer.lock().unwrap();
             renderer_mut.set_image_specification(image_specification);
@@ -132,8 +130,6 @@ where
 
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
-
-            println!("Rendered image in: {} ms", start_time.elapsed().as_millis());
         });
     }
 }
