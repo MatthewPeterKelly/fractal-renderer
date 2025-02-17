@@ -1,7 +1,11 @@
 use image::Rgb;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::{cmp::max, fmt::Debug, sync::Arc};
+use std::{
+    cmp::{max, min},
+    fmt::Debug,
+    sync::Arc,
+};
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
@@ -275,10 +279,19 @@ where
 
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
         let scale = 1.0 / (2u32.pow(level) as f64);
+
+        let adjust = |lower_bound, cached_value| {
+            (lower_bound as f64)
+                .min(cached_value)
+                .max(cached_value * scale)
+        };
+
         self.fractal_params.color_map_mut().histogram_sample_count =
-            max(512, cache.histogram_sample_count * scale as usize);
+            adjust(2048, cache.histogram_sample_count as f64) as usize;
+
         self.fractal_params.convergence_params_mut().max_iter_count =
-            max(128, cache.max_iter_count * scale as u32);
+            adjust(128, cache.max_iter_count as f64) as u32;
+
         self.fractal_params.render_options_mut().downsample_stride =
             cache.downsample_stride + (level as usize);
     }
