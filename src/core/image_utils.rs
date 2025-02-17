@@ -400,6 +400,113 @@ pub fn generate_scalar_image<F: PixelRenderLambda>(
     raw_data
 }
 
+
+
+
+
+
+
+
+// pub trait IntegerInterpolate<T> {
+//     fn integer_interpolate(low: &T, upp: &T, index: usize, distance: usize) -> T;
+// }
+
+// impl IntegerInterpolate<Vec<Rgb<u8>>> for Vec<Rgb<u8>> {
+//     fn integer_interpolate(
+//         low: &Vec<Rgb<u8>>,
+//         upp: &Vec<Rgb<u8>>,
+//         index: usize,
+//         distance: usize,
+//     ) -> Vec<Rgb<u8>> {
+//         let mut value = low.clone();
+//         for i in 0..low.len() {
+//             value[i] = Rgb::<u8>::integer_interpolate(&low[i], &upp[i], index, distance);
+//         }
+//         value
+//     }
+// }
+
+// fn bar(input_a: &u32, input_b: &u32, output: &mut u32) {
+//     *output = input_a + input_b;
+// }
+
+// fn dummy(foo: &mut Vec<u32>) {
+//     let (left, right) = foo.split_at_mut(1);
+//     let (middle, rest) = right.split_at_mut(1);
+//     bar(&left[0], &rest[0], &mut middle[0]);
+// }
+
+struct LinearPixelInerpolation {
+    data_length: usize,
+    downsample_stride: usize,
+    num_complete_chunks: usize,
+    terminal_reference_index: usize,
+}
+
+impl LinearPixelInerpolation {
+    fn new(data_length: usize, downsample_stride: usize) -> LinearPixelInerpolation {
+        // Number of complete "chunks" of data
+        let num_chunks = data_length / downsample_stride;
+
+        // Number of "leftover" elements at the end:
+        let remainder = data_length % downsample_stride;
+
+        // How many complete "interpolation blocks" can we process?
+        let num_complete_chunks = if remainder == 0 {
+            num_chunks - 1
+        } else {
+            num_chunks
+        };
+        let terminal_reference_index = num_complete_chunks * downsample_stride;
+
+        LinearPixelInerpolation {
+            data_length,
+            downsample_stride,
+            num_complete_chunks,
+            terminal_reference_index,
+        }
+    }
+
+    fn interpolate<'a, F>(&self, data_view: F, query_index: usize) -> Rgb<u8>
+    where
+        F: Fn(usize) -> &'a Rgb<u8>,
+    {
+        let chunk_index = query_index % self.downsample_stride;
+        if (chunk_index < self.num_complete_chunks) {
+            // We know the data at these indices
+            let low_ref_idx = chunk_index * self.downsample_stride;
+            let upp_ref_idx = low_ref_idx + self.downsample_stride;
+            // Iterate through interior points and set them:
+            Self::pixel_interpolate(
+                data_view(low_ref_idx),
+                data_view(upp_ref_idx),
+                query_index - low_ref_idx,
+                self.downsample_stride,
+            )
+        } else {
+            data_view(self.terminal_reference_index).clone()
+        }
+    }
+
+    fn pixel_interpolate(low: &Rgb<u8>, upp: &Rgb<u8>, index: usize, distance: usize) -> Rgb<u8> {
+        let mut value = low.clone();
+        for i in 0..3 {
+            value[i] = (((low[i] as usize) * (distance - index) + (upp[i] as usize) * index)
+                / distance) as u8;
+        }
+        value
+    }
+}
+
+
+
+
+
+
+
+
+
+
 /// Note: the generic `E` here can represent either an individual pixel or an entire
 /// vector of pixels.
 fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
@@ -474,7 +581,42 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         });
 
     if render_options.downsample_stride > 1 {
-        fill_skipped_entries(render_options.downsample_stride, raw_data);
+        // First pass through the image. Interpolate between populated entries.
+        // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
+        let inner_interpolator = LinearPixelInerpolation::new(
+            spec.resolution[1] as usize,
+            render_options.downsample_stride,
+        );
+        raw_data
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| i % render_options.downsample_stride == 0)
+            .for_each(|(x, row)| {
+                let data_view = |i: usize| -> &Rgb<u8> { &row[i] };
+                for index in 0..row.len() {
+                    if index % render_options.downsample_stride != 0 {
+                        row[index] = inner_interpolator.interpolate(&data_view, query_index);
+                    }
+                }
+            });
+
+        // Second pass through the data. Now we fill in the other dimension.
+        // This one is harder to parallelize, as we're slicing the 2D data the other way.
+
+        // NOTE:  we might want to flip the order and do the parallel version as the second pass,
+        // as we're filling in more data that way.
+        raw_data
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| i % render_options.downsample_stride != 0)
+            .for_each(|(x, row)| {
+                for index in 0..row.len() {
+                    let data_view = |i: usize| -> &Rgb<u8> {
+                        // TODO:  correctly capture the index going the other way.
+                    };
+                    row[index] = inner_interpolator.interpolate(data_view, query_index);
+                }
+            });
     }
 }
 
