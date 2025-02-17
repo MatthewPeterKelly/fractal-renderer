@@ -399,7 +399,7 @@ where
     raw_data
 }
 
-fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut Vec<E>) {
+fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
     for i in 0..data.len() {
         let offset = i % downsample_stride;
         if offset != 0 {
@@ -413,7 +413,7 @@ fn render_single_row_within_image<F, E: Clone>(
     column_query_value: f64,
     downsample_stride: usize,
     pixel_renderer: &F,
-    row: &mut Vec<E>,
+    row: &mut [E],
 ) where
     F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
 {
