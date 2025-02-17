@@ -415,6 +415,15 @@ fn render_single_row_within_image<F, E: Clone + Send>(
             let im = pixel_map_height.map(y as u32);
             *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(column_query_value, im));
         });
+
+    if downsample_stride > 1 {
+        for i in 0..row.len() {
+            let offset = i % downsample_stride;
+            if offset != 0 {
+                row[i] = row[i - offset].clone();
+            }
+        }
+    }
 }
 
 /**
