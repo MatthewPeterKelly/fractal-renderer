@@ -146,6 +146,9 @@ pub trait SpeedOptimizer {
     /// Modifies the parameters of the image in-place.
     /// An optimization level of zero corresponds to the "default paramers", with positive
     /// integers corresponding to progressively faster render times (and thus lower quality).
+    ///
+    /// Note: parameters modified by this call should strictly reduce the render time, and
+    /// should not change the size of the image or underlying data structures.
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
 }
 
