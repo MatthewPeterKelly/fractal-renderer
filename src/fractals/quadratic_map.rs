@@ -259,6 +259,31 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     }
 }
 
+impl<T> SpeedOptimizer for QuadraticMap<T>
+where
+    T: QuadraticMapParams,
+{
+    type ReferenceCache = ParamsReferenceCache;
+
+    fn reference_cache(&self) -> Self::ReferenceCache {
+        ParamsReferenceCache {
+            histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
+            max_iter_count: self.fractal_params.convergence_params().max_iter_count,
+            downsample_stride: self.fractal_params.render_options().downsample_stride,
+        }
+    }
+
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
+        let scale = 1.0 / (2u32.pow(level) as f64);
+        self.fractal_params.color_map_mut().histogram_sample_count =
+            max(512, cache.histogram_sample_count * scale as usize);
+        self.fractal_params.convergence_params_mut().max_iter_count =
+            max(128, cache.max_iter_count * scale as u32);
+        self.fractal_params.render_options_mut().downsample_stride =
+            cache.downsample_stride + (level as usize);
+    }
+}
+
 impl<T> Renderable for QuadraticMap<T>
 where
     T: QuadraticMapParams + Sync + Send,
@@ -298,30 +323,6 @@ where
 
     fn render_options(&self) -> &RenderOptions {
         self.fractal_params.render_options()
-    }
-}
-impl<T> SpeedOptimizer for QuadraticMap<T>
-where
-    T: QuadraticMapParams,
-{
-    type ReferenceCache = ParamsReferenceCache;
-
-    fn reference_cache(&self) -> Self::ReferenceCache {
-        ParamsReferenceCache {
-            histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
-            max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            downsample_stride: self.fractal_params.render_options().downsample_stride,
-        }
-    }
-
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        let scale = 1.0 / (2u32.pow(level) as f64);
-        self.fractal_params.color_map_mut().histogram_sample_count =
-            max(512, cache.histogram_sample_count * scale as usize);
-        self.fractal_params.convergence_params_mut().max_iter_count =
-            max(128, cache.max_iter_count * scale as u32);
-        self.fractal_params.render_options_mut().downsample_stride =
-            cache.downsample_stride + (level as usize);
     }
 }
 

@@ -75,11 +75,15 @@ pub struct PixelGrid<F: Renderable> {
     // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
     renderer: Arc<Mutex<F>>,
 
+    // Cache used to enable dynamically adjusting parameters to hit frame per second target.
+    speed_optimizer_cache: F::ReferenceCache,
+
     // Lock, used to ensure that we only run a single render background task.
     render_task_is_busy: Arc<AtomicBool>,
 
     // This flag is set high when we need to trigger another render pass.
-    render_required: bool,
+    // If set, then it contains the desired speed optimization level for the render.
+    render_required: Option<u32>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -98,13 +102,16 @@ where
             pan_rate: 0.0,
         });
 
+        let renderer = Arc::new(Mutex::new(renderer));
+
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
             file_prefix,
-            renderer: Arc::new(Mutex::new(renderer)),
+            renderer: renderer.clone(),
+            speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: true,
+            render_required: Some(0),
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
         pixel_grid
@@ -143,12 +150,9 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = true;
+        self.render_required = Some(0);
     }
 
-    // TODO: consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
-    /// Updates the view command. If the renderer is available and the view port has changed,
-    /// then it will update the view.
     fn update(
         &mut self,
         time: f64,
@@ -165,11 +169,22 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
-            self.render_required = true;
+            self.render_required = Some(2); // For now, just jump to speed level 2. Adaptive later.
         }
-        if self.render_required && !self.render_task_is_busy.swap(true, Ordering::Acquire) {
-            self.render();
-            self.render_required = false;
+        if let Some(level) = self.render_required {
+            if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                self.renderer
+                    .lock()
+                    .unwrap()
+                    .set_speed_optimization_level(level, &self.speed_optimizer_cache);
+                self.render();
+
+                if level > 0 {
+                    self.render_required = Some(level - 1);
+                } else {
+                    self.render_required = None;
+                }
+            }
         }
 
         self.redraw_required.load(Ordering::Acquire)
