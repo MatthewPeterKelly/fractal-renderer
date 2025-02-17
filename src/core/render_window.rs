@@ -4,10 +4,6 @@ use std::sync::{
 };
 
 use image::Rgb;
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
 
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},

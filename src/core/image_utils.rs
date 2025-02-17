@@ -399,6 +399,24 @@ where
     raw_data
 }
 
+fn render_single_row_within_image<F, E: Clone + Send>(
+    pixel_map_height: &LinearPixelMap,
+    column_query_value: f64,
+    downsample_stride: usize,
+    pixel_renderer: &F,
+    row: &mut Vec<E>,
+) where
+    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
+{
+    row.iter_mut()
+        .enumerate()
+        .step_by(downsample_stride)
+        .for_each(|(y, elem)| {
+            let im = pixel_map_height.map(y as u32);
+            *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(column_query_value, im));
+        });
+}
+
 /**
  * In-place version of the above function.
  */
@@ -437,13 +455,7 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
                 spec.resolution[1] as usize,
                 "Inner dimension mismatch"
             );
-            row.iter_mut()
-                .enumerate()
-                .step_by(stride)
-                .for_each(|(y, elem)| {
-                    let im = pixel_map_height.map(y as u32);
-                    *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
-                });
+            render_single_row_within_image(&pixel_map_height, re, stride, &pixel_renderer, row);
         });
 }
 
