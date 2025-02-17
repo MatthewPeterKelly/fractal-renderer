@@ -198,26 +198,13 @@ where
         );
         let array_skip = self.image_specification().resolution[0] as usize;
         let display_buffer = self.display_buffer.lock().unwrap();
-
-        let stride = self
-            .renderer
-            .lock()
-            .unwrap()
-            .render_options()
-            .downsample_stride;
-
-        screen
-            .par_chunks_exact_mut(4)
-            .enumerate()
-            .for_each(|(flat_index, pixel)| {
-                let j = stride * ((flat_index / array_skip) / stride);
-                let i = stride * ((flat_index % array_skip) / stride);
-                let raw_pixel = display_buffer[i][j];
-                pixel[0] = raw_pixel[0];
-                pixel[1] = raw_pixel[1];
-                pixel[2] = raw_pixel[2];
-                pixel[3] = 255;
-            });
+        for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
+            let j = flat_index / array_skip;
+            let i = flat_index % array_skip;
+            let raw_pixel = display_buffer[i][j];
+            let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
+            pixel.copy_from_slice(&color);
+        }
         self.redraw_required.store(false, Ordering::Release);
     }
 
