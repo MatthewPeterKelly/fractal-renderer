@@ -1,17 +1,9 @@
-use std::cmp::max;
-
-use crate::core::image_utils::{ImageSpecification, RenderOptions, SpeedOptimizer};
+use crate::core::image_utils::{ImageSpecification, RenderOptions};
 use serde::{Deserialize, Serialize};
 
 use super::quadratic_map::{
     ColorMapParams, ConvergenceParams, QuadraticMapParams, QuadraticMapSequence,
 };
-
-pub struct MandelbrotReferenceCache {
-    pub histogram_sample_count: usize,
-    pub max_iter_count: u32,
-    pub downsample_stride: usize,
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MandelbrotParams {
@@ -36,12 +28,24 @@ impl QuadraticMapParams for MandelbrotParams {
         &self.convergence_params
     }
 
+    fn convergence_params_mut(&mut self) -> &mut ConvergenceParams {
+        &mut self.convergence_params
+    }
+
     fn color_map(&self) -> &ColorMapParams {
         &self.color_map
     }
 
+    fn color_map_mut(&mut self) -> &mut ColorMapParams {
+        &mut self.color_map
+    }
+
     fn render_options(&self) -> &RenderOptions {
         &self.render_options
+    }
+
+    fn render_options_mut(&mut self) -> &mut RenderOptions {
+        &mut self.render_options
     }
 
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32> {
@@ -50,25 +54,5 @@ impl QuadraticMapParams for MandelbrotParams {
             point,
             &self.convergence_params,
         )
-    }
-}
-
-impl SpeedOptimizer for MandelbrotParams {
-    type ReferenceCache = MandelbrotReferenceCache;
-
-    fn reference_cache(&self) -> Self::ReferenceCache {
-        MandelbrotReferenceCache {
-            histogram_sample_count: self.color_map.histogram_sample_count,
-            max_iter_count: self.convergence_params.max_iter_count,
-            downsample_stride: self.render_options.downsample_stride,
-        }
-    }
-
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        let scale = 1.0 / (2u32.pow(level) as f64);
-        self.color_map.histogram_sample_count =
-            max(512, cache.histogram_sample_count * scale as usize);
-        self.convergence_params.max_iter_count = max(128, cache.max_iter_count * scale as u32);
-        self.render_options.downsample_stride = cache.downsample_stride + (level as usize);
     }
 }
