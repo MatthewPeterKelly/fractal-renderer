@@ -399,7 +399,16 @@ where
     raw_data
 }
 
-fn render_single_row_within_image<F, E: Clone + Send>(
+fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut Vec<E>) {
+    for i in 0..data.len() {
+        let offset = i % downsample_stride;
+        if offset != 0 {
+            data[i] = data[i - offset].clone();
+        }
+    }
+}
+
+fn render_single_row_within_image<F, E: Clone>(
     pixel_map_height: &LinearPixelMap,
     column_query_value: f64,
     downsample_stride: usize,
@@ -415,14 +424,8 @@ fn render_single_row_within_image<F, E: Clone + Send>(
             let im = pixel_map_height.map(y as u32);
             *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(column_query_value, im));
         });
-
     if downsample_stride > 1 {
-        for i in 0..row.len() {
-            let offset = i % downsample_stride;
-            if offset != 0 {
-                row[i] = row[i - offset].clone();
-            }
-        }
+        fill_skipped_entries(downsample_stride, row);
     }
 }
 
