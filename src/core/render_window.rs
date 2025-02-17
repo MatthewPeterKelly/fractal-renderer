@@ -4,10 +4,6 @@ use std::sync::{
 };
 
 use image::Rgb;
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
 
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
@@ -75,11 +71,15 @@ pub struct PixelGrid<F: Renderable> {
     // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
     renderer: Arc<Mutex<F>>,
 
+    // Cache used to enable dynamically adjusting parameters to hit frame per second target.
+    speed_optimizer_cache: F::ReferenceCache,
+
     // Lock, used to ensure that we only run a single render background task.
     render_task_is_busy: Arc<AtomicBool>,
 
     // This flag is set high when we need to trigger another render pass.
-    render_required: bool,
+    // If set, then it contains the desired speed optimization level for the render.
+    render_required: Option<u32>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -98,13 +98,16 @@ where
             pan_rate: 0.0,
         });
 
+        let renderer = Arc::new(Mutex::new(renderer));
+
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
             file_prefix,
-            renderer: Arc::new(Mutex::new(renderer)),
+            renderer: renderer.clone(),
+            speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: true,
+            render_required: Some(0),
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
         pixel_grid
@@ -143,12 +146,9 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = true;
+        self.render_required = Some(0);
     }
 
-    // TODO: consider a "fast update" that solves 2x2 or 3x3 pixel blocks while moving?
-    /// Updates the view command. If the renderer is available and the view port has changed,
-    /// then it will update the view.
     fn update(
         &mut self,
         time: f64,
@@ -165,11 +165,22 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
-            self.render_required = true;
+            self.render_required = Some(2); // For now, just jump to speed level 2. Adaptive later.
         }
-        if self.render_required && !self.render_task_is_busy.swap(true, Ordering::Acquire) {
-            self.render();
-            self.render_required = false;
+        if let Some(level) = self.render_required {
+            if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                self.renderer
+                    .lock()
+                    .unwrap()
+                    .set_speed_optimization_level(level, &self.speed_optimizer_cache);
+                self.render();
+
+                if level > 0 {
+                    self.render_required = Some(level - 1);
+                } else {
+                    self.render_required = None;
+                }
+            }
         }
 
         self.redraw_required.load(Ordering::Acquire)
@@ -183,26 +194,13 @@ where
         );
         let array_skip = self.image_specification().resolution[0] as usize;
         let display_buffer = self.display_buffer.lock().unwrap();
-
-        let stride = self
-            .renderer
-            .lock()
-            .unwrap()
-            .render_options()
-            .downsample_stride;
-
-        screen
-            .par_chunks_exact_mut(4)
-            .enumerate()
-            .for_each(|(flat_index, pixel)| {
-                let j = stride * ((flat_index / array_skip) / stride);
-                let i = stride * ((flat_index % array_skip) / stride);
-                let raw_pixel = display_buffer[i][j];
-                pixel[0] = raw_pixel[0];
-                pixel[1] = raw_pixel[1];
-                pixel[2] = raw_pixel[2];
-                pixel[3] = 255;
-            });
+        for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
+            let j = flat_index / array_skip;
+            let i = flat_index % array_skip;
+            let raw_pixel = display_buffer[i][j];
+            let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
+            pixel.copy_from_slice(&color);
+        }
         self.redraw_required.store(false, Ordering::Release);
     }
 

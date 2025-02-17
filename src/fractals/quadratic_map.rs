@@ -9,7 +9,7 @@ use crate::core::{
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        RenderOptions, Renderable,
+        RenderOptions, Renderable, SpeedOptimizer,
     },
     stopwatch::Stopwatch,
 };
@@ -163,12 +163,15 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 
     /// Access the convergence parameters.
     fn convergence_params(&self) -> &ConvergenceParams;
+    fn convergence_params_mut(&mut self) -> &mut ConvergenceParams;
 
     /// Access the color map parameters.
     fn color_map(&self) -> &ColorMapParams;
+    fn color_map_mut(&mut self) -> &mut ColorMapParams;
 
     /// Access to the rendering options:
     fn render_options(&self) -> &RenderOptions;
+    fn render_options_mut(&mut self) -> &mut RenderOptions;
 
     // Actually evaluate the fractal.
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
@@ -200,6 +203,12 @@ pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogra
         QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
     )
     .into()
+}
+
+pub struct ParamsReferenceCache {
+    pub histogram_sample_count: usize,
+    pub max_iter_count: u32,
+    pub downsample_stride: usize,
 }
 
 pub struct QuadraticMap<T: QuadraticMapParams> {
@@ -247,6 +256,46 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
                 let mapped_query = cdf_ref.percentile(query);
                 inner_map_ref.compute_pixel(mapped_query)
             });
+    }
+}
+
+/// Scales down an integer parameter based on a scale factor.
+/// Implements clamping to ensure that scaling the value does not drop it below some
+/// lower bound, but also that it does not increase the returned value.
+fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
+    if cached_value < lower_bound {
+        return cached_value;
+    }
+    let scaled_value = cached_value * scale;
+    scaled_value.max(lower_bound)
+}
+
+impl<T> SpeedOptimizer for QuadraticMap<T>
+where
+    T: QuadraticMapParams,
+{
+    type ReferenceCache = ParamsReferenceCache;
+
+    fn reference_cache(&self) -> Self::ReferenceCache {
+        ParamsReferenceCache {
+            histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
+            max_iter_count: self.fractal_params.convergence_params().max_iter_count,
+            downsample_stride: self.fractal_params.render_options().downsample_stride,
+        }
+    }
+
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
+        let scale = 1.0 / (2u32.pow(level) as f64);
+
+        self.fractal_params.color_map_mut().histogram_sample_count =
+            scale_down_parameter_for_speed(2048.0, cache.histogram_sample_count as f64, scale)
+                as usize;
+
+        self.fractal_params.convergence_params_mut().max_iter_count =
+            scale_down_parameter_for_speed(128.0, cache.max_iter_count as f64, scale) as u32;
+
+        self.fractal_params.render_options_mut().downsample_stride =
+            cache.downsample_stride + (level as usize);
     }
 }
 

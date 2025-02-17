@@ -135,9 +135,26 @@ pub struct RenderOptions {
     pub downsample_stride: usize,
 }
 
+/// Allows a set of parameters to be dynamically adjusted to hit a target frame rate.
+/// The `ReferenceCache` is used to store a reference sub-set of parameters.
+pub trait SpeedOptimizer {
+    type ReferenceCache;
+
+    /// Constructs a reference cache representing the current state of the parameters.
+    fn reference_cache(&self) -> Self::ReferenceCache;
+
+    /// Modifies the parameters of the image in-place.
+    /// An optimization level of zero corresponds to the "default paramers", with positive
+    /// integers corresponding to progressively faster render times (and thus lower quality).
+    ///
+    /// Note: parameters modified by this call should strictly reduce the render time, and
+    /// should not change the size of the image or underlying data structures.
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
+}
+
 /// The Renderable trait represents an object that can provide a point render function
 /// and an image specification.
-pub trait Renderable: Sync + Send {
+pub trait Renderable: Sync + Send + SpeedOptimizer {
     /// The type of parameters that describe the renderable object.
     type Params: Serialize + Debug;
 
@@ -385,6 +402,36 @@ where
     raw_data
 }
 
+fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
+    for i in 0..data.len() {
+        let offset = i % downsample_stride;
+        if offset != 0 {
+            data[i] = data[i - offset].clone();
+        }
+    }
+}
+
+fn render_single_row_within_image<F, E: Clone>(
+    pixel_map_height: &LinearPixelMap,
+    column_query_value: f64,
+    downsample_stride: usize,
+    pixel_renderer: &F,
+    row: &mut [E],
+) where
+    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
+{
+    row.iter_mut()
+        .enumerate()
+        .step_by(downsample_stride)
+        .for_each(|(y, elem)| {
+            let im = pixel_map_height.map(y as u32);
+            *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(column_query_value, im));
+        });
+    if downsample_stride > 1 {
+        fill_skipped_entries(downsample_stride, row);
+    }
+}
+
 /**
  * In-place version of the above function.
  */
@@ -410,12 +457,10 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         -spec.height(), // Image coordinates are upside down.
     );
 
-    let stride = render_options.downsample_stride;
-
     raw_data
         .par_iter_mut()
         .enumerate()
-        .filter(|(i, _)| i % stride == 0)
+        .filter(|(i, _)| i % render_options.downsample_stride == 0)
         .for_each(|(x, row)| {
             let re = pixel_map_width.map(x as u32);
             assert_eq!(
@@ -423,14 +468,18 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
                 spec.resolution[1] as usize,
                 "Inner dimension mismatch"
             );
-            row.iter_mut()
-                .enumerate()
-                .step_by(stride)
-                .for_each(|(y, elem)| {
-                    let im = pixel_map_height.map(y as u32);
-                    *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(re, im));
-                });
+            render_single_row_within_image(
+                &pixel_map_height,
+                re,
+                render_options.downsample_stride,
+                &pixel_renderer,
+                row,
+            );
         });
+
+    if render_options.downsample_stride > 1 {
+        fill_skipped_entries(render_options.downsample_stride, raw_data);
+    }
 }
 
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
