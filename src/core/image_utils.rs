@@ -135,6 +135,20 @@ pub struct RenderOptions {
     pub downsample_stride: usize,
 }
 
+/// Allows a set of parameters to be dynamically adjusted to hit a target frame rate.
+/// The `ReferenceCache` is used to store a reference sub-set of parameters.
+pub trait SpeedOptimizer {
+    type ReferenceCache;
+
+    /// Constructs a reference cache representing the current state of the parameters.
+    fn reference_cache(&self) -> Self::ReferenceCache;
+
+    /// Modifies the parameters of the image in-place.
+    /// An optimization level of zero corresponds to the "default paramers", with positive
+    /// integers corresponding to progressively faster render times (and thus lower quality).
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
+}
+
 /// The Renderable trait represents an object that can provide a point render function
 /// and an image specification.
 pub trait Renderable: Sync + Send {
