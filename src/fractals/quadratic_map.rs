@@ -263,6 +263,17 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     }
 }
 
+/// Scales down an integer parameter based on a scale factor.
+/// Implements clamping to ensure that scaling the value does not drop it below some
+/// lower bound, but also that it does not increase the returned value.
+fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
+    if cached_value < lower_bound {
+        return cached_value;
+    }
+    let scaled_value = cached_value * scale;
+    scaled_value.max(lower_bound)
+}
+
 impl<T> SpeedOptimizer for QuadraticMap<T>
 where
     T: QuadraticMapParams,
@@ -280,17 +291,12 @@ where
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
         let scale = 1.0 / (2u32.pow(level) as f64);
 
-        let adjust = |lower_bound, cached_value| {
-            (lower_bound as f64)
-                .min(cached_value)
-                .max(cached_value * scale)
-        };
-
         self.fractal_params.color_map_mut().histogram_sample_count =
-            adjust(2048, cache.histogram_sample_count as f64) as usize;
+            scale_down_parameter_for_speed(2048.0, cache.histogram_sample_count as f64, scale)
+                as usize;
 
         self.fractal_params.convergence_params_mut().max_iter_count =
-            adjust(128, cache.max_iter_count as f64) as u32;
+            scale_down_parameter_for_speed(128.0, cache.max_iter_count as f64, scale) as u32;
 
         self.fractal_params.render_options_mut().downsample_stride =
             cache.downsample_stride + (level as usize);
