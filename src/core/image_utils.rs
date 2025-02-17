@@ -454,12 +454,10 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
         -spec.height(), // Image coordinates are upside down.
     );
 
-    let stride = render_options.downsample_stride;
-
     raw_data
         .par_iter_mut()
         .enumerate()
-        .filter(|(i, _)| i % stride == 0)
+        .filter(|(i, _)| i % render_options.downsample_stride == 0)
         .for_each(|(x, row)| {
             let re = pixel_map_width.map(x as u32);
             assert_eq!(
@@ -467,8 +465,18 @@ pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
                 spec.resolution[1] as usize,
                 "Inner dimension mismatch"
             );
-            render_single_row_within_image(&pixel_map_height, re, stride, &pixel_renderer, row);
+            render_single_row_within_image(
+                &pixel_map_height,
+                re,
+                render_options.downsample_stride,
+                &pixel_renderer,
+                row,
+            );
         });
+
+    if render_options.downsample_stride > 1 {
+        fill_skipped_entries(render_options.downsample_stride, raw_data);
+    }
 }
 
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
