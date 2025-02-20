@@ -374,8 +374,9 @@ impl Default for SubpixelGridMask {
     }
 }
 
-// Use the PixelMapper to map from "point" to "pixel" space, and then
-// use existing utilitites in the ImageBuffer to draw the pixel at a specific color
+pub trait PixelRenderLambda: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
+
+impl<T> PixelRenderLambda for T where T: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
 
 /**
  * Given image size parameters and a mapping into "regular" space used by the fractal,
@@ -388,15 +389,12 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F>(
+pub fn generate_scalar_image<F: PixelRenderLambda>(
     spec: &ImageSpecification,
     render_options: &RenderOptions,
     pixel_renderer: F,
     default_element: Rgb<u8>,
-) -> Vec<Vec<Rgb<u8>>>
-where
-    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-{
+) -> Vec<Vec<Rgb<u8>>> {
     let mut raw_data: Vec<Vec<_>> = create_buffer(default_element, &spec.resolution);
     generate_scalar_image_in_place(spec, render_options, pixel_renderer, &mut raw_data);
     raw_data
@@ -413,15 +411,13 @@ fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
     }
 }
 
-fn render_single_row_within_image<F>(
+fn render_single_row_within_image<F: PixelRenderLambda>(
     pixel_map_height: &LinearPixelMap,
     column_query_value: f64,
     downsample_stride: usize,
     pixel_renderer: &F,
     row: &mut [Rgb<u8>],
-) where
-    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-{
+) {
     row.iter_mut()
         .enumerate()
         .step_by(downsample_stride)
@@ -437,14 +433,12 @@ fn render_single_row_within_image<F>(
 /**
  * In-place version of the above function.
  */
-pub fn generate_scalar_image_in_place<F>(
+pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
     spec: &ImageSpecification,
     render_options: &RenderOptions,
     pixel_renderer: F,
     raw_data: &mut Vec<Vec<Rgb<u8>>>,
-) where
-    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
-{
+) {
     assert_eq!(
         raw_data.len(),
         spec.resolution[0] as usize,
