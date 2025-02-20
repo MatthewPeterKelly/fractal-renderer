@@ -388,20 +388,22 @@ impl Default for SubpixelGridMask {
  * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
  * value which can then later be plugged into a color map by the rendering pipeline.
  */
-pub fn generate_scalar_image<F, E: Clone + Send>(
+pub fn generate_scalar_image<F>(
     spec: &ImageSpecification,
     render_options: &RenderOptions,
     pixel_renderer: F,
-    default_element: E,
-) -> Vec<Vec<E>>
+    default_element: Rgb<u8>,
+) -> Vec<Vec<Rgb<u8>>>
 where
-    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
     let mut raw_data: Vec<Vec<_>> = create_buffer(default_element, &spec.resolution);
     generate_scalar_image_in_place(spec, render_options, pixel_renderer, &mut raw_data);
     raw_data
 }
 
+/// Note: the generic `E` here can represent either an individual pixel or an entire
+/// vector of pixels.
 fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
     for i in 0..data.len() {
         let offset = i % downsample_stride;
@@ -411,14 +413,14 @@ fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
     }
 }
 
-fn render_single_row_within_image<F, E: Clone>(
+fn render_single_row_within_image<F>(
     pixel_map_height: &LinearPixelMap,
     column_query_value: f64,
     downsample_stride: usize,
     pixel_renderer: &F,
-    row: &mut [E],
+    row: &mut [Rgb<u8>],
 ) where
-    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
     row.iter_mut()
         .enumerate()
@@ -435,13 +437,13 @@ fn render_single_row_within_image<F, E: Clone>(
 /**
  * In-place version of the above function.
  */
-pub fn generate_scalar_image_in_place<F, E: Clone + Send>(
+pub fn generate_scalar_image_in_place<F>(
     spec: &ImageSpecification,
     render_options: &RenderOptions,
     pixel_renderer: F,
-    raw_data: &mut Vec<Vec<E>>,
+    raw_data: &mut Vec<Vec<Rgb<u8>>>,
 ) where
-    F: Fn(&nalgebra::Vector2<f64>) -> E + std::marker::Sync,
+    F: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + std::marker::Sync,
 {
     assert_eq!(
         raw_data.len(),
