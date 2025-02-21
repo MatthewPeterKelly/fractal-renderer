@@ -429,15 +429,20 @@ pub fn generate_scalar_image<F: PixelRenderLambda>(
 //     bar(&left[0], &rest[0], &mut middle[0]);
 // }
 
-struct LinearPixelInerpolation {
-    data_length: usize,
+/// Data structure to cache the details needed to do linear keyframe interpolation on
+/// image (pixel) data. The expensive render calculation will be performed to compute
+/// the value of pixels where `index % downsample_stride == 0` (ahead of time). Then
+/// this function will read those points (and only those points) from the data view to
+/// determine what the pixel value at intermediate points should be. The linear interpolation
+/// is implemented with integer math, as it is very fast.
+struct KeyframeLinearPixelInerpolation {
     downsample_stride: usize,
     num_complete_chunks: usize,
     terminal_reference_index: usize,
 }
 
-impl LinearPixelInerpolation {
-    fn new(data_length: usize, downsample_stride: usize) -> LinearPixelInerpolation {
+impl KeyframeLinearPixelInerpolation {
+    fn new(data_length: usize, downsample_stride: usize) -> KeyframeLinearPixelInerpolation {
         // Number of complete "chunks" of data
         let num_chunks = data_length / downsample_stride;
 
@@ -452,8 +457,7 @@ impl LinearPixelInerpolation {
         };
         let terminal_reference_index = num_complete_chunks * downsample_stride;
 
-        LinearPixelInerpolation {
-            data_length,
+        KeyframeLinearPixelInerpolation {
             downsample_stride,
             num_complete_chunks,
             terminal_reference_index,
@@ -466,18 +470,11 @@ impl LinearPixelInerpolation {
     {
         let chunk_index = query_index / self.downsample_stride;
 
-        // println!("chunk_index: {}, query_index: {}", chunk_index, query_index);
-
         if chunk_index < self.num_complete_chunks {
             // We know the data at these indices
             let low_ref_idx = chunk_index * self.downsample_stride;
             let upp_ref_idx = low_ref_idx + self.downsample_stride;
             let local_idx = query_index - low_ref_idx;
-
-            // println!(
-            //     "low_ref_idx: {}, upp_ref_idx: {}, local_idx: {}",
-            //     low_ref_idx, upp_ref_idx, local_idx
-            // );
 
             // Iterate through interior points and set them:
             Self::pixel_interpolate(
@@ -487,7 +484,6 @@ impl LinearPixelInerpolation {
                 self.downsample_stride,
             )
         } else {
-            // println!("Off the end!");
             data_view(self.terminal_reference_index).clone()
         }
     }
@@ -578,7 +574,7 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
     if render_options.downsample_stride > 1 {
         // // First pass through the image. Interpolate between populated entries.
         // // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
-        // let inner_interpolator = LinearPixelInerpolation::new(
+        // let inner_interpolator = KeyframeLinearPixelInerpolation::new(
         //     spec.resolution[1] as usize,
         //     render_options.downsample_stride,
         // );
@@ -811,13 +807,13 @@ mod tests {
             Rgb([0, 0, 0]),
         ];
         {
-            let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+            let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
 
             let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
 
             // Manually select the correct inputs to pixel interpolate and check that
             assert_eq!(
-                LinearPixelInerpolation::pixel_interpolate(
+                KeyframeLinearPixelInerpolation::pixel_interpolate(
                     &data[0],
                     &data[2],
                     1,
@@ -840,7 +836,7 @@ mod tests {
             data.push(Rgb([0, 60, 0]));
 
             let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
-            let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+            let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
 
             // Check the first points again, but now, expect the index 3 to properly interpolate
             assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([10, 0, 20]));
@@ -867,7 +863,7 @@ mod tests {
             Rgb([123, 123, 123]), // dummy data, should never be read
         ];
 
-        let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+        let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
 
         let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
 
