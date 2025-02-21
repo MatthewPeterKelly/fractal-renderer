@@ -585,12 +585,12 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         //            element in the inner data vector can be computed locally, without referencing
         //            the other inner vectors.
 
-        let inner_count = spec.resolution[1] as usize;
-        let outer_count = spec.resolution[0] as usize;
+        let inner_count = raw_data[0].len();
+        let outer_count = raw_data.len();
 
         // PASS ONE:
         for inner_index in 0..inner_count {
-            if inner_index % render_options.downsample_stride != 0 {
+            if inner_index % render_options.downsample_stride == 0 {
                 let interpolator = KeyframeLinearPixelInerpolation::new(
                     outer_count,
                     render_options.downsample_stride,
@@ -612,7 +612,6 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         raw_data
             .par_iter_mut()
             .enumerate()
-            .filter(|(i, _)| i % render_options.downsample_stride != 0)
             .for_each(|(_, inner_data)| {
                 let interpolator = KeyframeLinearPixelInerpolation::new(
                     inner_count,
