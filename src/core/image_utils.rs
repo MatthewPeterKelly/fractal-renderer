@@ -400,13 +400,6 @@ pub fn generate_scalar_image<F: PixelRenderLambda>(
     raw_data
 }
 
-
-
-
-
-
-
-
 // pub trait IntegerInterpolate<T> {
 //     fn integer_interpolate(low: &T, upp: &T, index: usize, distance: usize) -> T;
 // }
@@ -471,41 +464,43 @@ impl LinearPixelInerpolation {
     where
         F: Fn(usize) -> &'a Rgb<u8>,
     {
-        let chunk_index = query_index % self.downsample_stride;
-        if (chunk_index < self.num_complete_chunks) {
+        let chunk_index = query_index / self.downsample_stride;
+
+        println!("chunk_index: {}, query_index: {}", chunk_index, query_index);
+
+        if chunk_index < self.num_complete_chunks {
             // We know the data at these indices
             let low_ref_idx = chunk_index * self.downsample_stride;
             let upp_ref_idx = low_ref_idx + self.downsample_stride;
+            let local_idx = query_index - low_ref_idx;
+
+            println!(
+                "low_ref_idx: {}, upp_ref_idx: {}, local_idx: {}",
+                low_ref_idx, upp_ref_idx, local_idx
+            );
+
             // Iterate through interior points and set them:
             Self::pixel_interpolate(
                 data_view(low_ref_idx),
                 data_view(upp_ref_idx),
-                query_index - low_ref_idx,
+                local_idx,
                 self.downsample_stride,
             )
         } else {
+            println!("Off the end!");
             data_view(self.terminal_reference_index).clone()
         }
     }
 
     fn pixel_interpolate(low: &Rgb<u8>, upp: &Rgb<u8>, index: usize, distance: usize) -> Rgb<u8> {
-        let mut value = low.clone();
-        for i in 0..3 {
-            value[i] = (((low[i] as usize) * (distance - index) + (upp[i] as usize) * index)
-                / distance) as u8;
-        }
-        value
+        let delta = distance - index;
+        Rgb([
+            (((low[0] as usize) * delta + (upp[0] as usize) * index) / distance) as u8,
+            (((low[1] as usize) * delta + (upp[1] as usize) * index) / distance) as u8,
+            (((low[2] as usize) * delta + (upp[2] as usize) * index) / distance) as u8,
+        ])
     }
 }
-
-
-
-
-
-
-
-
-
 
 /// Note: the generic `E` here can represent either an individual pixel or an entire
 /// vector of pixels.
@@ -581,42 +576,42 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         });
 
     if render_options.downsample_stride > 1 {
-        // First pass through the image. Interpolate between populated entries.
-        // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
-        let inner_interpolator = LinearPixelInerpolation::new(
-            spec.resolution[1] as usize,
-            render_options.downsample_stride,
-        );
-        raw_data
-            .par_iter_mut()
-            .enumerate()
-            .filter(|(i, _)| i % render_options.downsample_stride == 0)
-            .for_each(|(x, row)| {
-                let data_view = |i: usize| -> &Rgb<u8> { &row[i] };
-                for index in 0..row.len() {
-                    if index % render_options.downsample_stride != 0 {
-                        row[index] = inner_interpolator.interpolate(&data_view, query_index);
-                    }
-                }
-            });
+        // // First pass through the image. Interpolate between populated entries.
+        // // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
+        // let inner_interpolator = LinearPixelInerpolation::new(
+        //     spec.resolution[1] as usize,
+        //     render_options.downsample_stride,
+        // );
+        // raw_data
+        //     .par_iter_mut()
+        //     .enumerate()
+        //     .filter(|(i, _)| i % render_options.downsample_stride == 0)
+        //     .for_each(|(x, row)| {
+        //         let data_view = |i: usize| -> &Rgb<u8> { &row[i] };
+        //         for index in 0..row.len() {
+        //             if index % render_options.downsample_stride != 0 {
+        //                 row[index] = inner_interpolator.interpolate(&data_view, query_index);
+        //             }
+        //         }
+        //     });
 
-        // Second pass through the data. Now we fill in the other dimension.
-        // This one is harder to parallelize, as we're slicing the 2D data the other way.
+        // // Second pass through the data. Now we fill in the other dimension.
+        // // This one is harder to parallelize, as we're slicing the 2D data the other way.
 
-        // NOTE:  we might want to flip the order and do the parallel version as the second pass,
-        // as we're filling in more data that way.
-        raw_data
-            .par_iter_mut()
-            .enumerate()
-            .filter(|(i, _)| i % render_options.downsample_stride != 0)
-            .for_each(|(x, row)| {
-                for index in 0..row.len() {
-                    let data_view = |i: usize| -> &Rgb<u8> {
-                        // TODO:  correctly capture the index going the other way.
-                    };
-                    row[index] = inner_interpolator.interpolate(data_view, query_index);
-                }
-            });
+        // // NOTE:  we might want to flip the order and do the parallel version as the second pass,
+        // // as we're filling in more data that way.
+        // raw_data
+        //     .par_iter_mut()
+        //     .enumerate()
+        //     .filter(|(i, _)| i % render_options.downsample_stride != 0)
+        //     .for_each(|(x, row)| {
+        //         for index in 0..row.len() {
+        //             let data_view = |i: usize| -> &Rgb<u8> {
+        //                 // TODO:  correctly capture the index going the other way.
+        //             };
+        //             row[index] = inner_interpolator.interpolate(data_view, query_index);
+        //         }
+        //     });
     }
 }
 
@@ -804,5 +799,56 @@ mod tests {
         assert_eq!(scaled_spec.center, image_spec.center);
         assert_eq!(scaled_spec.width, image_spec.width);
         assert_eq!(scaled_spec.resolution, Vector2::new(7, 5));
+    }
+
+    #[test]
+    fn test_linear_pixel_interpolation() {
+        let downsample_stride: usize = 2;
+        let mut data = vec![
+            Rgb([0, 0, 40]),
+            Rgb([0, 0, 0]),
+            Rgb([20, 0, 0]),
+            Rgb([0, 0, 0]),
+        ];
+        {
+            let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+
+            let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
+
+            // Manually select the correct inputs to pixel interpolate and check that
+            assert_eq!(
+                LinearPixelInerpolation::pixel_interpolate(
+                    &data[0],
+                    &data[2],
+                    1,
+                    downsample_stride
+                ),
+                Rgb([10, 0, 20])
+            );
+
+            // Now let the "full vector" machinery figure out the pixels
+            assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([10, 0, 20]));
+            assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([20, 0, 0]));
+
+            // We don't expect to query at known points, but lets make sure it doesn't break
+            assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 40]));
+            assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([20, 0, 0]));
+        }
+        {
+            // Now, let's add more data and try again:
+            let mut data = data;
+            data.push(Rgb([0, 60, 0]));
+
+            let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
+            let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+
+            // Check the first points again, but now, expect the index 3 to properly interpolate
+            assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([10, 0, 20]));
+            assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([10, 30, 0]));
+            // Check the keyframes again, as well:
+            assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 40]));
+            assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([20, 0, 0]));
+            assert_eq!(interpolator.interpolate(&data_view, 4), Rgb([0, 60, 0]));
+        }
     }
 }
