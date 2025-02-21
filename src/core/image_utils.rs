@@ -466,7 +466,7 @@ impl LinearPixelInerpolation {
     {
         let chunk_index = query_index / self.downsample_stride;
 
-        println!("chunk_index: {}, query_index: {}", chunk_index, query_index);
+        // println!("chunk_index: {}, query_index: {}", chunk_index, query_index);
 
         if chunk_index < self.num_complete_chunks {
             // We know the data at these indices
@@ -474,10 +474,10 @@ impl LinearPixelInerpolation {
             let upp_ref_idx = low_ref_idx + self.downsample_stride;
             let local_idx = query_index - low_ref_idx;
 
-            println!(
-                "low_ref_idx: {}, upp_ref_idx: {}, local_idx: {}",
-                low_ref_idx, upp_ref_idx, local_idx
-            );
+            // println!(
+            //     "low_ref_idx: {}, upp_ref_idx: {}, local_idx: {}",
+            //     low_ref_idx, upp_ref_idx, local_idx
+            // );
 
             // Iterate through interior points and set them:
             Self::pixel_interpolate(
@@ -487,7 +487,7 @@ impl LinearPixelInerpolation {
                 self.downsample_stride,
             )
         } else {
-            println!("Off the end!");
+            // println!("Off the end!");
             data_view(self.terminal_reference_index).clone()
         }
     }
@@ -802,9 +802,9 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_pixel_interpolation() {
+    fn test_linear_pixel_interpolation_stride_2() {
         let downsample_stride: usize = 2;
-        let mut data = vec![
+        let data = vec![
             Rgb([0, 0, 40]),
             Rgb([0, 0, 0]),
             Rgb([20, 0, 0]),
@@ -850,5 +850,40 @@ mod tests {
             assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([20, 0, 0]));
             assert_eq!(interpolator.interpolate(&data_view, 4), Rgb([0, 60, 0]));
         }
+    }
+
+    #[test]
+    fn test_linear_pixel_interpolation_stride_3() {
+        let downsample_stride: usize = 3;
+        let data = vec![
+            Rgb([0, 0, 33]),
+            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([90, 60, 0]),
+            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([81, 140, 15]),
+            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([123, 123, 123]), // dummy data, should never be read
+        ];
+
+        let interpolator = LinearPixelInerpolation::new(data.len(), downsample_stride);
+
+        let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
+
+        // Check interpolated points
+        assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([30, 20, 22]));
+        assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([60, 40, 11]));
+        assert_eq!(interpolator.interpolate(&data_view, 4), Rgb([87, 86, 5]));
+        assert_eq!(interpolator.interpolate(&data_view, 5), Rgb([84, 113, 10]));
+
+        // Check extrapolated points
+        assert_eq!(interpolator.interpolate(&data_view, 7), Rgb([81, 140, 15]));
+        assert_eq!(interpolator.interpolate(&data_view, 8), Rgb([81, 140, 15]));
+
+        // Check keyframe points
+        assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 33]));
+        assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([90, 60, 0]));
+        assert_eq!(interpolator.interpolate(&data_view, 6), Rgb([81, 140, 15]));
     }
 }
