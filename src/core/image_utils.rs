@@ -484,7 +484,7 @@ impl KeyframeLinearPixelInerpolation {
                 self.downsample_stride,
             )
         } else {
-            data_view(self.terminal_reference_index).clone()
+            *data_view(self.terminal_reference_index)
         }
     }
 
@@ -551,6 +551,8 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         -spec.height(), // Image coordinates are upside down.
     );
 
+    // Perform the expensive render operation.
+    // Potentially down-sample in both dimensions based on `downsample_stride`.
     raw_data
         .par_iter_mut()
         .enumerate()
@@ -598,10 +600,12 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
                 for outer_index in 0..outer_count {
                     if outer_index % render_options.downsample_stride != 0 {
                         raw_data[outer_index][inner_index] = {
-                            let data_view = |outer_index: usize| -> &Rgb<u8> {
-                                &raw_data[outer_index][inner_index]
-                            };
-                            interpolator.interpolate(&data_view, outer_index)
+                            interpolator.interpolate(
+                                |outer_index: usize| -> &Rgb<u8> {
+                                    &raw_data[outer_index][inner_index]
+                                },
+                                outer_index,
+                            )
                         };
                     }
                 }
@@ -620,8 +624,10 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
                 for inner_index in 0..inner_data.len() {
                     if inner_index % render_options.downsample_stride != 0 {
                         inner_data[inner_index] = {
-                            let data_view = |idx: usize| -> &Rgb<u8> { &inner_data[idx] };
-                            interpolator.interpolate(&data_view, inner_index)
+                            interpolator.interpolate(
+                                |idx: usize| -> &Rgb<u8> { &inner_data[idx] },
+                                inner_index,
+                            )
                         };
                     }
                 }
