@@ -572,60 +572,61 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         });
 
     if render_options.downsample_stride > 1 {
-        // First, scan through and do linear interpolation by columns. This is not parallelized
-        // because the mutable access to the data structure is a bit weird, because each column
-        // has elements from every single inner (row) vector. This could be parallelized with
-        // unsafe code... but I don't think it is worth it here.
-        for i_row in 0..spec.resolution[1] {
-            let interpolator = KeyframeLinearPixelInerpolation::new(
-                spec.resolution[0] as usize,
-                render_options.downsample_stride,
-            );
-            for i_col in 0..spec.resolution[0] {
-                let pixel = {
-                    let data_view = |index: usize| -> &Rgb<u8> { &raw_data[index][i_row as usize] };
-                    interpolator.interpolate(&data_view, i_col as usize)
-                };
-                raw_data[i_col as usize][i_row as usize] = pixel;
+        // This will perform bilinear interpolation over the entire image in two passes.
+        //
+        // PASS ONE:  interpolate between the different "inner data vectors". This pass is
+        //            tricky to parallelize with the borrow checker and not cloning large
+        //            data structures. It could be done with an `unsafe` block, but not worth it.
+        //            Once this pass is complete, then every "inner data vector" will have
+        //            the exact same sparsity pattern (at the start, some inner vectors are empty).
+        //
+        // PASS TWO:  interpolation within each inner data vector, in parallel. This step performs
+        //            more computation that pass one, and it is trivial to parallelize beause each
+        //            element in the inner data vector can be computed locally, without referencing
+        //            the other inner vectors.
+
+        let inner_count = spec.resolution[1] as usize;
+        let outer_count = spec.resolution[0] as usize;
+
+        // PASS ONE:
+        for inner_index in 0..inner_count {
+            if inner_index % render_options.downsample_stride != 0 {
+                let interpolator = KeyframeLinearPixelInerpolation::new(
+                    outer_count,
+                    render_options.downsample_stride,
+                );
+                for outer_index in 0..outer_count {
+                    if outer_index % render_options.downsample_stride != 0 {
+                        raw_data[outer_index][inner_index] = {
+                            let data_view = |outer_index: usize| -> &Rgb<u8> {
+                                &raw_data[outer_index][inner_index]
+                            };
+                            interpolator.interpolate(&data_view, outer_index)
+                        };
+                    }
+                }
             }
         }
 
-        // // First pass through the image. Interpolate between populated entries.
-        // // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
-        // let inner_interpolator = KeyframeLinearPixelInerpolation::new(
-        //     spec.resolution[1] as usize,
-        //     render_options.downsample_stride,
-        // );
-        // raw_data
-        //     .par_iter_mut()
-        //     .enumerate()
-        //     .filter(|(i, _)| i % render_options.downsample_stride == 0)
-        //     .for_each(|(x, row)| {
-        //         let data_view = |i: usize| -> &Rgb<u8> { &row[i] };
-        //         for index in 0..row.len() {
-        //             if index % render_options.downsample_stride != 0 {
-        //                 row[index] = inner_interpolator.interpolate(&data_view, query_index);
-        //             }
-        //         }
-        //     });
-
-        // // Second pass through the data. Now we fill in the other dimension.
-        // // This one is harder to parallelize, as we're slicing the 2D data the other way.
-
-        // // NOTE:  we might want to flip the order and do the parallel version as the second pass,
-        // // as we're filling in more data that way.
-        // raw_data
-        //     .par_iter_mut()
-        //     .enumerate()
-        //     .filter(|(i, _)| i % render_options.downsample_stride != 0)
-        //     .for_each(|(x, row)| {
-        //         for index in 0..row.len() {
-        //             let data_view = |i: usize| -> &Rgb<u8> {
-        //                 // TODO:  correctly capture the index going the other way.
-        //             };
-        //             row[index] = inner_interpolator.interpolate(data_view, query_index);
-        //         }
-        //     });
+        // PASS TWO:
+        raw_data
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| i % render_options.downsample_stride != 0)
+            .for_each(|(_, inner_data)| {
+                let interpolator = KeyframeLinearPixelInerpolation::new(
+                    inner_count,
+                    render_options.downsample_stride,
+                );
+                for inner_index in 0..inner_data.len() {
+                    if inner_index % render_options.downsample_stride != 0 {
+                        inner_data[inner_index] = {
+                            let data_view = |idx: usize| -> &Rgb<u8> { &inner_data[idx] };
+                            interpolator.interpolate(&data_view, inner_index)
+                        };
+                    }
+                }
+            });
     }
 }
 
