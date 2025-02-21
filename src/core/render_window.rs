@@ -11,6 +11,9 @@ use super::{
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
+// For now, just jump to speed level 2. Adaptive later.
+const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: u32 = 2;
+
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
 /// used by the "explore" GUI to interact with the different fractals.
@@ -165,7 +168,7 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
-            self.render_required = Some(2); // For now, just jump to speed level 2. Adaptive later.
+            self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
         }
         if let Some(level) = self.render_required {
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
