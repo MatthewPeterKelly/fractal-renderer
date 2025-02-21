@@ -400,35 +400,6 @@ pub fn generate_scalar_image<F: PixelRenderLambda>(
     raw_data
 }
 
-// pub trait IntegerInterpolate<T> {
-//     fn integer_interpolate(low: &T, upp: &T, index: usize, distance: usize) -> T;
-// }
-
-// impl IntegerInterpolate<Vec<Rgb<u8>>> for Vec<Rgb<u8>> {
-//     fn integer_interpolate(
-//         low: &Vec<Rgb<u8>>,
-//         upp: &Vec<Rgb<u8>>,
-//         index: usize,
-//         distance: usize,
-//     ) -> Vec<Rgb<u8>> {
-//         let mut value = low.clone();
-//         for i in 0..low.len() {
-//             value[i] = Rgb::<u8>::integer_interpolate(&low[i], &upp[i], index, distance);
-//         }
-//         value
-//     }
-// }
-
-// fn bar(input_a: &u32, input_b: &u32, output: &mut u32) {
-//     *output = input_a + input_b;
-// }
-
-// fn dummy(foo: &mut Vec<u32>) {
-//     let (left, right) = foo.split_at_mut(1);
-//     let (middle, rest) = right.split_at_mut(1);
-//     bar(&left[0], &rest[0], &mut middle[0]);
-// }
-
 /// Data structure to cache the details needed to do linear keyframe interpolation on
 /// image (pixel) data. The expensive render calculation will be performed to compute
 /// the value of pixels where `index % downsample_stride == 0` (ahead of time). Then
