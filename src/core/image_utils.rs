@@ -435,6 +435,10 @@ impl KeyframeLinearPixelInerpolation {
         }
     }
 
+    /// Performs interpolation between keyframes to figure out the RGB value at the
+    /// specified index. Uses a generic instead of a flat vector so that it can work
+    /// for both a vector (inner image data) and across several vectors (outer image
+    /// data) with a single algorithm.
     fn interpolate<'a, F>(&self, data_view: F, query_index: usize) -> Rgb<u8>
     where
         F: Fn(usize) -> &'a Rgb<u8>,
