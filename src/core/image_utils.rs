@@ -572,6 +572,24 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         });
 
     if render_options.downsample_stride > 1 {
+        // First, scan through and do linear interpolation by columns. This is not parallelized
+        // because the mutable access to the data structure is a bit weird, because each column
+        // has elements from every single inner (row) vector. This could be parallelized with
+        // unsafe code... but I don't think it is worth it here.
+        for i_row in 0..spec.resolution[1] {
+            let interpolator = KeyframeLinearPixelInerpolation::new(
+                spec.resolution[0] as usize,
+                render_options.downsample_stride,
+            );
+            for i_col in 0..spec.resolution[0] {
+                let pixel = {
+                    let data_view = |index: usize| -> &Rgb<u8> { &raw_data[index][i_row as usize] };
+                    interpolator.interpolate(&data_view, i_col as usize)
+                };
+                raw_data[i_col as usize][i_row as usize] = pixel;
+            }
+        }
+
         // // First pass through the image. Interpolate between populated entries.
         // // Now we go from a 2D-sparse pattern to a 1D sparse pattern.
         // let inner_interpolator = KeyframeLinearPixelInerpolation::new(
