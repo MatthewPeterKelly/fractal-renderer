@@ -37,7 +37,8 @@
     "histogram_bin_count": 1000,
     "histogram_sample_count": 100000
     "render_options": {
-      "downsample_stride": 1
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 1
     }
   }
 }

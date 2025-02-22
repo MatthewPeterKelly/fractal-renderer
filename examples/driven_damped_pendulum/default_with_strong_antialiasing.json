@@ -13,7 +13,8 @@
     "periodic_state_error_tolerance": 0.005,
     "subpixel_antialiasing": 7,
     "render_options": {
-      "downsample_stride": 1
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 1
     }
   }
 }

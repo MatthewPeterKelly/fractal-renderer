@@ -2,6 +2,7 @@ use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::{
     io::{self, Write},
     path::PathBuf,
@@ -514,14 +515,14 @@ fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
     image_specification: &ImageSpecification,
     pixel_renderer: F,
 ) -> impl PixelRenderLambda {
-    let subpixel_samples = image_specification.subpixel_offset_vector(subpixel_antialiasing);
-    let subpixel_scale = 1.0 / (subpixel_samples.len() as f32);
+    let subpixel_samples =
+        Arc::new(image_specification.subpixel_offset_vector(subpixel_antialiasing));
 
     let wrapped_renderer = {
         move |point: &nalgebra::Vector2<f64>| {
             let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
 
-            for sample in subpixel_samples {
+            for sample in subpixel_samples.iter() {
                 let result = pixel_renderer(&nalgebra::Vector2::<f64>::new(
                     point[0] + sample[0],
                     point[1] + sample[1],
@@ -544,6 +545,49 @@ fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
     wrapped_renderer
 }
 
+fn render_image_internal<F: PixelRenderLambda>(
+    spec: &ImageSpecification,
+    pixel_renderer: F,
+    raw_data: &mut Vec<Vec<Rgb<u8>>>,
+    downsample_stride: usize,
+) {
+    let pixel_map_width =
+        LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
+
+    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
+        spec.resolution[1],
+        spec.center[1],
+        -spec.height(), // Image coordinates are upside down.
+    );
+
+    // Ok - we've got a type mismatch on the above if statement.
+    // I think this can be fixed by moving the population of the raw data
+    // below into a function, and then calling that funciont from each branch
+    // of the above if statement.
+
+    // Perform the expensive render operation.
+    // Potentially down-sample in both dimensions based on `downsample_stride`.
+    raw_data
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(i, _)| i % downsample_stride == 0)
+        .for_each(|(x, row)| {
+            let re = pixel_map_width.map(x as u32);
+            assert_eq!(
+                row.len(),
+                spec.resolution[1] as usize,
+                "Inner dimension mismatch"
+            );
+            render_single_row_within_image(
+                &pixel_map_height,
+                re,
+                downsample_stride,
+                &pixel_renderer,
+                row,
+            );
+        });
+}
+
 /**
  * In-place version of the above function.
  */
@@ -558,48 +602,27 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         spec.resolution[0] as usize,
         "Outer dimension mismatch"
     );
-    let pixel_map_width =
-        LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
 
-    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
-        spec.resolution[1],
-        spec.center[1],
-        -spec.height(), // Image coordinates are upside down.
-    );
-
-    // Wrap the renderer in an antialiaser if desired:
-    let pixel_renderer = if render_options.subpixel_antialiasing > 1 {
-        wrap_renderer_with_antialiasing(render_options.subpixel_antialiasing, spec, pixel_renderer)
+    if render_options.subpixel_antialiasing > 1 {
+        // Wrap the renderer in an antialiasing utility:
+        render_image_internal(
+            spec,
+            wrap_renderer_with_antialiasing(
+                render_options.subpixel_antialiasing,
+                spec,
+                pixel_renderer,
+            ),
+            raw_data,
+            render_options.downsample_stride,
+        );
     } else {
-        pixel_renderer
+        render_image_internal(
+            spec,
+            pixel_renderer,
+            raw_data,
+            render_options.downsample_stride,
+        );
     };
-
-    // Ok - we've got a type mismatch on the above if statement.
-    // I think this can be fixed by moving the population of the raw data
-    // below into a function, and then calling that funciont from each branch
-    // of the above if statement.
-
-    // Perform the expensive render operation.
-    // Potentially down-sample in both dimensions based on `downsample_stride`.
-    raw_data
-        .par_iter_mut()
-        .enumerate()
-        .filter(|(i, _)| i % render_options.downsample_stride == 0)
-        .for_each(|(x, row)| {
-            let re = pixel_map_width.map(x as u32);
-            assert_eq!(
-                row.len(),
-                spec.resolution[1] as usize,
-                "Inner dimension mismatch"
-            );
-            render_single_row_within_image(
-                &pixel_map_height,
-                re,
-                render_options.downsample_stride,
-                &pixel_renderer,
-                row,
-            );
-        });
 
     if render_options.downsample_stride > 1 {
         // This will perform bilinear interpolation over the entire image in two passes.
