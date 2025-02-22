@@ -31,8 +31,11 @@ impl ImageSpecification {
      * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
      * applied within a single pixel, generating a dense grid of samples within that pixel.
      */
-    pub fn subpixel_offset_vector(&self, n: u32) -> Vec<nalgebra::Vector2<f64>> {
-        assert!(n > 0);
+    pub fn subpixel_offset_vector(
+        &self,
+        subpixel_antialiasing: u32,
+    ) -> Vec<nalgebra::Vector2<f64>> {
+        let n = subpixel_antialiasing + 1;
         let mut offsets = Vec::with_capacity((n * n) as usize);
         let step = 1.0 / n as f64;
 
@@ -135,10 +138,13 @@ pub struct RenderOptions {
     /// routine.
     pub downsample_stride: usize,
 
-    /// Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
-    /// 1 == no antialiasing
-    /// 3 = some antialiasing (at 9x CPU time)
-    /// 7 = high antialiasing (at cost of 49x CPU time)
+    /// Anti-aliasing when n > 0. Expensive, but huge improvement to image quality.
+    /// The value here indicates the number of times the pixel will be sub-divided along
+    /// each dimension. E.g. one subdivision along each dimension will result in four
+    /// sub-pixels, and thus four rendering evaluations per pixel.
+    /// 0 == no antialiasing
+    /// 2 = some antialiasing (at 9x CPU time)
+    /// 6 = high antialiasing (at cost of 49x CPU time)
     pub subpixel_antialiasing: u32,
 }
 
@@ -518,74 +524,28 @@ fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
     let subpixel_samples =
         Arc::new(image_specification.subpixel_offset_vector(subpixel_antialiasing));
 
-    let wrapped_renderer = {
-        move |point: &nalgebra::Vector2<f64>| {
-            let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
+    move |point: &nalgebra::Vector2<f64>| {
+        let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
 
-            for sample in subpixel_samples.iter() {
-                let result = pixel_renderer(&nalgebra::Vector2::<f64>::new(
-                    point[0] + sample[0],
-                    point[1] + sample[1],
-                ));
-                sum[0] += result[0] as u32;
-                sum[1] += result[1] as u32;
-                sum[2] += result[2] as u32;
-            }
-
-            // Scale back to the final totals:
-            let count = subpixel_samples.len() as u32;
-
-            image::Rgb([
-                (sum[0] / count) as u8,
-                (sum[1] / count) as u8,
-                (sum[2] / count) as u8,
-            ])
+        for sample in subpixel_samples.iter() {
+            let result = pixel_renderer(&nalgebra::Vector2::<f64>::new(
+                point[0] + sample[0],
+                point[1] + sample[1],
+            ));
+            sum[0] += result[0] as u32;
+            sum[1] += result[1] as u32;
+            sum[2] += result[2] as u32;
         }
-    };
-    wrapped_renderer
-}
 
-fn render_image_internal<F: PixelRenderLambda>(
-    spec: &ImageSpecification,
-    pixel_renderer: F,
-    raw_data: &mut Vec<Vec<Rgb<u8>>>,
-    downsample_stride: usize,
-) {
-    let pixel_map_width =
-        LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
+        // Scale back to the final totals:
+        let count = subpixel_samples.len() as u32;
 
-    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
-        spec.resolution[1],
-        spec.center[1],
-        -spec.height(), // Image coordinates are upside down.
-    );
-
-    // Ok - we've got a type mismatch on the above if statement.
-    // I think this can be fixed by moving the population of the raw data
-    // below into a function, and then calling that funciont from each branch
-    // of the above if statement.
-
-    // Perform the expensive render operation.
-    // Potentially down-sample in both dimensions based on `downsample_stride`.
-    raw_data
-        .par_iter_mut()
-        .enumerate()
-        .filter(|(i, _)| i % downsample_stride == 0)
-        .for_each(|(x, row)| {
-            let re = pixel_map_width.map(x as u32);
-            assert_eq!(
-                row.len(),
-                spec.resolution[1] as usize,
-                "Inner dimension mismatch"
-            );
-            render_single_row_within_image(
-                &pixel_map_height,
-                re,
-                downsample_stride,
-                &pixel_renderer,
-                row,
-            );
-        });
+        image::Rgb([
+            (sum[0] / count) as u8,
+            (sum[1] / count) as u8,
+            (sum[2] / count) as u8,
+        ])
+    }
 }
 
 /**
@@ -603,8 +563,7 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         "Outer dimension mismatch"
     );
 
-    if render_options.subpixel_antialiasing > 1 {
-        // Wrap the renderer in an antialiasing utility:
+    if render_options.subpixel_antialiasing > 0 {
         render_image_internal(
             spec,
             wrap_renderer_with_antialiasing(
@@ -686,6 +645,47 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
     }
 }
 
+/// Implements the iteration over the image, rendering each pixel.
+/// If `downsample_stride` is greater than one, then some pixels will be skipped.
+/// These pixels will be filled in by linear interpolation in a following step.
+fn render_image_internal<F: PixelRenderLambda>(
+    spec: &ImageSpecification,
+    pixel_renderer: F,
+    raw_data: &mut Vec<Vec<Rgb<u8>>>,
+    downsample_stride: usize,
+) {
+    let pixel_map_width =
+        LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
+
+    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
+        spec.resolution[1],
+        spec.center[1],
+        -spec.height(), // Image coordinates are upside down.
+    );
+
+    // Perform the expensive render operation.
+    // Potentially down-sample in both dimensions based on `downsample_stride`.
+    raw_data
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(i, _)| i % downsample_stride == 0)
+        .for_each(|(x, row)| {
+            let re = pixel_map_width.map(x as u32);
+            assert_eq!(
+                row.len(),
+                spec.resolution[1] as usize,
+                "Inner dimension mismatch"
+            );
+            render_single_row_within_image(
+                &pixel_map_height,
+                re,
+                downsample_stride,
+                &pixel_renderer,
+                row,
+            );
+        });
+}
+
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
 where
     F: FnOnce(&PathBuf) -> Result<T, E>,
@@ -736,8 +736,7 @@ mod tests {
         };
 
         {
-            // n > 1
-            let offset_vector = image_specification.subpixel_offset_vector(4);
+            let offset_vector = image_specification.subpixel_offset_vector(3);
 
             let mut x_offset_data = BTreeSet::new();
             let mut y_offset_data = BTreeSet::new();
@@ -762,8 +761,7 @@ mod tests {
         }
 
         {
-            // n = 1
-            let offset_vector = image_specification.subpixel_offset_vector(1);
+            let offset_vector = image_specification.subpixel_offset_vector(0);
             assert_eq!(offset_vector.len(), 1);
             assert_eq!(offset_vector[0], nalgebra::Vector2::new(0.0, 0.0));
         }

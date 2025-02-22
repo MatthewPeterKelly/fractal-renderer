@@ -23,11 +23,6 @@ pub struct DrivenDampedPendulumParams {
     pub n_steps_per_period: u32,
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
-    // Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
-    // 1 == no antialiasing
-    // 3 = some antialiasing (at 9x CPU time)
-    // 7 = high antialiasing (at cost of 49x CPU time)
-    pub subpixel_antialiasing: u32, // TODO:  move into render_options
     pub render_options: RenderOptions,
 }
 
@@ -145,31 +140,17 @@ pub fn render_driven_damped_pendulum_attractor(
     );
 
     stopwatch.record_split("setup".to_owned());
-
-    let subpixel_samples = params
-        .image_specification
-        .subpixel_offset_vector(params.subpixel_antialiasing);
-    let subpixel_scale = 1.0 / (subpixel_samples.len() as f32);
-
+    let color_map = greyscale_color_map();
     let pixel_renderer = {
-        let subpixel_samples = &subpixel_samples; // Capture by reference
-        let color_map = greyscale_color_map();
         move |point: &nalgebra::Vector2<f64>| {
-            let mut sum: f32 = 0.0;
-
-            for sample in subpixel_samples {
-                let result = compute_basin_of_attraction(
-                    nalgebra::Vector2::<f64>::new(point[0] + sample[0], point[1] + sample[1]),
-                    time_phase_fraction,
-                    params.n_max_period,
-                    params.n_steps_per_period,
-                    params.periodic_state_error_tolerance,
-                );
-                if Option::<i32>::Some(0) == result {
-                    sum += subpixel_scale;
-                }
-            }
-            color_map(sum)
+            let result = compute_basin_of_attraction(
+                *point,
+                time_phase_fraction,
+                params.n_max_period,
+                params.n_steps_per_period,
+                params.periodic_state_error_tolerance,
+            );
+            color_map(result.unwrap_or(0) as f32)
         }
     };
 

@@ -33,7 +33,7 @@
     },
     "render_options": {
       "downsample_stride": 1,
-      "subpixel_antialiasing": 1
+      "subpixel_antialiasing": 0
     }
   }
 }
