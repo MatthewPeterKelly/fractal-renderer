@@ -133,6 +133,12 @@ pub struct RenderOptions {
     /// pixels are assigned the same value). Eventually we could use a better interpolation
     /// routine.
     pub downsample_stride: usize,
+
+    /// Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
+    /// 1 == no antialiasing
+    /// 3 = some antialiasing (at 9x CPU time)
+    /// 7 = high antialiasing (at cost of 49x CPU time)
+    pub subpixel_antialiasing: u32,
 }
 
 /// Allows a set of parameters to be dynamically adjusted to hit a target frame rate.
@@ -503,6 +509,41 @@ fn render_single_row_within_image<F: PixelRenderLambda>(
     }
 }
 
+fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
+    subpixel_antialiasing: u32,
+    image_specification: &ImageSpecification,
+    pixel_renderer: F,
+) -> impl PixelRenderLambda {
+    let subpixel_samples = image_specification.subpixel_offset_vector(subpixel_antialiasing);
+    let subpixel_scale = 1.0 / (subpixel_samples.len() as f32);
+
+    let wrapped_renderer = {
+        move |point: &nalgebra::Vector2<f64>| {
+            let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
+
+            for sample in subpixel_samples {
+                let result = pixel_renderer(&nalgebra::Vector2::<f64>::new(
+                    point[0] + sample[0],
+                    point[1] + sample[1],
+                ));
+                sum[0] += result[0] as u32;
+                sum[1] += result[1] as u32;
+                sum[2] += result[2] as u32;
+            }
+
+            // Scale back to the final totals:
+            let count = subpixel_samples.len() as u32;
+
+            image::Rgb([
+                (sum[0] / count) as u8,
+                (sum[1] / count) as u8,
+                (sum[2] / count) as u8,
+            ])
+        }
+    };
+    wrapped_renderer
+}
+
 /**
  * In-place version of the above function.
  */
@@ -525,6 +566,18 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         spec.center[1],
         -spec.height(), // Image coordinates are upside down.
     );
+
+    // Wrap the renderer in an antialiaser if desired:
+    let pixel_renderer = if render_options.subpixel_antialiasing > 1 {
+        wrap_renderer_with_antialiasing(render_options.subpixel_antialiasing, spec, pixel_renderer)
+    } else {
+        pixel_renderer
+    };
+
+    // Ok - we've got a type mismatch on the above if statement.
+    // I think this can be fixed by moving the population of the raw data
+    // below into a function, and then calling that funciont from each branch
+    // of the above if statement.
 
     // Perform the expensive render operation.
     // Potentially down-sample in both dimensions based on `downsample_stride`.
