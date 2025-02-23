@@ -140,7 +140,6 @@ pub fn render_driven_damped_pendulum_attractor(
     );
 
     stopwatch.record_split("setup".to_owned());
-    let color_map = greyscale_color_map();
     let pixel_renderer = {
         move |point: &nalgebra::Vector2<f64>| {
             let result = compute_basin_of_attraction(
@@ -150,7 +149,15 @@ pub fn render_driven_damped_pendulum_attractor(
                 params.n_steps_per_period,
                 params.periodic_state_error_tolerance,
             );
-            color_map(result.unwrap_or(0) as f32)
+            // We color the pixel white if it is in the zeroth basin of attraction.
+            // Otherwise, color it black. Alternative coloring schemes could be:
+            // - color each basin a different color.
+            // - grayscale based on angular distance traveled to reach stable orbit
+            if result == Some(0) {
+                image::Rgb([255, 255, 255])
+            } else {
+                image::Rgb([0, 0, 0])
+            }
         }
     };
 
@@ -176,11 +183,4 @@ pub fn render_driven_damped_pendulum_attractor(
     stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
     Ok(())
-}
-
-fn greyscale_color_map() -> impl Fn(f32) -> image::Rgb<u8> {
-    move |input: f32| {
-        let value = (input * 255.0) as u8;
-        image::Rgb([value, value, value])
-    }
 }
