@@ -23,11 +23,6 @@ pub struct DrivenDampedPendulumParams {
     pub n_steps_per_period: u32,
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
-    // Anti-aliasing when n > 1. Expensive, but huge improvement to image quality
-    // 1 == no antialiasing
-    // 3 = some antialiasing (at 9x CPU time)
-    // 7 = high antialiasing (at cost of 49x CPU time)
-    pub subpixel_antialiasing: u32, // TODO:  move into render_options
     pub render_options: RenderOptions,
 }
 
@@ -145,31 +140,24 @@ pub fn render_driven_damped_pendulum_attractor(
     );
 
     stopwatch.record_split("setup".to_owned());
-
-    let subpixel_samples = params
-        .image_specification
-        .subpixel_offset_vector(params.subpixel_antialiasing);
-    let subpixel_scale = 1.0 / (subpixel_samples.len() as f32);
-
     let pixel_renderer = {
-        let subpixel_samples = &subpixel_samples; // Capture by reference
-        let color_map = greyscale_color_map();
         move |point: &nalgebra::Vector2<f64>| {
-            let mut sum: f32 = 0.0;
-
-            for sample in subpixel_samples {
-                let result = compute_basin_of_attraction(
-                    nalgebra::Vector2::<f64>::new(point[0] + sample[0], point[1] + sample[1]),
-                    time_phase_fraction,
-                    params.n_max_period,
-                    params.n_steps_per_period,
-                    params.periodic_state_error_tolerance,
-                );
-                if Option::<i32>::Some(0) == result {
-                    sum += subpixel_scale;
-                }
+            let result = compute_basin_of_attraction(
+                *point,
+                time_phase_fraction,
+                params.n_max_period,
+                params.n_steps_per_period,
+                params.periodic_state_error_tolerance,
+            );
+            // We color the pixel white if it is in the zeroth basin of attraction.
+            // Otherwise, color it black. Alternative coloring schemes could be:
+            // - color each basin a different color.
+            // - grayscale based on angular distance traveled to reach stable orbit
+            if result == Some(0) {
+                image::Rgb([255, 255, 255])
+            } else {
+                image::Rgb([0, 0, 0])
             }
-            color_map(sum)
         }
     };
 
@@ -195,11 +183,4 @@ pub fn render_driven_damped_pendulum_attractor(
     stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
 
     Ok(())
-}
-
-fn greyscale_color_map() -> impl Fn(f32) -> image::Rgb<u8> {
-    move |input: f32| {
-        let value = (input * 255.0) as u8;
-        image::Rgb([value, value, value])
-    }
 }

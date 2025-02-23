@@ -208,7 +208,7 @@ pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogra
 pub struct ParamsReferenceCache {
     pub histogram_sample_count: usize,
     pub max_iter_count: u32,
-    pub downsample_stride: usize,
+    pub render_options: RenderOptions,
 }
 
 pub struct QuadraticMap<T: QuadraticMapParams> {
@@ -280,7 +280,7 @@ where
         ParamsReferenceCache {
             histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
             max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            downsample_stride: self.fractal_params.render_options().downsample_stride,
+            render_options: self.fractal_params.render_options().clone(),
         }
     }
 
@@ -294,8 +294,9 @@ where
         self.fractal_params.convergence_params_mut().max_iter_count =
             scale_down_parameter_for_speed(128.0, cache.max_iter_count as f64, scale) as u32;
 
-        self.fractal_params.render_options_mut().downsample_stride =
-            cache.downsample_stride + (level as usize);
+        self.fractal_params
+            .render_options_mut()
+            .set_speed_optimization_level(level, &cache.render_options);
     }
 }
 

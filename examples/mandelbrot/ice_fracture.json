@@ -2,8 +2,8 @@
   "Mandelbrot": {
     "image_specification": {
       "resolution": [1920, 1080],
-      "center": [-1.3952321839526187, 0.018220366323002782],
-      "width": 0.013358361379321044
+      "center": [-1.3959885766443019, 0.017529890508103968],
+      "width": 0.005655091918085126
     },
     "convergence_params": {
       "escape_radius_squared": 4.0,
@@ -39,7 +39,8 @@
       "histogram_sample_count": 20000
     },
     "render_options": {
-      "downsample_stride": 1
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 2
     }
   }
 }

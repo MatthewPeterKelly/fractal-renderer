@@ -78,6 +78,14 @@ mod tests {
                 "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
             ),
             (
+                "mandelbrot/anti_aliasing_regression_test",
+                "fd1bb5829792e963a41e80ced4f576529698a9087140a6da1c328439e05c8f07",
+            ),
+            (
+                "mandelbrot/downsample_interpolation_regression_test",
+                "a314629edf95c6d745f32251bc4600b643be79086820a4ceb48100c17dbf1ac4",
+            ),
+            (
                 "julia/default_regression_test",
                 "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
             ),
