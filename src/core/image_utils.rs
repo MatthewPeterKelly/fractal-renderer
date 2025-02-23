@@ -124,6 +124,23 @@ impl ViewRectangle {
     }
 }
 
+/// Allows a set of parameters to be dynamically adjusted to hit a target frame rate.
+/// The `ReferenceCache` is used to store a reference sub-set of parameters.
+pub trait SpeedOptimizer {
+    type ReferenceCache;
+
+    /// Constructs a reference cache representing the current state of the parameters.
+    fn reference_cache(&self) -> Self::ReferenceCache;
+
+    /// Modifies the parameters of the image in-place.
+    /// An optimization level of zero corresponds to the "default paramers", with positive
+    /// integers corresponding to progressively faster render times (and thus lower quality).
+    ///
+    /// Note: parameters modified by this call should strictly reduce the render time, and
+    /// should not change the size of the image or underlying data structures.
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
+}
+
 /// Parameters shared by multiple fractal types that control how the fractal is rendered
 /// to the screen.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -148,21 +165,22 @@ pub struct RenderOptions {
     pub subpixel_antialiasing: u32,
 }
 
-/// Allows a set of parameters to be dynamically adjusted to hit a target frame rate.
-/// The `ReferenceCache` is used to store a reference sub-set of parameters.
-pub trait SpeedOptimizer {
-    type ReferenceCache;
+impl SpeedOptimizer for RenderOptions {
+    type ReferenceCache = RenderOptions;
 
-    /// Constructs a reference cache representing the current state of the parameters.
-    fn reference_cache(&self) -> Self::ReferenceCache;
+    fn reference_cache(&self) -> Self::ReferenceCache {
+        self.clone()
+    }
 
-    /// Modifies the parameters of the image in-place.
-    /// An optimization level of zero corresponds to the "default paramers", with positive
-    /// integers corresponding to progressively faster render times (and thus lower quality).
-    ///
-    /// Note: parameters modified by this call should strictly reduce the render time, and
-    /// should not change the size of the image or underlying data structures.
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
+        self.downsample_stride = cache.downsample_stride + (level as usize);
+
+        self.subpixel_antialiasing = if cache.subpixel_antialiasing > level {
+            cache.subpixel_antialiasing - level
+        } else {
+            0
+        };
+    }
 }
 
 /// The Renderable trait represents an object that can provide a point render function
