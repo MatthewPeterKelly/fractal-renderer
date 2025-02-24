@@ -2,6 +2,7 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{
         generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, RenderOptions,
+        Renderable, SpeedOptimizer,
     },
     ode_solvers::rk4_simulate,
     stopwatch::Stopwatch,
@@ -24,6 +25,62 @@ pub struct DrivenDampedPendulumParams {
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
+}
+
+impl Renderable for DrivenDampedPendulumParams {
+    type Params = DrivenDampedPendulumParams;
+
+    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> image::Rgb<u8> {
+        todo!()
+    }
+
+    fn image_specification(&self) -> &ImageSpecification {
+        todo!()
+    }
+
+    fn render_options(&self) -> &RenderOptions {
+        todo!()
+    }
+
+    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+        todo!()
+    }
+
+    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn params(&self) -> &Self::Params {
+        todo!()
+    }
+
+    fn render_to_buffer(&self, buffer: &mut Vec<Vec<image::Rgb<u8>>>) {
+        crate::core::image_utils::generate_scalar_image_in_place(
+            self.image_specification(),
+            self.render_options(),
+            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            buffer,
+        );
+    }
+}
+
+pub struct ParamsReferenceCache {
+    pub n_max_period: u32,
+    pub n_steps_per_period: u32,
+    pub periodic_state_error_tolerance: f64,
+    pub render_options: RenderOptions,
+}
+
+impl SpeedOptimizer for DrivenDampedPendulumParams {
+    type ReferenceCache = ParamsReferenceCache;
+
+    fn reference_cache(&self) -> Self::ReferenceCache {
+        todo!()
+    }
+
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
+        todo!()
+    }
 }
 
 /**
