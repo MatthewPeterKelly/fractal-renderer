@@ -8,8 +8,8 @@ use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        RenderOptions, Renderable, SpeedOptimizer,
+        generate_scalar_image, scale_down_parameter_for_speed, write_image_to_file_or_panic,
+        ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
     },
     stopwatch::Stopwatch,
 };
@@ -259,17 +259,6 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     }
 }
 
-/// Scales down an integer parameter based on a scale factor.
-/// Implements clamping to ensure that scaling the value does not drop it below some
-/// lower bound, but also that it does not increase the returned value.
-fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
-    if cached_value < lower_bound {
-        return cached_value;
-    }
-    let scaled_value = cached_value * scale;
-    scaled_value.max(lower_bound)
-}
-
 impl<T> SpeedOptimizer for QuadraticMap<T>
 where
     T: QuadraticMapParams,
@@ -280,7 +269,7 @@ where
         ParamsReferenceCache {
             histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
             max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            render_options: self.fractal_params.render_options().clone(),
+            render_options: *self.fractal_params.render_options(),
         }
     }
 

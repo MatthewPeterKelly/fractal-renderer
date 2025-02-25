@@ -141,9 +141,20 @@ pub trait SpeedOptimizer {
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
 }
 
+/// Scales down an integer parameter based on a scale factor.
+/// Implements clamping to ensure that scaling the value does not drop it below some
+/// lower bound, but also that it does not increase the returned value.
+pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
+    if cached_value < lower_bound {
+        return cached_value;
+    }
+    let scaled_value = cached_value * scale;
+    scaled_value.max(lower_bound)
+}
+
 /// Parameters shared by multiple fractal types that control how the fractal is rendered
 /// to the screen.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RenderOptions {
     /// If set to a value larger than 1, it indicates that some pixels should be skipped
     /// to allow for faster rendering. This is a particularily useful feature when trying

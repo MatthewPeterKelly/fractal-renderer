@@ -1,8 +1,8 @@
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, RenderOptions,
-        Renderable, SpeedOptimizer,
+        generate_scalar_image, scale_down_parameter_for_speed, write_image_to_file_or_panic,
+        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
     },
     ode_solvers::rk4_simulate,
     stopwatch::Stopwatch,
@@ -75,11 +75,27 @@ impl SpeedOptimizer for DrivenDampedPendulumParams {
     type ReferenceCache = ParamsReferenceCache;
 
     fn reference_cache(&self) -> Self::ReferenceCache {
-        todo!()
+        ParamsReferenceCache {
+            n_max_period: self.n_max_period,
+            n_steps_per_period: self.n_steps_per_period,
+            periodic_state_error_tolerance: self.periodic_state_error_tolerance,
+            render_options: self.render_options,
+        }
     }
 
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        todo!()
+        let scale = 1.0 / (2u32.pow(level) as f64);
+
+        self.n_max_period =
+            scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, scale) as u32;
+
+        self.n_steps_per_period =
+            scale_down_parameter_for_speed(128.0, cache.n_steps_per_period as f64, scale) as u32;
+
+        self.periodic_state_error_tolerance = cache.periodic_state_error_tolerance * scale;
+
+        self.render_options
+            .set_speed_optimization_level(level, &cache.render_options);
     }
 }
 
