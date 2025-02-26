@@ -5,13 +5,11 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
-    file_io::{serialize_to_json_or_panic, FilePrefix},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, PixelMapper,
-        RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed, ImageSpecification, PixelMapper, RenderOptions, Renderable,
+        SpeedOptimizer,
     },
-    stopwatch::Stopwatch,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -259,17 +257,6 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     }
 }
 
-/// Scales down an integer parameter based on a scale factor.
-/// Implements clamping to ensure that scaling the value does not drop it below some
-/// lower bound, but also that it does not increase the returned value.
-fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
-    if cached_value < lower_bound {
-        return cached_value;
-    }
-    let scaled_value = cached_value * scale;
-    scaled_value.max(lower_bound)
-}
-
 impl<T> SpeedOptimizer for QuadraticMap<T>
 where
     T: QuadraticMapParams,
@@ -280,7 +267,7 @@ where
         ParamsReferenceCache {
             histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
             max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            render_options: self.fractal_params.render_options().clone(),
+            render_options: *self.fractal_params.render_options(),
         }
     }
 
@@ -340,54 +327,4 @@ where
     fn render_options(&self) -> &RenderOptions {
         self.fractal_params.render_options()
     }
-}
-
-pub fn render<T: Renderable>(
-    renderable: T,
-    file_prefix: FilePrefix,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
-
-    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::new(
-        renderable.image_specification().resolution[0],
-        renderable.image_specification().resolution[1],
-    );
-
-    serialize_to_json_or_panic(
-        file_prefix.full_path_with_suffix(".json"),
-        renderable.params(),
-    );
-
-    stopwatch.record_split("basic setup".to_owned());
-
-    let image_specification = renderable.image_specification().clone();
-    let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
-    stopwatch.record_split("build renderer".to_owned());
-
-    let raw_data = generate_scalar_image(
-        &image_specification,
-        renderable.render_options(),
-        pixel_renderer,
-        Rgb([0, 0, 0]),
-    );
-
-    stopwatch.record_split("compute quadratic sequences".to_owned());
-
-    // Apply color to each pixel in the image:
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = raw_data[x as usize][y as usize];
-    }
-
-    stopwatch.record_split("copy into image buffer".to_owned());
-    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
-        imgbuf.save(f)
-    });
-    stopwatch.record_split("write PNG".to_owned());
-
-    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
-    stopwatch.display(&mut diagnostics_file)?;
-    renderable.write_diagnostics(&mut diagnostics_file)?;
-
-    Ok(())
 }

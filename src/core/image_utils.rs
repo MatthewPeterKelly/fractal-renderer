@@ -8,7 +8,10 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+use super::file_io::{serialize_to_json_or_panic, FilePrefix};
+use super::stopwatch::Stopwatch;
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
     // TODO:  consider using `(usize, usize)`` for data here. We don't need the vector.
     // https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
@@ -99,7 +102,7 @@ pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) ->
 /**
  * Describes a rectangular region in space.
  */
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewRectangle {
     pub center: nalgebra::Vector2<f64>,
     pub dimensions: nalgebra::Vector2<f64>,
@@ -141,9 +144,20 @@ pub trait SpeedOptimizer {
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
 }
 
+/// Scales down an integer parameter based on a scale factor.
+/// Implements clamping to ensure that scaling the value does not drop it below some
+/// lower bound, but also that it does not increase the returned value.
+pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
+    if cached_value < lower_bound {
+        return cached_value;
+    }
+    let scaled_value = cached_value * scale;
+    scaled_value.max(lower_bound)
+}
+
 /// Parameters shared by multiple fractal types that control how the fractal is rendered
 /// to the screen.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RenderOptions {
     /// If set to a value larger than 1, it indicates that some pixels should be skipped
     /// to allow for faster rendering. This is a particularily useful feature when trying
@@ -169,7 +183,7 @@ impl SpeedOptimizer for RenderOptions {
     type ReferenceCache = RenderOptions;
 
     fn reference_cache(&self) -> Self::ReferenceCache {
-        self.clone()
+        *self
     }
 
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
@@ -220,6 +234,56 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
             buffer,
         );
     }
+}
+
+pub fn render<T: Renderable>(
+    renderable: T,
+    file_prefix: FilePrefix,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
+
+    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
+    let mut imgbuf = image::ImageBuffer::new(
+        renderable.image_specification().resolution[0],
+        renderable.image_specification().resolution[1],
+    );
+
+    serialize_to_json_or_panic(
+        file_prefix.full_path_with_suffix(".json"),
+        renderable.params(),
+    );
+
+    stopwatch.record_split("basic setup".to_owned());
+
+    let image_specification = *renderable.image_specification();
+    let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
+    stopwatch.record_split("build renderer".to_owned());
+
+    let raw_data = generate_scalar_image(
+        &image_specification,
+        renderable.render_options(),
+        pixel_renderer,
+        Rgb([0, 0, 0]),
+    );
+
+    stopwatch.record_split("compute quadratic sequences".to_owned());
+
+    // Apply color to each pixel in the image:
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        *pixel = raw_data[x as usize][y as usize];
+    }
+
+    stopwatch.record_split("copy into image buffer".to_owned());
+    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
+        imgbuf.save(f)
+    });
+    stopwatch.record_split("write PNG".to_owned());
+
+    let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
+    stopwatch.display(&mut diagnostics_file)?;
+    renderable.write_diagnostics(&mut diagnostics_file)?;
+
+    Ok(())
 }
 
 /**

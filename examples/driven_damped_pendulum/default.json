@@ -5,9 +5,7 @@
       "center": [0, 0],
       "width": 18
     },
-    "time_phase": {
-      "Snapshot": 0
-    },
+    "time_phase": 0,
     "n_max_period": 100,
     "n_steps_per_period": 16,
     "periodic_state_error_tolerance": 0.01,

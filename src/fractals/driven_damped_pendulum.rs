@@ -1,29 +1,110 @@
 use crate::core::{
-    file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{
-        generate_scalar_image, write_image_to_file_or_panic, ImageSpecification, RenderOptions,
+        scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
+        SpeedOptimizer,
     },
     ode_solvers::rk4_simulate,
-    stopwatch::Stopwatch,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum TimePhaseSpecification {
-    Snapshot(f64),
-    Series { low: f64, upp: f64, count: u32 },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
     pub image_specification: ImageSpecification,
-    pub time_phase: TimePhaseSpecification, // See above.
+    // dynamical system parameters:
+    pub time_phase: f64,
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
     pub n_steps_per_period: u32,
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
+}
+
+impl Renderable for DrivenDampedPendulumParams {
+    type Params = DrivenDampedPendulumParams;
+
+    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> image::Rgb<u8> {
+        let result = compute_basin_of_attraction(
+            *point,
+            self.time_phase,
+            self.n_max_period,
+            self.n_steps_per_period,
+            self.periodic_state_error_tolerance,
+        );
+        // We color the pixel white if it is in the zeroth basin of attraction.
+        // Otherwise, color it black. Alternative coloring schemes could be:
+        // - color each basin a different color.
+        // - grayscale based on angular distance traveled to reach stable orbit
+        if result == Some(0) {
+            image::Rgb([255, 255, 255])
+        } else {
+            image::Rgb([0, 0, 0])
+        }
+    }
+
+    fn image_specification(&self) -> &ImageSpecification {
+        &self.image_specification
+    }
+
+    fn render_options(&self) -> &RenderOptions {
+        &self.render_options
+    }
+
+    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+        self.image_specification = image_specification;
+    }
+
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        std::io::Result::Ok(())
+    }
+
+    fn params(&self) -> &Self::Params {
+        self
+    }
+
+    fn render_to_buffer(&self, buffer: &mut Vec<Vec<image::Rgb<u8>>>) {
+        crate::core::image_utils::generate_scalar_image_in_place(
+            self.image_specification(),
+            self.render_options(),
+            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            buffer,
+        );
+    }
+}
+
+pub struct ParamsReferenceCache {
+    pub n_max_period: u32,
+    pub n_steps_per_period: u32,
+    pub periodic_state_error_tolerance: f64,
+    pub render_options: RenderOptions,
+}
+
+impl SpeedOptimizer for DrivenDampedPendulumParams {
+    type ReferenceCache = ParamsReferenceCache;
+
+    fn reference_cache(&self) -> Self::ReferenceCache {
+        ParamsReferenceCache {
+            n_max_period: self.n_max_period,
+            n_steps_per_period: self.n_steps_per_period,
+            periodic_state_error_tolerance: self.periodic_state_error_tolerance,
+            render_options: self.render_options,
+        }
+    }
+
+    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
+        let scale = 1.0 / (2u32.pow(level) as f64);
+
+        self.n_max_period =
+            scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, scale) as u32;
+
+        self.n_steps_per_period =
+            scale_down_parameter_for_speed(128.0, cache.n_steps_per_period as f64, scale) as u32;
+
+        self.periodic_state_error_tolerance = cache.periodic_state_error_tolerance * scale;
+
+        self.render_options
+            .set_speed_optimization_level(level, &cache.render_options);
+    }
 }
 
 /**
@@ -97,90 +178,4 @@ pub fn compute_basin_of_attraction(
         }
     }
     None
-}
-
-pub fn render_driven_damped_pendulum_attractor(
-    params: &DrivenDampedPendulumParams,
-    file_prefix: FilePrefix,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch = Stopwatch::new("DDP Stopwatch".to_owned());
-
-    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
-
-    // decide whether to split out to create multiple images, or just continue with a snapshot:
-    let time_phase_fraction = match params.time_phase {
-        TimePhaseSpecification::Snapshot(time) => time,
-        TimePhaseSpecification::Series { low, upp, count } => {
-            more_asserts::assert_gt!(count, 0);
-            let scale = (upp - low) / (count as f64);
-            let inner_directory_path = file_prefix.full_path_with_suffix("");
-            std::fs::create_dir_all(&inner_directory_path).unwrap();
-            stopwatch.record_split("setup".to_owned());
-            for idx in 0..count {
-                let time = low + (idx as f64) * scale;
-                let mut inner_params = params.clone();
-                inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
-                let inner_file_prefix = FilePrefix {
-                    directory_path: inner_directory_path.clone(),
-                    file_base: format!("{}_{}", file_prefix.file_base, idx),
-                };
-                render_driven_damped_pendulum_attractor(&inner_params, inner_file_prefix)?;
-            }
-            stopwatch.record_split("simulation".to_owned());
-            stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
-
-            return Ok(());
-        }
-    };
-
-    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::new(
-        params.image_specification.resolution[0],
-        params.image_specification.resolution[1],
-    );
-
-    stopwatch.record_split("setup".to_owned());
-    let pixel_renderer = {
-        move |point: &nalgebra::Vector2<f64>| {
-            let result = compute_basin_of_attraction(
-                *point,
-                time_phase_fraction,
-                params.n_max_period,
-                params.n_steps_per_period,
-                params.periodic_state_error_tolerance,
-            );
-            // We color the pixel white if it is in the zeroth basin of attraction.
-            // Otherwise, color it black. Alternative coloring schemes could be:
-            // - color each basin a different color.
-            // - grayscale based on angular distance traveled to reach stable orbit
-            if result == Some(0) {
-                image::Rgb([255, 255, 255])
-            } else {
-                image::Rgb([0, 0, 0])
-            }
-        }
-    };
-
-    let raw_data = generate_scalar_image(
-        &params.image_specification,
-        &params.render_options,
-        pixel_renderer,
-        image::Rgb([0, 0, 0]),
-    );
-
-    stopwatch.record_split("simulation".to_owned());
-
-    // Iterate over the coordinates and pixels of the image
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = raw_data[x as usize][y as usize];
-    }
-
-    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
-        imgbuf.save(f)
-    });
-    stopwatch.record_split("write_png".to_owned());
-
-    stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
-
-    Ok(())
 }
