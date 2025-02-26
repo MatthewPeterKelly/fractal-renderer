@@ -10,15 +10,10 @@ use crate::core::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum TimePhaseSpecification {
-    Snapshot(f64),
-    Series { low: f64, upp: f64, count: u32 },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
     pub image_specification: ImageSpecification,
-    pub time_phase: TimePhaseSpecification, // See above.
+    // dynamical system parameters:
+    pub time_phase: f64,
     // simulation parameters
     pub n_max_period: u32, // maximum number of periods to simulate before aborting
     pub n_steps_per_period: u32,
@@ -31,27 +26,42 @@ impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
 
     fn render_point(&self, point: &nalgebra::Vector2<f64>) -> image::Rgb<u8> {
-        todo!()
+        let result = compute_basin_of_attraction(
+            *point,
+            self.time_phase,
+            self.n_max_period,
+            self.n_steps_per_period,
+            self.periodic_state_error_tolerance,
+        );
+        // We color the pixel white if it is in the zeroth basin of attraction.
+        // Otherwise, color it black. Alternative coloring schemes could be:
+        // - color each basin a different color.
+        // - grayscale based on angular distance traveled to reach stable orbit
+        if result == Some(0) {
+            image::Rgb([255, 255, 255])
+        } else {
+            image::Rgb([0, 0, 0])
+        }
     }
 
     fn image_specification(&self) -> &ImageSpecification {
-        todo!()
+        &self.image_specification
     }
 
     fn render_options(&self) -> &RenderOptions {
-        todo!()
+        &self.render_options
     }
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
-        todo!()
+        self.image_specification = image_specification;
     }
 
-    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        todo!()
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        std::io::Result::Ok(())
     }
 
     fn params(&self) -> &Self::Params {
-        todo!()
+        self
     }
 
     fn render_to_buffer(&self, buffer: &mut Vec<Vec<image::Rgb<u8>>>) {
@@ -180,32 +190,6 @@ pub fn render_driven_damped_pendulum_attractor(
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
 
-    // decide whether to split out to create multiple images, or just continue with a snapshot:
-    let time_phase_fraction = match params.time_phase {
-        TimePhaseSpecification::Snapshot(time) => time,
-        TimePhaseSpecification::Series { low, upp, count } => {
-            more_asserts::assert_gt!(count, 0);
-            let scale = (upp - low) / (count as f64);
-            let inner_directory_path = file_prefix.full_path_with_suffix("");
-            std::fs::create_dir_all(&inner_directory_path).unwrap();
-            stopwatch.record_split("setup".to_owned());
-            for idx in 0..count {
-                let time = low + (idx as f64) * scale;
-                let mut inner_params = params.clone();
-                inner_params.time_phase = TimePhaseSpecification::Snapshot(time);
-                let inner_file_prefix = FilePrefix {
-                    directory_path: inner_directory_path.clone(),
-                    file_base: format!("{}_{}", file_prefix.file_base, idx),
-                };
-                render_driven_damped_pendulum_attractor(&inner_params, inner_file_prefix)?;
-            }
-            stopwatch.record_split("simulation".to_owned());
-            stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
-
-            return Ok(());
-        }
-    };
-
     // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
     let mut imgbuf = image::ImageBuffer::new(
         params.image_specification.resolution[0],
@@ -213,26 +197,7 @@ pub fn render_driven_damped_pendulum_attractor(
     );
 
     stopwatch.record_split("setup".to_owned());
-    let pixel_renderer = {
-        move |point: &nalgebra::Vector2<f64>| {
-            let result = compute_basin_of_attraction(
-                *point,
-                time_phase_fraction,
-                params.n_max_period,
-                params.n_steps_per_period,
-                params.periodic_state_error_tolerance,
-            );
-            // We color the pixel white if it is in the zeroth basin of attraction.
-            // Otherwise, color it black. Alternative coloring schemes could be:
-            // - color each basin a different color.
-            // - grayscale based on angular distance traveled to reach stable orbit
-            if result == Some(0) {
-                image::Rgb([255, 255, 255])
-            } else {
-                image::Rgb([0, 0, 0])
-            }
-        }
-    };
+    let pixel_renderer = { move |point: &nalgebra::Vector2<f64>| params.render_point(point) };
 
     let raw_data = generate_scalar_image(
         &params.image_specification,

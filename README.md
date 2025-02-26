@@ -22,10 +22,6 @@ cargo run --release -- render ./examples/driven_damped_pendulum/default.json
 ```
 
 ```
-cargo run --release -- render ./examples/driven_damped_pendulum/default_series.json
-```
-
-```
 cargo run --release -- render ./examples/barnsley_fern/default.json
 ```
 
