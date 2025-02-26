@@ -159,6 +159,16 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
+
+        FractalParams::DrivenDampedPendulum(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
+            Box::new(PixelGrid::new(
+                stopwatch.total_elapsed_seconds(),
+                file_prefix,
+                ViewControl::new(time, &inner_params.image_specification),
+                (**inner_params).clone(),
+            ))
+        }
         _ => {
             println!(
                 "ERROR: Parameter type `{}` does not yet implement the `RenderWindow` trait!  Aborting.",
