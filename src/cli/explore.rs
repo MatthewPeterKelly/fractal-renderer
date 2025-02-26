@@ -150,6 +150,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 QuadraticMap::new((**inner_params).clone()),
             ))
         }
+
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
             Box::new(PixelGrid::new(
@@ -169,6 +170,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 (**inner_params).clone(),
             ))
         }
+
         _ => {
             println!(
                 "ERROR: Parameter type `{}` does not yet implement the `RenderWindow` trait!  Aborting.",

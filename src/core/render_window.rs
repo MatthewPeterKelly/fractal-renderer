@@ -124,7 +124,7 @@ where
     fn render(&mut self) {
         let display_buffer = self.display_buffer.clone();
         let renderer = self.renderer.clone();
-        let image_specification = self.image_specification().clone();
+        let image_specification = *self.image_specification();
         let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
         let redraw_required = self.redraw_required.clone();
 

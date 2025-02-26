@@ -11,7 +11,7 @@ use std::{
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
     // TODO:  consider using `(usize, usize)`` for data here. We don't need the vector.
     // https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
@@ -102,7 +102,7 @@ pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) ->
 /**
  * Describes a rectangular region in space.
  */
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewRectangle {
     pub center: nalgebra::Vector2<f64>,
     pub dimensions: nalgebra::Vector2<f64>,
@@ -183,7 +183,7 @@ impl SpeedOptimizer for RenderOptions {
     type ReferenceCache = RenderOptions;
 
     fn reference_cache(&self) -> Self::ReferenceCache {
-        self.clone()
+        *self
     }
 
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
@@ -255,7 +255,7 @@ pub fn render<T: Renderable>(
 
     stopwatch.record_split("basic setup".to_owned());
 
-    let image_specification = renderable.image_specification().clone();
+    let image_specification = *renderable.image_specification();
     let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
     stopwatch.record_split("build renderer".to_owned());
 
