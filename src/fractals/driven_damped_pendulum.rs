@@ -1,11 +1,9 @@
 use crate::core::{
-    file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{
-        generate_scalar_image, scale_down_parameter_for_speed, write_image_to_file_or_panic,
-        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
+        SpeedOptimizer,
     },
     ode_solvers::rk4_simulate,
-    stopwatch::Stopwatch,
 };
 use serde::{Deserialize, Serialize};
 
@@ -180,45 +178,4 @@ pub fn compute_basin_of_attraction(
         }
     }
     None
-}
-
-pub fn render_driven_damped_pendulum_attractor(
-    params: &DrivenDampedPendulumParams,
-    file_prefix: FilePrefix,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stopwatch = Stopwatch::new("DDP Stopwatch".to_owned());
-
-    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
-
-    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::new(
-        params.image_specification.resolution[0],
-        params.image_specification.resolution[1],
-    );
-
-    stopwatch.record_split("setup".to_owned());
-    let pixel_renderer = { move |point: &nalgebra::Vector2<f64>| params.render_point(point) };
-
-    let raw_data = generate_scalar_image(
-        &params.image_specification,
-        &params.render_options,
-        pixel_renderer,
-        image::Rgb([0, 0, 0]),
-    );
-
-    stopwatch.record_split("simulation".to_owned());
-
-    // Iterate over the coordinates and pixels of the image
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = raw_data[x as usize][y as usize];
-    }
-
-    write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
-        imgbuf.save(f)
-    });
-    stopwatch.record_split("write_png".to_owned());
-
-    stopwatch.display(&mut file_prefix.create_file_with_suffix("_diagnostics.txt"))?;
-
-    Ok(())
 }
