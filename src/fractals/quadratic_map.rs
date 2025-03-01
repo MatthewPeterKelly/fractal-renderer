@@ -309,7 +309,7 @@ where
         &self.fractal_params
     }
 
-    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> Rgb<u8> {
+    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8> {
         let maybe_escape_count = self
             .fractal_params
             .normalized_log_escape_count(&[point[0], point[1]]);
