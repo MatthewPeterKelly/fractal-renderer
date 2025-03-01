@@ -58,10 +58,13 @@ impl ImageSpecification {
      * Returns a new image specification object with the same center and width, but
      * with resolution scaled by `subpixel_count`. Used for some antialiasing operations.
      */
-    pub fn upsample(&self, subpixel_count: i32) -> ImageSpecification {
+    pub fn upsample(&self, subpixel_count: u32) -> ImageSpecification {
         assert!(subpixel_count > 0);
         ImageSpecification {
-            resolution: self.resolution * (subpixel_count as u32),
+            resolution: [
+                self.resolution[0] * subpixel_count,
+                self.resolution[1] * subpixel_count,
+            ],
             center: self.center,
             width: self.width,
         }
@@ -349,8 +352,8 @@ impl LinearPixelMap {
 
     // Maps from point to pixel.
     // Rename as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/48?
-    pub fn inverse_map(&self, point: f64) -> i32 {
-        ((point - self.offset) / self.slope) as i32
+    pub fn inverse_map(&self, point: f64) -> u32 {
+        ((point - self.offset) / self.slope) as u32
     }
 }
 
@@ -380,11 +383,11 @@ impl PixelMapper {
         }
     }
 
-    pub fn inverse_map(&self, point: &[f64; 2]) -> (i32, i32) {
-        (
+    pub fn inverse_map(&self, point: &[f64; 2]) -> [u32; 2] {
+        [
             self.width.inverse_map(point[0]),
             self.height.inverse_map(point[1]),
-        )
+        ]
     }
 
     pub fn map(&self, point: &(u32, u32)) -> (f64, f64) {
@@ -397,8 +400,8 @@ impl PixelMapper {
  * Coordinate of a subpixel within the entire image.
  */
 pub struct SubpixelIndex {
-    pub pixel: (i32, i32),
-    pub subpixel: (i32, i32),
+    pub pixel: [u32; 2],
+    pub subpixel: [u32; 2],
 }
 
 /**
@@ -407,13 +410,13 @@ pub struct SubpixelIndex {
  */
 pub struct UpsampledPixelMapper {
     pixel_mapper: PixelMapper,
-    subpixel_count: i32,
+    subpixel_count: u32,
 }
 
 impl UpsampledPixelMapper {
     pub fn new(
         image_specification: &ImageSpecification,
-        subpixel_count: i32,
+        subpixel_count: u32,
     ) -> UpsampledPixelMapper {
         UpsampledPixelMapper {
             pixel_mapper: PixelMapper::new(&image_specification.upsample(subpixel_count)),
@@ -422,10 +425,10 @@ impl UpsampledPixelMapper {
     }
 
     pub fn inverse_map(&self, point: &[f64; 2]) -> SubpixelIndex {
-        let (x_raw, y_raw) = self.pixel_mapper.inverse_map(point);
+        let [x_raw, y_raw] = self.pixel_mapper.inverse_map(point);
         SubpixelIndex {
-            pixel: (x_raw / self.subpixel_count, y_raw / self.subpixel_count),
-            subpixel: (x_raw % self.subpixel_count, y_raw % self.subpixel_count),
+            pixel: [x_raw / self.subpixel_count, y_raw / self.subpixel_count],
+            subpixel: [x_raw % self.subpixel_count, y_raw % self.subpixel_count],
         }
     }
 }
@@ -445,8 +448,8 @@ impl SubpixelGridMask {
         SubpixelGridMask { bitmask: 0 }
     }
 
-    pub fn insert(&mut self, count_per_side: i32, coordinate: (i32, i32)) {
-        let (x, y) = coordinate;
+    pub fn insert(&mut self, count_per_side: u32, coordinate: [u32; 2]) {
+        let [x, y] = coordinate;
         assert!(x >= 0 && x < count_per_side);
         assert!(y >= 0 && y < count_per_side);
         let index = x * count_per_side + y;
@@ -857,14 +860,14 @@ mod tests {
 
         assert_eq!(grid_mask.bitmask.count_ones(), 0);
         let n_grid = 3;
-        grid_mask.insert(n_grid, (0, 0));
+        grid_mask.insert(n_grid, [0, 0]);
         assert_eq!(grid_mask.bitmask.count_ones(), 1);
 
-        grid_mask.insert(n_grid, (1, 1));
+        grid_mask.insert(n_grid, [1, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, (1, 1));
+        grid_mask.insert(n_grid, [1, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, (2, 1));
+        grid_mask.insert(n_grid, [2, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 3);
     }
 
@@ -877,24 +880,17 @@ mod tests {
 
         for i in 0..n_grid {
             for j in 0..n_grid {
-                grid_mask.insert(n_grid, (i, j));
+                grid_mask.insert(n_grid, [i, j]);
             }
         }
-        assert_eq!(grid_mask.count_ones() as i32, n_grid * n_grid);
+        assert_eq!(grid_mask.count_ones() as u32, n_grid * n_grid);
     }
 
     #[test]
     #[should_panic]
     fn test_pixel_grid_mask_invalid_upp() {
         let mut grid_mask = super::SubpixelGridMask::new();
-        grid_mask.insert(4, (5, 5));
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_pixel_grid_mask_invalid_low() {
-        let mut grid_mask = super::SubpixelGridMask::new();
-        grid_mask.insert(6, (-1, 5));
+        grid_mask.insert(4, [5, 5]);
     }
 
     use approx::assert_relative_eq;
