@@ -23,9 +23,9 @@ pub struct DrivenDampedPendulumParams {
 impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
 
-    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> image::Rgb<u8> {
+    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
         let result = compute_basin_of_attraction(
-            *point,
+            point,
             self.time_phase,
             self.n_max_period,
             self.n_steps_per_period,
@@ -66,7 +66,7 @@ impl Renderable for DrivenDampedPendulumParams {
         crate::core::image_utils::generate_scalar_image_in_place(
             self.image_specification(),
             self.render_options(),
-            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            |point: &[f64; 2]| self.render_point(point),
             buffer,
         );
     }

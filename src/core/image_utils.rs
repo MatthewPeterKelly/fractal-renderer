@@ -1,7 +1,6 @@
 use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::cmp::max;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{
@@ -118,10 +117,8 @@ impl ViewRectangle {
             let mut max_val = min_val;
 
             for &vertex in &vertices[1..] {
-                for i in 0..2 {
-                    min_val = min_val.min(vertex[dim]);
-                    max_val = max_val.max(vertex[dim]);
-                }
+                min_val = min_val.min(vertex[dim]);
+                max_val = max_val.max(vertex[dim]);
             }
 
             let center = 0.5 * (min_val + max_val);
@@ -464,8 +461,8 @@ impl SubpixelGridMask {
 
     pub fn insert(&mut self, count_per_side: u32, coordinate: [u32; 2]) {
         let [x, y] = coordinate;
-        assert!(x >= 0 && x < count_per_side);
-        assert!(y >= 0 && y < count_per_side);
+        assert!(x < count_per_side);
+        assert!(y < count_per_side);
         let index = x * count_per_side + y;
         self.bitmask |= 1 << index;
     }
@@ -791,7 +788,6 @@ mod tests {
     use std::{collections::BTreeSet, iter::FromIterator};
 
     use super::*;
-    use nalgebra::Vector2;
     use ordered_float::OrderedFloat;
 
     #[test]

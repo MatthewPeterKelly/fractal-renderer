@@ -14,7 +14,7 @@ use crate::core::{
 use super::{image_utils::write_image_to_file_or_panic, stopwatch::Stopwatch};
 
 pub struct ColoredPoint {
-    pub point: nalgebra::Vector2<f64>,
+    pub point: [f64; 2],
     pub color: image::Rgb<u8>,
 }
 
@@ -27,7 +27,7 @@ pub fn chaos_game_render<D>(
     background_color: image::Rgb<u8>,
     distribution_generator: &mut D,
     sample_count: u32,
-    subpixel_antialiasing: i32,
+    subpixel_antialiasing: u32,
     image_specification: &ImageSpecification,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>>
@@ -60,7 +60,7 @@ where
     for _ in 0..sample_count {
         let colored_point = distribution_generator();
         let index = pixel_mapper.inverse_map(&colored_point.point);
-        let (x, y) = index.pixel;
+        let [x, y] = index.pixel;
 
         if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
             *pixel = colored_point.color;
