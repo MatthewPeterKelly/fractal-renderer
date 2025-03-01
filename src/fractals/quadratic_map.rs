@@ -178,7 +178,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
     let hist_image_spec = fractal_params
         .image_specification()
-        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
+        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as u32);
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 

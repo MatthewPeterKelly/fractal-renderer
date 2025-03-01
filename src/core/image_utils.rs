@@ -78,7 +78,7 @@ impl ImageSpecification {
      *
      * @param: target pixel count in the new image, lower bound.
      */
-    pub fn scale_to_total_pixel_count(&self, target_pixel_count: i32) -> ImageSpecification {
+    pub fn scale_to_total_pixel_count(&self, target_pixel_count: u32) -> ImageSpecification {
         assert!(target_pixel_count > 0);
         let old_pixel_count = self.resolution[0] * self.resolution[1];
         let scale = ((target_pixel_count as f64) / (old_pixel_count as f64)).sqrt();
