@@ -15,7 +15,7 @@ pub struct SerpinskyParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
     pub rng_seed: u64,
-    pub subpixel_antialiasing: i32,
+    pub subpixel_antialiasing: u32,
     pub background_color_rgb: [u8; 3],
     pub vertex_colors_rgb: Vec<[u8; 3]>,
 }
@@ -83,7 +83,7 @@ impl SampleGenerator {
         let next_point = self.ratio * selected_vertex + (1.0 - self.ratio) * prev_sample;
         let next_color = self.colors[vertex_index];
         ColoredPoint {
-            point: next_point,
+            point: next_point.into(),
             color: next_color,
         }
     }
@@ -103,11 +103,13 @@ pub fn render_serpinsky(
 
     let mut distribution = || {
         let next_colored_point = generator.next(&mut rng, &sample_point);
-        sample_point = next_colored_point.point;
+        sample_point = next_colored_point.point.into();
         next_colored_point
     };
 
     serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
+
+    let verticies_plain: Vec<[f64; 2]> = vertices.iter().map(|p| [p.x, p.y]).collect();
 
     chaos_game_render(
         image::Rgb(params.background_color_rgb),
@@ -116,7 +118,7 @@ pub fn render_serpinsky(
         params.subpixel_antialiasing,
         &params
             .fit_image
-            .image_specification(&ViewRectangle::from_vertices(&vertices)),
+            .image_specification(&ViewRectangle::from_vertices(&verticies_plain)),
         file_prefix,
     )
 }

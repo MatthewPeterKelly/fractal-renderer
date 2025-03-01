@@ -13,10 +13,8 @@ use super::stopwatch::Stopwatch;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
-    // TODO:  consider using `(usize, usize)`` for data here. We don't need the vector.
-    // https://github.com/MatthewPeterKelly/fractal-renderer/issues/47
-    pub resolution: nalgebra::Vector2<u32>,
-    pub center: nalgebra::Vector2<f64>,
+    pub resolution: [u32; 2],
+    pub center: [f64; 2],
     pub width: f64,
 }
 
@@ -34,10 +32,7 @@ impl ImageSpecification {
      * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
      * applied within a single pixel, generating a dense grid of samples within that pixel.
      */
-    pub fn subpixel_offset_vector(
-        &self,
-        subpixel_antialiasing: u32,
-    ) -> Vec<nalgebra::Vector2<f64>> {
+    pub fn subpixel_offset_vector(&self, subpixel_antialiasing: u32) -> Vec<[f64; 2]> {
         let n = subpixel_antialiasing + 1;
         let mut offsets = Vec::with_capacity((n * n) as usize);
         let step = 1.0 / n as f64;
@@ -52,7 +47,7 @@ impl ImageSpecification {
             for j in 0..n {
                 let alpha_j = step * (j as f64); // [0.0, 1.0)
                 let y = alpha_j * pixel_height;
-                offsets.push(nalgebra::Vector2::new(x, y));
+                offsets.push([x, y]);
             }
         }
 
@@ -63,10 +58,13 @@ impl ImageSpecification {
      * Returns a new image specification object with the same center and width, but
      * with resolution scaled by `subpixel_count`. Used for some antialiasing operations.
      */
-    pub fn upsample(&self, subpixel_count: i32) -> ImageSpecification {
+    pub fn upsample(&self, subpixel_count: u32) -> ImageSpecification {
         assert!(subpixel_count > 0);
         ImageSpecification {
-            resolution: self.resolution * (subpixel_count as u32),
+            resolution: [
+                self.resolution[0] * subpixel_count,
+                self.resolution[1] * subpixel_count,
+            ],
             center: self.center,
             width: self.width,
         }
@@ -80,22 +78,22 @@ impl ImageSpecification {
      *
      * @param: target pixel count in the new image, lower bound.
      */
-    pub fn scale_to_total_pixel_count(&self, target_pixel_count: i32) -> ImageSpecification {
+    pub fn scale_to_total_pixel_count(&self, target_pixel_count: u32) -> ImageSpecification {
         assert!(target_pixel_count > 0);
         let old_pixel_count = self.resolution[0] * self.resolution[1];
         let scale = ((target_pixel_count as f64) / (old_pixel_count as f64)).sqrt();
         ImageSpecification {
-            resolution: nalgebra::Vector2::new(
+            resolution: [
                 (self.resolution[0] as f64 * scale).ceil() as u32,
                 (self.resolution[1] as f64 * scale).ceil() as u32,
-            ),
+            ],
             center: self.center,
             width: self.width,
         }
     }
 }
 
-pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) -> Vec<Vec<T>> {
+pub fn create_buffer<T: Clone>(value: T, resolution: &[u32; 2]) -> Vec<Vec<T>> {
     vec![vec![value; resolution[1] as usize]; resolution[0] as usize]
 }
 
@@ -104,26 +102,37 @@ pub fn create_buffer<T: Clone>(value: T, resolution: &nalgebra::Vector2<u32>) ->
  */
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ViewRectangle {
-    pub center: nalgebra::Vector2<f64>,
-    pub dimensions: nalgebra::Vector2<f64>,
+    pub center: [f64; 2],
+    pub dimensions: [f64; 2],
 }
 
 impl ViewRectangle {
-    pub fn from_vertices(vertices: &[nalgebra::Vector2<f64>]) -> ViewRectangle {
+    /// Given a vector of 2D points, compute the smallest view rectangle
+    /// that will contain all points.
+    pub fn from_vertices(vertices: &[[f64; 2]]) -> ViewRectangle {
         assert!(!vertices.is_empty());
 
-        let mut min_corner = vertices[0];
-        let mut max_corner = vertices[0];
+        let find_center_and_range = |dim| {
+            let mut min_val: f64 = vertices[0][dim];
+            let mut max_val = min_val;
 
-        for vertex in vertices.iter() {
-            min_corner = min_corner.inf(vertex);
-            max_corner = max_corner.sup(vertex);
+            for &vertex in &vertices[1..] {
+                min_val = min_val.min(vertex[dim]);
+                max_val = max_val.max(vertex[dim]);
+            }
+
+            let center = 0.5 * (min_val + max_val);
+            let range = max_val - min_val;
+            (center, range)
+        };
+
+        let (center_x, range_x) = find_center_and_range(0);
+        let (center_y, range_y) = find_center_and_range(1);
+
+        ViewRectangle {
+            center: [center_x, center_y],
+            dimensions: [range_x, range_y],
         }
-
-        let center = 0.5 * (min_corner + max_corner);
-        let dimensions = max_corner - min_corner;
-
-        ViewRectangle { center, dimensions }
     }
 }
 
@@ -204,7 +213,7 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
     type Params: Serialize + Debug;
 
     /// Evaluates the pixel color at a specified point in the fractal.
-    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> Rgb<u8>;
+    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8>;
 
     /// Access the current image specification for the renderable object.
     fn image_specification(&self) -> &ImageSpecification;
@@ -230,7 +239,7 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
         generate_scalar_image_in_place(
             self.image_specification(),
             self.render_options(),
-            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            |point: &[f64; 2]| self.render_point(point),
             buffer,
         );
     }
@@ -256,7 +265,7 @@ pub fn render<T: Renderable>(
     stopwatch.record_split("basic setup".to_owned());
 
     let image_specification = *renderable.image_specification();
-    let pixel_renderer = |point: &nalgebra::Vector2<f64>| renderable.render_point(point);
+    let pixel_renderer = |point: &[f64; 2]| renderable.render_point(point);
     stopwatch.record_split("build renderer".to_owned());
 
     let raw_data = generate_scalar_image(
@@ -295,7 +304,7 @@ pub fn render<T: Renderable>(
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FitImage {
-    pub resolution: nalgebra::Vector2<u32>,
+    pub resolution: [u32; 2],
     pub padding_scale: f64,
 }
 
@@ -354,8 +363,8 @@ impl LinearPixelMap {
 
     // Maps from point to pixel.
     // Rename as part of https://github.com/MatthewPeterKelly/fractal-renderer/issues/48?
-    pub fn inverse_map(&self, point: f64) -> i32 {
-        ((point - self.offset) / self.slope) as i32
+    pub fn inverse_map(&self, point: f64) -> u32 {
+        ((point - self.offset) / self.slope) as u32
     }
 }
 
@@ -385,11 +394,11 @@ impl PixelMapper {
         }
     }
 
-    pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> (i32, i32) {
-        (
+    pub fn inverse_map(&self, point: &[f64; 2]) -> [u32; 2] {
+        [
             self.width.inverse_map(point[0]),
             self.height.inverse_map(point[1]),
-        )
+        ]
     }
 
     pub fn map(&self, point: &(u32, u32)) -> (f64, f64) {
@@ -402,8 +411,8 @@ impl PixelMapper {
  * Coordinate of a subpixel within the entire image.
  */
 pub struct SubpixelIndex {
-    pub pixel: (i32, i32),
-    pub subpixel: (i32, i32),
+    pub pixel: [u32; 2],
+    pub subpixel: [u32; 2],
 }
 
 /**
@@ -412,13 +421,13 @@ pub struct SubpixelIndex {
  */
 pub struct UpsampledPixelMapper {
     pixel_mapper: PixelMapper,
-    subpixel_count: i32,
+    subpixel_count: u32,
 }
 
 impl UpsampledPixelMapper {
     pub fn new(
         image_specification: &ImageSpecification,
-        subpixel_count: i32,
+        subpixel_count: u32,
     ) -> UpsampledPixelMapper {
         UpsampledPixelMapper {
             pixel_mapper: PixelMapper::new(&image_specification.upsample(subpixel_count)),
@@ -426,11 +435,11 @@ impl UpsampledPixelMapper {
         }
     }
 
-    pub fn inverse_map(&self, point: &nalgebra::Vector2<f64>) -> SubpixelIndex {
-        let (x_raw, y_raw) = self.pixel_mapper.inverse_map(point);
+    pub fn inverse_map(&self, point: &[f64; 2]) -> SubpixelIndex {
+        let [x_raw, y_raw] = self.pixel_mapper.inverse_map(point);
         SubpixelIndex {
-            pixel: (x_raw / self.subpixel_count, y_raw / self.subpixel_count),
-            subpixel: (x_raw % self.subpixel_count, y_raw % self.subpixel_count),
+            pixel: [x_raw / self.subpixel_count, y_raw / self.subpixel_count],
+            subpixel: [x_raw % self.subpixel_count, y_raw % self.subpixel_count],
         }
     }
 }
@@ -450,10 +459,10 @@ impl SubpixelGridMask {
         SubpixelGridMask { bitmask: 0 }
     }
 
-    pub fn insert(&mut self, count_per_side: i32, coordinate: (i32, i32)) {
-        let (x, y) = coordinate;
-        assert!(x >= 0 && x < count_per_side);
-        assert!(y >= 0 && y < count_per_side);
+    pub fn insert(&mut self, count_per_side: u32, coordinate: [u32; 2]) {
+        let [x, y] = coordinate;
+        assert!(x < count_per_side);
+        assert!(y < count_per_side);
         let index = x * count_per_side + y;
         self.bitmask |= 1 << index;
     }
@@ -469,9 +478,9 @@ impl Default for SubpixelGridMask {
     }
 }
 
-pub trait PixelRenderLambda: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
+pub trait PixelRenderLambda: Fn(&[f64; 2]) -> Rgb<u8> + Sync {}
 
-impl<T> PixelRenderLambda for T where T: Fn(&nalgebra::Vector2<f64>) -> Rgb<u8> + Sync {}
+impl<T> PixelRenderLambda for T where T: Fn(&[f64; 2]) -> Rgb<u8> + Sync {}
 
 /**
  * Given image size parameters and a mapping into "regular" space used by the fractal,
@@ -591,7 +600,7 @@ fn render_single_row_within_image<F: PixelRenderLambda>(
         .step_by(downsample_stride)
         .for_each(|(y, elem)| {
             let im = pixel_map_height.map(y as u32);
-            *elem = pixel_renderer(&nalgebra::Vector2::<f64>::new(column_query_value, im));
+            *elem = pixel_renderer(&[column_query_value, im]);
         });
     if downsample_stride > 1 {
         fill_skipped_entries(downsample_stride, row);
@@ -606,14 +615,11 @@ fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
     let subpixel_samples =
         Arc::new(image_specification.subpixel_offset_vector(subpixel_antialiasing));
 
-    move |point: &nalgebra::Vector2<f64>| {
+    move |point: &[f64; 2]| {
         let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
 
         for sample in subpixel_samples.iter() {
-            let result = pixel_renderer(&nalgebra::Vector2::<f64>::new(
-                point[0] + sample[0],
-                point[1] + sample[1],
-            ));
+            let result = pixel_renderer(&[point[0] + sample[0], point[1] + sample[1]]);
             sum[0] += result[0] as u32;
             sum[1] += result[1] as u32;
             sum[2] += result[2] as u32;
@@ -782,28 +788,22 @@ mod tests {
     use std::{collections::BTreeSet, iter::FromIterator};
 
     use super::*;
-    use nalgebra::Vector2;
     use ordered_float::OrderedFloat;
 
     #[test]
     fn test_view_port_from_vertices() {
-        let vertices = vec![
-            nalgebra::Vector2::new(1.0, 2.0),
-            nalgebra::Vector2::new(3.0, 5.0),
-            nalgebra::Vector2::new(-1.0, -2.0),
-            nalgebra::Vector2::new(2.0, 3.0),
-        ];
+        let vertices = vec![[1.0, 2.0], [3.0, 5.0], [-1.0, -2.0], [2.0, 3.0]];
 
         let view_rectangle = ViewRectangle::from_vertices(&vertices);
 
-        assert_eq!(view_rectangle.center, nalgebra::Vector2::new(1.0, 1.5));
-        assert_eq!(view_rectangle.dimensions, nalgebra::Vector2::new(4.0, 7.0));
+        assert_eq!(view_rectangle.center, [1.0, 1.5]);
+        assert_eq!(view_rectangle.dimensions, [4.0, 7.0]);
     }
 
     #[test]
     #[should_panic(expected = "assertion failed")]
     fn test_view_port_empty_vertices() {
-        let vertices: Vec<nalgebra::Vector2<f64>> = Vec::new();
+        let vertices: Vec<[f64; 2]> = Vec::new();
         ViewRectangle::from_vertices(&vertices);
     }
 
@@ -812,8 +812,8 @@ mod tests {
         // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [0.0, 0.5, 1.0, 1.5]
         // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
         let image_specification = ImageSpecification {
-            resolution: nalgebra::Vector2::new(4, 8),
-            center: nalgebra::Vector2::new(2.0, 4.0),
+            resolution: [4, 8],
+            center: [2.0, 4.0],
             width: 8.0,
         };
 
@@ -845,15 +845,15 @@ mod tests {
         {
             let offset_vector = image_specification.subpixel_offset_vector(0);
             assert_eq!(offset_vector.len(), 1);
-            assert_eq!(offset_vector[0], nalgebra::Vector2::new(0.0, 0.0));
+            assert_eq!(offset_vector[0], [0.0, 0.0]);
         }
     }
 
     #[test]
     fn test_image_specification_height() {
         let image_specification = ImageSpecification {
-            resolution: nalgebra::Vector2::new(5, 23),
-            center: nalgebra::Vector2::new(2.6, 3.4),
+            resolution: [5, 23],
+            center: [2.6, 3.4],
             width: 8.5,
         };
 
@@ -870,14 +870,14 @@ mod tests {
 
         assert_eq!(grid_mask.bitmask.count_ones(), 0);
         let n_grid = 3;
-        grid_mask.insert(n_grid, (0, 0));
+        grid_mask.insert(n_grid, [0, 0]);
         assert_eq!(grid_mask.bitmask.count_ones(), 1);
 
-        grid_mask.insert(n_grid, (1, 1));
+        grid_mask.insert(n_grid, [1, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, (1, 1));
+        grid_mask.insert(n_grid, [1, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, (2, 1));
+        grid_mask.insert(n_grid, [2, 1]);
         assert_eq!(grid_mask.bitmask.count_ones(), 3);
     }
 
@@ -890,24 +890,17 @@ mod tests {
 
         for i in 0..n_grid {
             for j in 0..n_grid {
-                grid_mask.insert(n_grid, (i, j));
+                grid_mask.insert(n_grid, [i, j]);
             }
         }
-        assert_eq!(grid_mask.count_ones() as i32, n_grid * n_grid);
+        assert_eq!(grid_mask.count_ones() as u32, n_grid * n_grid);
     }
 
     #[test]
     #[should_panic]
     fn test_pixel_grid_mask_invalid_upp() {
         let mut grid_mask = super::SubpixelGridMask::new();
-        grid_mask.insert(4, (5, 5));
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_pixel_grid_mask_invalid_low() {
-        let mut grid_mask = super::SubpixelGridMask::new();
-        grid_mask.insert(6, (-1, 5));
+        grid_mask.insert(4, [5, 5]);
     }
 
     use approx::assert_relative_eq;
@@ -941,15 +934,15 @@ mod tests {
     #[test]
     fn test_scale_to_total_pixel_count() {
         let image_spec = ImageSpecification {
-            resolution: Vector2::new(800, 600),
-            center: Vector2::new(0.0, 0.0),
+            resolution: [800, 600],
+            center: [0.0, 0.0],
             width: 1.0,
         };
 
         let scaled_spec = image_spec.scale_to_total_pixel_count(32);
         assert_eq!(scaled_spec.center, image_spec.center);
         assert_eq!(scaled_spec.width, image_spec.width);
-        assert_eq!(scaled_spec.resolution, Vector2::new(7, 5));
+        assert_eq!(scaled_spec.resolution, [7, 5]);
     }
 
     #[test]

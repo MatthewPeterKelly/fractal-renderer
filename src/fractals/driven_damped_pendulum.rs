@@ -23,9 +23,9 @@ pub struct DrivenDampedPendulumParams {
 impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
 
-    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> image::Rgb<u8> {
+    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
         let result = compute_basin_of_attraction(
-            *point,
+            point,
             self.time_phase,
             self.n_max_period,
             self.n_steps_per_period,
@@ -66,7 +66,7 @@ impl Renderable for DrivenDampedPendulumParams {
         crate::core::image_utils::generate_scalar_image_in_place(
             self.image_specification(),
             self.render_options(),
-            |point: &nalgebra::Vector2<f64>| self.render_point(point),
+            |point: &[f64; 2]| self.render_point(point),
             buffer,
         );
     }
@@ -153,7 +153,7 @@ pub fn compute_basin_index(angle: f64) -> i32 {
 // - basin at termination
 // - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(
-    x_begin: nalgebra::Vector2<f64>,
+    x_begin: &[f64; 2],
     time_phase_fraction: f64, // [0, 1] driving function phase offset
     n_max_period: u32,
     n_steps_per_period: u32,
@@ -162,7 +162,7 @@ pub fn compute_basin_of_attraction(
     const TWO_PI: f64 = 2.0 * std::f64::consts::PI;
     let t_begin = time_phase_fraction * TWO_PI;
     let t_final = (time_phase_fraction + 1.0) * TWO_PI;
-    let mut x = x_begin;
+    let mut x = nalgebra::Vector2::new(x_begin[0], x_begin[1]);
     for _ in 0..n_max_period {
         let x_prev = x;
         x = rk4_simulate(

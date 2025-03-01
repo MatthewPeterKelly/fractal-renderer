@@ -64,7 +64,7 @@ pub struct BarnsleyFernParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
     pub rng_seed: u64,
-    pub subpixel_antialiasing: i32,
+    pub subpixel_antialiasing: u32,
     pub background_color_rgb: [u8; 3],
     pub fern_color_rgb: [u8; 3],
     pub coeffs: Coeffs,
@@ -131,7 +131,7 @@ pub fn render_barnsley_fern(
     let mut distribution = || {
         sample_point = generator.next(&mut rng, &sample_point);
         ColoredPoint {
-            point: sample_point,
+            point: sample_point.into(),
             color: fern_color,
         }
     };

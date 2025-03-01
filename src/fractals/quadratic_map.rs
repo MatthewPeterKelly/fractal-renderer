@@ -178,7 +178,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
     let hist_image_spec = fractal_params
         .image_specification()
-        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as i32);
+        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as u32);
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
@@ -309,7 +309,7 @@ where
         &self.fractal_params
     }
 
-    fn render_point(&self, point: &nalgebra::Vector2<f64>) -> Rgb<u8> {
+    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8> {
         let maybe_escape_count = self
             .fractal_params
             .normalized_log_escape_count(&[point[0], point[1]]);
