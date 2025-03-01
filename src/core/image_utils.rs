@@ -1,6 +1,7 @@
 use image::Rgb;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
+use std::cmp::max;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{
@@ -107,21 +108,34 @@ pub struct ViewRectangle {
 }
 
 impl ViewRectangle {
+    /// Given a vector of 2D points, compute the smallest view rectangle
+    /// that will contain all points.
     pub fn from_vertices(vertices: &[[f64; 2]]) -> ViewRectangle {
         assert!(!vertices.is_empty());
 
-        let mut min_corner = vertices[0];
-        let mut max_corner = vertices[0];
+        let find_center_and_range = |dim| {
+            let mut min_val: f64 = vertices[0][dim];
+            let mut max_val = min_val;
 
-        for vertex in vertices.iter() {
-            min_corner = min_corner.inf(vertex);
-            max_corner = max_corner.sup(vertex);
+            for &vertex in &vertices[1..] {
+                for i in 0..2 {
+                    min_val = min_val.min(vertex[dim]);
+                    max_val = max_val.max(vertex[dim]);
+                }
+            }
+
+            let center = 0.5 * (min_val + max_val);
+            let range = max_val - min_val;
+            (center, range)
+        };
+
+        let (center_x, range_x) = find_center_and_range(0);
+        let (center_y, range_y) = find_center_and_range(1);
+
+        ViewRectangle {
+            center: [center_x, center_y],
+            dimensions: [range_x, range_y],
         }
-
-        let center = 0.5 * (min_corner + max_corner);
-        let dimensions = max_corner - min_corner;
-
-        ViewRectangle { center, dimensions }
     }
 }
 
