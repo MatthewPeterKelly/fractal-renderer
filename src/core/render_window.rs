@@ -97,7 +97,7 @@ where
         let resolution = view_control.image_specification().resolution;
         let display_buffer = create_buffer(Rgb([0, 0, 0]), &resolution);
         let center_command = CenterCommand::Target(CenterTargetCommand {
-            view_center: view_control.image_specification().center.into(),
+            view_center: view_control.image_specification().center,
             pan_rate: 0.0,
         });
 

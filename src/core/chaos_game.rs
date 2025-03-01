@@ -62,7 +62,7 @@ where
         let index = pixel_mapper.inverse_map(&colored_point.point);
         let [x, y] = index.pixel;
 
-        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x as u32, y as u32) {
+        if let Some(pixel) = imgbuf.get_pixel_mut_checked(x, y) {
             *pixel = colored_point.color;
             subpixel_mask[(x as usize, y as usize)].insert(subpixel_antialiasing, index.subpixel)
         }
