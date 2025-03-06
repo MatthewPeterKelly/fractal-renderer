@@ -3,6 +3,7 @@
 A high-performance utility for rendering fractal images.
 
 Currently this library supports five different fractals:
+
 - [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set)
 - [Julia Set](https://en.wikipedia.org/wiki/Julia_set) (for the 𝑝(𝑧) = 𝑧² + 𝑐 quadratic map)
 - [Barnsley Fern](https://en.wikipedia.org/wiki/Barnsley_fern)
@@ -10,6 +11,7 @@ Currently this library supports five different fractals:
 - Generalized Serpinsky Triangle
 
 The binary produced by this project primarily supports two modes of operation:
+
 - `render` -- used to render a single image directly to an output file
 - `explore` -- opens an interactive GUI to pan and zoom around the fractal
 
@@ -17,7 +19,7 @@ The binary produced by this project primarily supports two modes of operation:
 
 TODO
 
-## Status:  Active Development
+## Status: Active Development
 
 This library is under active development, with plans to add support for more fractals and features over time.
 
@@ -33,7 +35,6 @@ It is quite responsive for both the Mandelbrot and Julia Sets, provided you run 
 
 I'm actively experimenting with algorithms to dynamically adjust the render parameters for each fractal to hit a target frame rate of 30 Hz.
 
-
 ## Examples
 
 Both the `explore` and `render` modes of operation accept the same JSON file format as input, which describes the fractal to be rendered. This JSON file is loaded by `serde` into the `common::FractalParams` enum, which tells the program what fractal to render, along with what parameters to use.
@@ -45,6 +46,7 @@ The examples listed below are designed to run relatively quickly. Within each `e
 ```
 cargo run --release -- render ./examples/mandelbrot/default.json
 ```
+
 ```
 cargo run --release -- render ./examples/julia/default.json
 ```
@@ -61,15 +63,15 @@ cargo run --release -- render ./examples/barnsley_fern/default.json
 cargo run --release -- render ./examples/serpinsky/triangle.json
 ```
 
-
 **Explore Mode:**
 
 Explore mode will open a GUI and immediately render the fractal with the specified parameters.
 
 You can interact with the GUI in the following ways:
-- `a`/`d`:  rapid zoom
-- `w`/`s`:  standard zoom
-- arrow keys:  pan
+
+- `a`/`d`: rapid zoom
+- `w`/`s`: standard zoom
+- arrow keys: pan
 - click: pan to center window on selected point
 - `r` reset to initial view
 - `esc` close the GUI
@@ -99,7 +101,6 @@ The simple "color-swatch" mode is used for debugging and tweaking color map data
 cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
 ```
 
-
 ## Software Architecture Overview
 
 TODO
@@ -115,6 +116,10 @@ Much of the core library and examples are covered by unit tests, although the co
 The few tests that render full images (at low resolution), then read them back in and compare a hash of the image data.
 
 There is a test to ensure that all of the `.json` files in `examples` are able to be parsed into valid rust enums.
+
+## Developer Notes
+
+JSON and Markdown formatting via [prettier](https://prettier.io/). Rust code is formatted and linted with the standard tooling.
 
 ## Acknowledgements
 
