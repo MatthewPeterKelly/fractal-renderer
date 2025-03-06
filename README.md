@@ -83,7 +83,7 @@ Note that `explore` mode does not support the barnsley fern or serpinsky triangl
 
 **Color-Swatch Mode**
 
-The simple "color-swatch" mode is used for debugging and tweaking color map data. It has a slightly different input format. Eventually I would love to replace it with an interactive GUI with a color-picker... but that is low-priority for now.
+The simple "color-swatch" mode is used for debugging and tweaking color map data. It has a slightly different input format.
 
 ```
 cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
@@ -99,7 +99,7 @@ The software for the fractal renderer was written with two goals in mind:
 Working toward these goals:
 
 - Most of the "inner loops" of the rendering pipeline are parallelized with Rayon
-- Much of the core library and examples are covered by unit tests, although the coverage is not strict.
+- Much of the core library and examples are covered by unit tests
 - There are integration tests for full rendering pipeline
 - Core library components are modular, documented, and shared between the different fractals.
 - Generics are used extensively to achieve static polymorphism
