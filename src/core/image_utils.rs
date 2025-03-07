@@ -169,7 +169,7 @@ pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RenderOptions {
     /// If set to a value larger than 1, it indicates that some pixels should be skipped
-    /// to allow for faster rendering. This is a particularily useful feature when trying
+    /// to allow for faster rendering. This is a particularly useful feature when trying
     /// to maintain a rapid frame-rate on larger images. It applies uniformly in both
     /// dimensions of the image. For example, setting this value to `3` will cause the
     /// image to be rendered in three-by-three blocks, with only one true "evaluation"

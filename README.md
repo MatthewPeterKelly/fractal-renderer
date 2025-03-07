@@ -1,6 +1,6 @@
 # Fractal Renderer
 
-A high-performance utility for rendering fractal images.
+A utility for quickly rendering high-quality fractal images.
 
 Currently this library supports five different fractals:
 
@@ -21,14 +21,14 @@ The binary produced by this project primarily supports two modes of operation:
 
 Visualization of the basin of attraction for the driven-damped pendulum, where each period in the fractal is one full revolution of the pendulum. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705358520).
 
-![ddp_QHD_with_antialias](https://github.com/user-attachments/assets/7af4ca16-7135-4a43-ae74-ee1985521130)
+![driven-damped-pendulum-zoomed-out](https://github.com/user-attachments/assets/20dd0df6-aa3b-418a-a33c-bae1b765c9a3)
 
 **Barnsley Fern**
 
 Visualization of the Barnsley Fern, with the render settings tweaked so that it appears to be shadowed.
 Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705371473).
 
-![shadow_fern_QHD](https://github.com/user-attachments/assets/532b49f8-646c-48ea-8882-1644a98e105b)
+![barnsley-fern-shadow-version](https://github.com/user-attachments/assets/ce91830c-b539-4989-a267-fcb719b48e59)
 
 ## Status: Active Development
 
