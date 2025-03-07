@@ -17,7 +17,18 @@ The binary produced by this project primarily supports two modes of operation:
 
 ## Gallery
 
-TODO
+**Driven-Damped Pendulum**
+
+Visualization of the basin of attraction for the driven-damped pendulum, where each period in the fractal is one full revolution of the pendulum. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705358520).
+
+![ddp_QHD_with_antialias](https://github.com/user-attachments/assets/7af4ca16-7135-4a43-ae74-ee1985521130)
+
+**Barnsley Fern**
+
+Visualization of the Barnsley Fern, with the render settings tweaked so that it appears to be shadowed.
+Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705371473).
+
+![shadow_fern_QHD](https://github.com/user-attachments/assets/532b49f8-646c-48ea-8882-1644a98e105b)
 
 ## Status: Active Development
 
@@ -83,7 +94,7 @@ Note that `explore` mode does not support the barnsley fern or serpinsky triangl
 
 **Color-Swatch Mode**
 
-The simple "color-swatch" mode is used for debugging and tweaking color map data. It has a slightly different input format. Eventually I would love to replace it with an interactive GUI with a color-picker... but that is low-priority for now.
+The simple "color-swatch" mode is used for debugging and tweaking color map data. It has a slightly different input format.
 
 ```
 cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
@@ -99,7 +110,7 @@ The software for the fractal renderer was written with two goals in mind:
 Working toward these goals:
 
 - Most of the "inner loops" of the rendering pipeline are parallelized with Rayon
-- Much of the core library and examples are covered by unit tests, although the coverage is not strict.
+- Much of the core library and examples are covered by unit tests
 - There are integration tests for full rendering pipeline
 - Core library components are modular, documented, and shared between the different fractals.
 - Generics are used extensively to achieve static polymorphism
