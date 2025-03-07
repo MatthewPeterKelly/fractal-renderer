@@ -30,6 +30,12 @@ Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#iss
 
 ![barnsley-fern-shadow-version](https://github.com/user-attachments/assets/ce91830c-b539-4989-a267-fcb719b48e59)
 
+**Mandelbrot Set**
+
+Visualization of the Mandelbrot Set with a dark blue color map and zoomed in a bit. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/132#issuecomment-2706158399).
+
+![mandelbrot-zoomed-in-dark](https://github.com/user-attachments/assets/4addea8e-6bf9-44d1-be34-527fc5fa2883)
+
 ## Status: Active Development
 
 This library is under active development, with plans to add support for more fractals and features over time.
