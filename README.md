@@ -17,7 +17,18 @@ The binary produced by this project primarily supports two modes of operation:
 
 ## Gallery
 
-TODO
+**Driven-Damped Pendulum**
+
+Visualization of the basin of attraction for the driven-damped pendulum, where each period in the fractal is one full revolution of the pendulum. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705358520).
+
+![ddp_QHD_with_antialias](https://github.com/user-attachments/assets/7af4ca16-7135-4a43-ae74-ee1985521130)
+
+**Barnsley Fern**
+
+Visualization of the Barnsley Fern, with the render settings tweaked so that it appears to be shadowed.
+Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/130#issuecomment-2705371473).
+
+![shadow_fern_QHD](https://github.com/user-attachments/assets/532b49f8-646c-48ea-8882-1644a98e105b)
 
 ## Status: Active Development
 
