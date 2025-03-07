@@ -67,7 +67,7 @@ You can interact with the GUI in the following ways:
 - `esc` close the GUI
 - `space` write image to file along with (partial) JSON params
 
-When actively interacting with the fractal, it will render in "fast mode", at a lower resolution. Once interaction has stopped, it will render at progressively higher quality, stopping at the original paramters. This feature is still experimental.
+When actively interacting with the fractal, it will render in "fast mode", at a lower resolution. Once interaction has stopped, it will render at progressively higher quality, stopping at the original parameters. This feature is still experimental.
 
 User events received during rendering will be condensed and processed after rendering. Eventually I plan to add the ability to interrupt a slow render with a GUI event.
 
@@ -105,6 +105,10 @@ Working toward these goals:
 - Generics are used extensively to achieve static polymorphism
 
 ## Developer Notes
+
+Refer to [`CONTRIBUTING.md`](./CONTRIBUTING.md) file if you are interested in contributing to this project.
+
+This project is covered by the MIT [LICENSE](./LICENSE).
 
 JSON and Markdown formatting via [prettier](https://prettier.io/). Rust code is formatted and linted with the standard tooling.
 
