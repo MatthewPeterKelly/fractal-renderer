@@ -8,7 +8,7 @@ Currently this library supports five different fractals:
 - [Julia Set](https://en.wikipedia.org/wiki/Julia_set) (for the 𝑝(𝑧) = 𝑧² + 𝑐 quadratic map)
 - [Barnsley Fern](https://en.wikipedia.org/wiki/Barnsley_fern)
 - Attractor of the Driven-Damped Pendulum
-- Generalized Serpinsky Triangle
+- Generalized [Serpinsky Triangle](https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle) to support N-sided polygons
 
 The binary produced by this project primarily supports two modes of operation:
 
@@ -43,23 +43,13 @@ The examples listed below are designed to run relatively quickly. Within each `e
 
 **Render Mode**
 
+Run in release mode, pass the `render` argument, followed by a JSON file path:
+
 ```
 cargo run --release -- render ./examples/mandelbrot/default.json
-```
-
-```
 cargo run --release -- render ./examples/julia/default.json
-```
-
-```
 cargo run --release -- render ./examples/driven_damped_pendulum/default.json
-```
-
-```
 cargo run --release -- render ./examples/barnsley_fern/default.json
-```
-
-```
 cargo run --release -- render ./examples/serpinsky/triangle.json
 ```
 
@@ -81,17 +71,15 @@ When actively interacting with the fractal, it will render in "fast mode", at a 
 
 User events received during rendering will be condensed and processed after rendering. Eventually I plan to add the ability to interrupt a slow render with a GUI event.
 
+The calling pattern matches `render`, and it uses the same JSON files:
+
 ```
 cargo run --release -- explore ./examples/mandelbrot/default.json
-```
-
-```
 cargo run --release -- explore ./examples/julia/default.json
-```
-
-```
 cargo run --release -- explore ./examples/driven_damped_pendulum/ddp_low_res_antialias.json
 ```
+
+Note that `explore` mode does not support the barnsley fern or serpinsky triangle.
 
 **Color-Swatch Mode**
 
@@ -101,21 +89,20 @@ The simple "color-swatch" mode is used for debugging and tweaking color map data
 cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
 ```
 
-## Software Architecture Overview
+## Software Design
 
-TODO
+The software for the fractal renderer was written with two goals in mind:
 
-## Testing
+- Be clear, correct, and maintainable
+- Render images as fast as possible
 
-**Unit Testing**
+Working toward these goals:
 
-Much of the core library and examples are covered by unit tests, although the coverage is not strict.
-
-**Integration Tests**
-
-The few tests that render full images (at low resolution), then read them back in and compare a hash of the image data.
-
-There is a test to ensure that all of the `.json` files in `examples` are able to be parsed into valid rust enums.
+- Most of the "inner loops" of the rendering pipeline are parallelized with Rayon
+- Much of the core library and examples are covered by unit tests, although the coverage is not strict.
+- There are integration tests for full rendering pipeline
+- Core library components are modular, documented, and shared between the different fractals.
+- Generics are used extensively to achieve static polymorphism
 
 ## Developer Notes
 
