@@ -42,6 +42,12 @@ Visualization for the Serpinksy fractal, but generalized to a N-degree polygon a
 
 ![hexagon](https://github.com/user-attachments/assets/bef9ec0a-b656-4f4d-86e0-be6b4d47d1fa)
 
+**Julia Quadratic Map**
+
+Visualization of the Julia set. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/133#issuecomment-2707873840).
+
+![brassicas](https://github.com/user-attachments/assets/ff6b465a-d37c-4700-86ee-7a2b7134c369)
+
 ## Status: Active Development
 
 This library is under active development, with plans to add support for more fractals and features over time.
