@@ -1,31 +1,39 @@
 {
   "Mandelbrot": {
     "image_specification": {
-      "resolution": [1920, 1080],
+      "resolution": [1000, 500],
       "center": [-0.006893157175705378, 0.7381186687313246],
       "width": 0.05
     },
     "convergence_params": {
       "escape_radius_squared": 5.0,
-      "max_iter_count": 2000,
+      "max_iter_count": 12000,
       "refinement_count": 5
     },
     "color_map": {
       "keyframes": [
         {
           "query": 0.0,
-          "rgb_raw": [10, 0, 60]
+          "rgb_raw": [5, 0, 12]
+        },
+        {
+          "query": 0.6,
+          "rgb_raw": [40, 10, 110]
         },
         {
           "query": 0.8,
-          "rgb_raw": [20, 0, 86]
+          "rgb_raw": [10, 0, 26]
         },
         {
-          "query": 0.92,
-          "rgb_raw": [20, 0, 160]
+          "query": 0.9,
+          "rgb_raw": [140, 10, 35]
         },
         {
-          "query": 0.96,
+          "query": 0.94,
+          "rgb_raw": [20, 40, 140]
+        },
+        {
+          "query": 0.98,
           "rgb_raw": [0, 50, 240]
         },
         {
@@ -33,14 +41,14 @@
           "rgb_raw": [230, 245, 255]
         }
       ],
-      "lookup_table_count": 512,
+      "lookup_table_count": 1024,
       "background_color_rgb": [0, 0, 0],
-      "histogram_bin_count": 32,
-      "histogram_sample_count": 40000
+      "histogram_bin_count": 512,
+      "histogram_sample_count": 100000
     },
     "render_options": {
       "downsample_stride": 1,
-      "subpixel_antialiasing": 0
+      "subpixel_antialiasing": 2
     }
   }
 }
