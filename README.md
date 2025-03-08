@@ -36,6 +36,12 @@ Visualization of the Mandelbrot Set with a dark blue color map and zoomed in a b
 
 ![mandelbrot-zoomed-in-dark](https://github.com/user-attachments/assets/4addea8e-6bf9-44d1-be34-527fc5fa2883)
 
+**Serpinksy... Hexagon!**
+
+Visualization for the Serpinksy fractal, but generalized to a N-degree polygon and rendered as a hexagon. There are many ways to construct this fractal. This approach is implemented by sampling a sampling points from a sequence. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/133#issuecomment-2707861996).
+
+![hexagon](https://github.com/user-attachments/assets/bef9ec0a-b656-4f4d-86e0-be6b4d47d1fa)
+
 ## Status: Active Development
 
 This library is under active development, with plans to add support for more fractals and features over time.
@@ -131,5 +137,4 @@ JSON and Markdown formatting via [prettier](https://prettier.io/). Rust code is 
 
 ## Acknowledgements
 
-Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels), which was really helpful in getting the GUI working:
-https://github.com/parasyte/pixels/tree/39e84aacbe117347e7b8e7201c48184344aed9cc/examples/conway
+Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels), which was really helpful in getting the GUI working: [pixels/examples/conway](https://github.com/parasyte/pixels/tree/39e84aacbe117347e7b8e7201c48184344aed9cc/examples/conway).
