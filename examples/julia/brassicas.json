@@ -1,0 +1,35 @@
+{
+  "Julia": {
+    "image_specification": {
+      "resolution": [1600, 900],
+      "center": [0, 0],
+      "width": 3.8
+    },
+    "constant_term": [-0.4, 0.6],
+    "convergence_params": {
+      "escape_radius_squared": 4.0,
+      "max_iter_count": 24000,
+      "refinement_count": 5
+    },
+    "color_map": {
+      "keyframes": [
+        { "query": 0.0, "rgb_raw": [20, 20, 20] },
+        { "query": 0.75, "rgb_raw": [24, 24, 24] },
+        { "query": 0.92, "rgb_raw": [39, 112, 155] },
+        { "query": 0.93, "rgb_raw": [132, 92, 162] },
+        { "query": 0.95, "rgb_raw": [223, 73, 119] },
+        { "query": 0.975, "rgb_raw": [237, 81, 40] },
+        { "query": 0.99, "rgb_raw": [228, 191, 48] },
+        { "query": 1.0, "rgb_raw": [84, 190, 58] }
+      ],
+      "lookup_table_count": 2048,
+      "background_color_rgb": [14, 14, 14],
+      "histogram_bin_count": 32,
+      "histogram_sample_count": 80000
+    },
+    "render_options": {
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 2
+    }
+  }
+}
