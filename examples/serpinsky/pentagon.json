@@ -1,10 +1,10 @@
 {
   "Serpinsky": {
     "fit_image": {
-      "resolution": [300, 300],
-      "padding_scale": 1.05
+      "resolution": [1200, 1200],
+      "padding_scale": 1.1
     },
-    "sample_count": 5000000,
+    "sample_count": 20000000,
     "rng_seed": 12345,
     "subpixel_antialiasing": 4,
     "background_color_rgb": [14, 14, 14],

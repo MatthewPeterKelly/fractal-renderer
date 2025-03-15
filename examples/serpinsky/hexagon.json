@@ -1,7 +1,7 @@
 {
   "Serpinsky": {
     "fit_image": {
-      "resolution": [300, 300],
+      "resolution": [1200, 1200],
       "padding_scale": 1.1
     },
     "sample_count": 20000000,

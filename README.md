@@ -36,7 +36,7 @@ Visualization of the Mandelbrot Set with a dark blue color map and zoomed in a b
 
 ![mandelbrot-zoomed-in-dark](https://github.com/user-attachments/assets/4addea8e-6bf9-44d1-be34-527fc5fa2883)
 
-**Serpinksy "Triangle"!**
+**Serpinksy "Triangle"**
 
 Visualization for the Serpinksy fractal, but generalized to a N-degree polygon. There are many ways to construct this fractal. This approach is implemented by sampling a sampling points from a sequence. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/134#issuecomment-2726445693).
 
