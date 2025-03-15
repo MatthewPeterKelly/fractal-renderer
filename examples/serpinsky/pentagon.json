@@ -1,19 +1,19 @@
 {
   "Serpinsky": {
     "fit_image": {
-      "resolution": [1600, 1600],
+      "resolution": [300, 300],
       "padding_scale": 1.05
     },
-    "sample_count": 50000000,
+    "sample_count": 5000000,
     "rng_seed": 12345,
-    "subpixel_antialiasing": 2,
+    "subpixel_antialiasing": 4,
     "background_color_rgb": [14, 14, 14],
     "vertex_colors_rgb": [
-      [132, 92, 162],
-      [223, 73, 119],
-      [237, 81, 40],
-      [228, 191, 48],
-      [84, 190, 58]
+      [52, 152, 219],
+      [46, 204, 113],
+      [241, 196, 15],
+      [231, 76, 60],
+      [155, 89, 182]
     ]
   }
 }
