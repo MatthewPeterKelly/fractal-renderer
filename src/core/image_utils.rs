@@ -208,7 +208,8 @@ impl SpeedOptimizer for RenderOptions {
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
         let max_downsample_stride = 8.0; // TODO:  param?
-        self.downsample_stride = interpolate(0.0, max_downsample_stride, level) as usize;
+        // Note:  1.0 = no downsample stride (one sample per pixel)
+        self.downsample_stride = interpolate(1.0, max_downsample_stride, level) as usize;
 
         self.subpixel_antialiasing =
             interpolate(cache.subpixel_antialiasing as f64, 0.0, level) as u32;

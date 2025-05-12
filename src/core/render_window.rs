@@ -12,7 +12,7 @@ use super::{
 };
 
 // For now, just jump to speed level 2. Adaptive later.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
+const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.3;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -175,6 +175,8 @@ where
             // I think we need time as input, then internal state for a `dt` tracker.
             // Then... I guess also hard limits on the optimization level, along with
             // the current level. And a reset... ok. This is a whole thing. let's make a class.
+            // Note:  "rendere required" is more like:  "should I render? If so, at what optimization
+            // level?"
             self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
         }
         if let Some(level) = self.render_required {
@@ -188,7 +190,7 @@ where
                 // yep. amke this smarter.
                 if level > 0.0 {
                     // HACK:  asymtotiallcy approach one  (maximum optimization)
-                    self.render_required = Some(0.5 * (1.0 + level));
+                    self.render_required = Some(0.5 *  level);
                 } else {
                     self.render_required = None;
                 }

@@ -132,7 +132,7 @@ impl ViewControl {
     ///
     /// - `image_specification: ImageSpecification`
     ///   Specify the initial view and resolution. The resolution will remain constant, but
-    ///   view commands will alter the center and width of the view.
+    ///   view commands will alter the center and width of the view, based on user input.
     ///
     pub fn new(time: f64, image_specification: &ImageSpecification) -> Self {
         Self {
