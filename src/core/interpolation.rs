@@ -59,6 +59,16 @@ where
     }
 
     #[cfg(test)]
+    pub fn queries(&self) -> &[T] {
+        &self.queries
+    }
+
+    #[cfg(test)]
+    pub fn values(&self) -> &[V] {
+        &self.values
+    }
+
+    #[cfg(test)]
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
