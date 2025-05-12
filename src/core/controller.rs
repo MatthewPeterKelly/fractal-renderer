@@ -1,3 +1,5 @@
+use crate::core::render_quality_fsm::{self, ConstantFrameRatePolicy, FiniteStateMachine};
+
 #[derive(Clone, Debug)]
 pub enum Target {
     Position { pos_ref: f64, max_vel: f64 },
@@ -68,6 +70,75 @@ impl PointTracker {
             Target::Velocity { vel_ref } => {
                 self.position += vel_ref * delta_time;
             }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Debug)]
+pub struct AdaptiveOptimizationRegulator {
+    render_policy_fsm:
+        render_quality_fsm::FiniteStateMachine<ConstantFrameRatePolicy, ConstantFrameRatePolicy>,
+    render_start_time: Option<f64>,
+    render_period: Option<f64>,
+    render_command: Option<f64>,
+}
+
+impl Default for AdaptiveOptimizationRegulator {
+    fn default() -> Self {
+        Self {
+            render_policy_fsm: FiniteStateMachine::new(
+                0.0,
+                ConstantFrameRatePolicy::new(0.55),
+                ConstantFrameRatePolicy::new(0.0),
+            ),
+            render_start_time: None,
+            render_period: None,
+            render_command: None,
+        }
+    }
+}
+
+impl AdaptiveOptimizationRegulator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn reset(&mut self) {
+        self.render_policy_fsm.reset();
+        self.render_start_time = None;
+        self.render_period = None;
+        self.render_command = None;
+    }
+
+    pub fn render_required(&mut self, is_interactive: bool) -> Option<f64> {
+        self.render_policy_fsm.render_required(
+            self.render_command,
+            self.render_period,
+            is_interactive,
+        )
+    }
+
+    // Called by the render pipeline whenever a new render begins.
+    pub fn begin_rendering(&mut self, time: f64, command: f64) {
+        println!("Begin rendering...   time: {}", time);
+        self.render_start_time = Some(time);
+        self.render_period = None;
+        self.render_command = Some(command);
+    }
+
+    // Called by the render pipeline whenever the render is completed
+    pub fn finish_rendering(&mut self, time: f64) {
+        if let Some(start_time) = self.render_start_time {
+            println!("Finish rendering...   time: {}", time);
+            self.render_period = Some(time - start_time);
+            self.render_start_time = None;
+        } else {
+            println!(
+                "Finish rendering called again because redrawing takes a looong time...   time: {}",
+                time
+            );
         }
     }
 }

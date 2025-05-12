@@ -59,6 +59,16 @@ where
     }
 
     #[cfg(test)]
+    pub fn queries(&self) -> &[T] {
+        &self.queries
+    }
+
+    #[cfg(test)]
+    pub fn values(&self) -> &[V] {
+        &self.values
+    }
+
+    #[cfg(test)]
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
@@ -127,7 +137,7 @@ where
     }
 }
 
-/// Linear interpolation: a * (1 - alpha) + b * alpha
+/// Linear interpolation: low * (1 - alpha) + upp * alpha
 /// Extrapolate if alpha is not in [0,1]
 #[derive(Default, Clone, Copy, Debug)]
 pub struct LinearInterpolator;
@@ -137,8 +147,42 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
+    /// Interpolates between the specified values
+    /// - `alpha`: interpolation parameter, typically on [0,1]
+    /// - `low`: lower bound on interpolation; returned if `alpha == 0.0`
+    /// - `upp`: upper bound on interpolation; returned if `alpha == 1.0`
+    ///
+    /// Note:  this method will *extrapolate* if `alpha` is not in [0,1]
     fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
         low + (upp - low) * alpha
+    }
+}
+
+/// Clamped Linear interpolation: low * (1 - alpha.clamp(0,1)) + upp * alpha)
+///
+#[derive(Default, Clone, Copy, Debug)]
+pub struct ClampedLinearInterpolator;
+
+impl<T, V> Interpolator<T, V> for ClampedLinearInterpolator
+where
+    T: Float + Copy,
+    V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
+{
+    /// Interpolates between the specified values
+    /// - `alpha`: interpolation parameter, typically on [0,1]
+    /// - `low`: lower bound on interpolation; returned if `alpha == 0.0`
+    /// - `upp`: upper bound on interpolation; returned if `alpha == 1.0`
+    ///
+    /// Note:  this method will *extrapolate* if `alpha` is not in [0,1]
+    fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
+        if alpha <= T::zero() {
+            return low;
+        }
+        if alpha >= T::one() {
+            return upp;
+        }
+        let interpolator = LinearInterpolator;
+        interpolator.interpolate(alpha, low, upp)
     }
 }
 
@@ -178,6 +222,21 @@ mod tests {
         // interpolation and extrapolation
         assert_relative_eq!(interp.interpolate(0.5, low, upp), 15.0, epsilon = 1e-6);
         assert_relative_eq!(interp.interpolate(1.5, low, upp), 25.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_clamped_linear_interpolator_scalar() {
+        let interp = ClampedLinearInterpolator;
+        let low: f32 = 10.0;
+        let upp: f32 = 20.0;
+        // Keyframes
+        assert_relative_eq!(interp.interpolate(0.0, low, upp), 10.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.0, low, upp), 20.0, epsilon = 1e-6);
+        // interpolation
+        assert_relative_eq!(interp.interpolate(0.5, low, upp), 15.0, epsilon = 1e-6);
+        // extrapolation
+        assert_relative_eq!(interp.interpolate(-0.6, low, upp), 10.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.5, low, upp), 20.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -337,7 +396,7 @@ mod tests {
         assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(3.0), 128.0, epsilon = 1e-6); // interpolate
         assert_relative_eq!(interp.evaluate(5.0), 200.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolateg
         assert_relative_eq!(interp.evaluate(10.0), 0.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(18.0), 0.0, epsilon = 1e-6); // extrapolate (clamped)
     }
