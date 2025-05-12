@@ -110,7 +110,7 @@ where
             renderer: renderer.clone(),
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: Some(0),
+            render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
         pixel_grid
@@ -149,7 +149,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0);
+        self.render_required = Some(0.0);
     }
 
     fn update(
@@ -173,7 +173,7 @@ where
             // we already have timing.
             // I would have expected this to be a float... but it is an int. Silly.
             // I think we need time as input, then internal state for a `dt` tracker.
-            // Then... I guess also hard limits on the optimization level, along with 
+            // Then... I guess also hard limits on the optimization level, along with
             // the current level. And a reset... ok. This is a whole thing. let's make a class.
             self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
         }
@@ -186,8 +186,9 @@ where
                 self.render();
                 // oh -- here is the controller now.
                 // yep. amke this smarter.
-                if level > 0 {
-                    self.render_required = Some(level - 1);
+                if level > 0.0 {
+                    // HACK:  asymtotiallcy approach one  (maximum optimization)
+                    self.render_required = Some(0.5 * (1.0 + level));
                 } else {
                     self.render_required = None;
                 }

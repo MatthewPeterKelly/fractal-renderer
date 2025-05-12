@@ -11,6 +11,16 @@ use std::{
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
 
+/// Linear interpolation between two points, with extrapolation:
+///
+/// alpha = 0   --->  low
+/// alpha = 1   --->  upp
+///
+/// TODO:  put this in some math utility library?
+pub fn interpolate(low: f64, upp: f64, alpha: f64) -> f64 {
+    upp * alpha + (1.0 - alpha) * low
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
     pub resolution: [u32; 2],
@@ -145,10 +155,10 @@ pub trait SpeedOptimizer {
     fn reference_cache(&self) -> Self::ReferenceCache;
 
     /// Modifies the parameters of the image in-place.
-    /// An optimization level of zero corresponds to the "default paramers" and one corresponds 
+    /// An optimization level of zero corresponds to the "default paramers" and one corresponds
     /// to "as fast as possible, with dramatic loss of image quality".  It is up to each fractal
     /// implementation to anchor the upper bound to a meaningful value.
-    /// 
+    ///
     /// Note: parameters modified by this call should strictly reduce the render time, and
     /// should not change the size of the image or underlying data structures.
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache);
@@ -197,14 +207,11 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.downsample_stride = cache.downsample_stride + (level as usize);
+        let max_downsample_stride = 8.0; // TODO:  param?
+        self.downsample_stride = interpolate(0.0, max_downsample_stride, level) as usize;
 
-        //MPK:  TODO -- make a better scaling law here, with a float to int cast.
-        self.subpixel_antialiasing = if cache.subpixel_antialiasing > level {
-            cache.subpixel_antialiasing - level
-        } else {
-            0
-        };
+        self.subpixel_antialiasing =
+            interpolate(cache.subpixel_antialiasing as f64, 0.0, level) as u32;
     }
 }
 
@@ -792,6 +799,12 @@ mod tests {
     use super::*;
     use ordered_float::OrderedFloat;
 
+    #[test]
+    fn test_interpolate() {
+        assert_eq!(interpolate(-2.3, 3.0, 0.0), -2.3);
+        assert_eq!(interpolate(-2.3, 3.0, 1.0), 3.0);
+        assert_eq!(interpolate(-5.0, 3.0, 0.5), -1.0);
+    }
     #[test]
     fn test_view_port_from_vertices() {
         let vertices = vec![[1.0, 2.0], [3.0, 5.0], [-1.0, -2.0], [2.0, 3.0]];
