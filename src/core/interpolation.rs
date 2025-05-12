@@ -58,7 +58,6 @@ where
         }
     }
 
-    #[cfg(test)]
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
@@ -79,7 +78,6 @@ where
         self.queries[index] = query;
     }
 
-    #[cfg(test)]
     pub fn set_keyframe_value(&mut self, index: usize, value: V) {
         assert!(
             index < self.queries.len(),

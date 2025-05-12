@@ -1,3 +1,7 @@
+use std::{f32::MIN_POSITIVE, os::raw};
+
+use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, LinearInterpolator};
+
 #[derive(Clone, Debug)]
 pub enum Target {
     Position { pos_ref: f64, max_vel: f64 },
@@ -69,5 +73,130 @@ impl PointTracker {
                 self.position += vel_ref * delta_time;
             }
         }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The frame rate policy is a mapping from the measured period to the
+/// command that should be used on the next render, conditioned on the
+/// command that was used to generate the current measured period.
+///
+/// This can be thought of as a root-finding exercise, where the the
+/// objective is to find the command that will yield the desired period.
+/// In this case, the "function" that we're iterating over is the entire
+/// render pipeline.
+///
+/// One way to do this root-solve is with quassi-Newton method, which requires
+/// that we be able to locally approximate the function with a linear model.
+/// Directly computing the derivative of the function is not possible, because
+/// the render pipeline is not consistent across frames -- the CPU load might
+///
+/// change, and also the fractal being rendered might change, so we've got to
+/// work with a single evaluation.
+///
+/// There is another tricky detail -- we need to ensure that the command is bounded
+/// to the domain of [0,1], which is not typically part of a quassi newton method.
+///
+/// This problem has some nice features that we can exploit. The first is that we
+/// know the render pipeline is monotonic -- increasing the command will always
+/// reduce the period, until it saturates (given a fixed CPU and render task).
+/// Additionally, the command is
+/// bounded to [0,1], and the period is bounded to [0, max_expected_period].
+///
+/// We can use this information to construct a piecewise linear model of the function
+/// that is always invertible, and which is guaranteed to have a single unique solution
+/// for any period in the range [0, max_expected_period]. The model is constructed
+/// by interpolation between three keyframes, where the first and last keyframes are
+/// specified by the problem itself, and the middle keyframe is updated each time based
+/// on the measured period and the command that produced it. As a result, this model is
+/// most accurate near the current measurement, and the two boundary keyframes primarily
+/// serve to provide a reasonable guess at the local deriviatives.
+#[derive(Clone, Debug)]
+pub struct InteractiveFrameRateTimingParams {
+    // How fast do we ideally want the update period to run?
+    // implemented as a deadband to avoid chattering on the render settings.
+    target_update_period: f64,
+
+    // Above this value, the command will saturate. We assume that the render
+    // will be aborted if it reaches this period, allowing us to try again with
+    // higher optimization command.
+    max_expected_period: f64, // the maximum expected period, in seconds.
+
+    // Controller margin, used to ensure that the model (command as a function of period)
+    // remains invertable. It is used for both the period and the command, and is normalized
+    // by the acceptable range of each.
+    normalized_margin: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct InteractiveFrameRatePolicy {
+    // User-specified parameters for the timing policy -- do not change after construction.
+    timing_params: InteractiveFrameRateTimingParams,
+
+    // The policy is implemented by linear interpolation between keyframes,
+    // mapping from the measured period (given previous command) to the command that
+    // should be used on the next frame to hit the target period. This is effectively a
+    // model of the inverse of the render pipeline. Evaluating it does two things:
+    // (1) updates the model based on the most recent measurement data
+    // (2) solves: render_pipeline_period_model(next_command) - desired_period = 0
+    policy: KeyframeInterpolator<f64, f64, LinearInterpolator>,
+
+    // The command is cached here for use on the next evaluation to update the model.
+    command: f64, // The command that was produced by the last evaluation.
+}
+
+impl InteractiveFrameRatePolicy {
+    const MAX_COMMAND: f64 = 1.0;
+    const MIN_COMMAND: f64 = 0.0;
+    const MIN_PERIOD: f64 = 0.0;
+
+    pub fn new(timing_params: InteractiveFrameRateTimingParams) -> InteractiveFrameRatePolicy {
+        const NOMINAL_COMMAND: f64 = 0.5 * (Self::MAX_COMMAND + Self::MIN_COMMAND);
+        let command_margin =
+            timing_params.normalized_margin * (Self::MAX_COMMAND - Self::MIN_COMMAND);
+        let period_margin = timing_params.normalized_margin
+            * (timing_params.max_expected_period - Self::MIN_PERIOD);
+        let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
+            InterpolationKeyframe {
+                input: Self::MIN_PERIOD - period_margin,
+                output: Self::MIN_COMMAND - command_margin,
+            },
+            InterpolationKeyframe {
+                input: timing_params.target_update_period,
+                output: NOMINAL_COMMAND,
+            },
+            InterpolationKeyframe {
+                input: timing_params.max_expected_period + period_margin,
+                output: Self::MAX_COMMAND + command_margin,
+            },
+        ];
+        InteractiveFrameRatePolicy {
+            timing_params,
+            policy: KeyframeInterpolator::new(keyframes, LinearInterpolator),
+            command: NOMINAL_COMMAND,
+        }
+    }
+
+    pub fn evaluate_policy(&mut self, measured_period: f64) -> f64 {
+        // (0) Ensure that the measurement is within the expected range, which in turn
+        //     will ensure that the model remains invertable (and we can update the policy).
+        let clamped_measured_period =
+            measured_period.clamp(Self::MIN_PERIOD, self.timing_params.max_expected_period);
+
+        // (1) Update the policy based on the most recent measurement and cached command.
+        self.policy.set_keyframe_value(1, self.command);
+        self.policy.set_keyframe_query(1, clamped_measured_period);
+
+        // (2) Evaluate the policy, relying on the clamping behavior of the interpolator
+        //     to manage any out-of-bounds input on `update_period`.
+        let raw_command = self.policy.evaluate(clamped_measured_period);
+
+        // (3) The policy will sometimes produce out-of-bounds commands. This is intentional, and
+        //     is what allows the model to correctly handle saturation in the cases where there is
+        //     no solution (all values of the command result in a period that is either above or below the target).
+        self.command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
+
+        self.command
     }
 }
