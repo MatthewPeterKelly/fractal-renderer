@@ -12,7 +12,7 @@ use super::{
 };
 
 // For now, just jump to speed level 2. Adaptive later.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: u32 = 2;
+const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -82,7 +82,7 @@ pub struct PixelGrid<F: Renderable> {
 
     // This flag is set high when we need to trigger another render pass.
     // If set, then it contains the desired speed optimization level for the render.
-    render_required: Option<u32>,
+    render_required: Option<f64>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -168,6 +168,13 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
+            // TODO:  MPK -- this is hard-coded two-rate system.
+            // need to get the timing data in here and wrap it in a control loop.
+            // we already have timing.
+            // I would have expected this to be a float... but it is an int. Silly.
+            // I think we need time as input, then internal state for a `dt` tracker.
+            // Then... I guess also hard limits on the optimization level, along with 
+            // the current level. And a reset... ok. This is a whole thing. let's make a class.
             self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
         }
         if let Some(level) = self.render_required {
@@ -177,7 +184,8 @@ where
                     .unwrap()
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
                 self.render();
-
+                // oh -- here is the controller now.
+                // yep. amke this smarter.
                 if level > 0 {
                     self.render_required = Some(level - 1);
                 } else {
