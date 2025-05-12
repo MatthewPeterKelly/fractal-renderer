@@ -11,6 +11,16 @@ use std::{
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
 
+/// Linear interpolation between two points, with extrapolation:
+///
+/// alpha = 0   --->  low
+/// alpha = 1   --->  upp
+///
+/// TODO:  put this in some math utility library?
+pub fn interpolate(low: f64, upp: f64, alpha: f64) -> f64 {
+    upp * alpha + (1.0 - alpha) * low
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
     pub resolution: [u32; 2],
@@ -145,12 +155,13 @@ pub trait SpeedOptimizer {
     fn reference_cache(&self) -> Self::ReferenceCache;
 
     /// Modifies the parameters of the image in-place.
-    /// An optimization level of zero corresponds to the "default paramers", with positive
-    /// integers corresponding to progressively faster render times (and thus lower quality).
+    /// An optimization level of zero corresponds to the "default paramers" and one corresponds
+    /// to "as fast as possible, with dramatic loss of image quality".  It is up to each fractal
+    /// implementation to anchor the upper bound to a meaningful value.
     ///
     /// Note: parameters modified by this call should strictly reduce the render time, and
     /// should not change the size of the image or underlying data structures.
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache);
+    fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache);
 }
 
 /// Scales down an integer parameter based on a scale factor.
@@ -195,10 +206,13 @@ impl SpeedOptimizer for RenderOptions {
         *self
     }
 
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        self.downsample_stride = cache.downsample_stride + (level as usize);
+    fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
+        let max_downsample_stride = 8.0; // TODO:  param?
+                                         // Note:  1.0 = no downsample stride (one sample per pixel)
+        self.downsample_stride = interpolate(1.0, max_downsample_stride, level) as usize;
 
-        self.subpixel_antialiasing = cache.subpixel_antialiasing.saturating_sub(level);
+        self.subpixel_antialiasing =
+            interpolate(cache.subpixel_antialiasing as f64, 0.0, level) as u32;
     }
 }
 
@@ -786,6 +800,12 @@ mod tests {
     use super::*;
     use ordered_float::OrderedFloat;
 
+    #[test]
+    fn test_interpolate() {
+        assert_eq!(interpolate(-2.3, 3.0, 0.0), -2.3);
+        assert_eq!(interpolate(-2.3, 3.0, 1.0), 3.0);
+        assert_eq!(interpolate(-5.0, 3.0, 0.5), -1.0);
+    }
     #[test]
     fn test_view_port_from_vertices() {
         let vertices = vec![[1.0, 2.0], [3.0, 5.0], [-1.0, -2.0], [2.0, 3.0]];

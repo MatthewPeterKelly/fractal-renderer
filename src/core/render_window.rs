@@ -5,14 +5,13 @@ use std::sync::{
 
 use image::Rgb;
 
+use crate::core::controller::AdaptiveOptimizationRegulator;
+
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
     image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
-
-// For now, just jump to speed level 2. Adaptive later.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: u32 = 2;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -70,6 +69,12 @@ pub struct PixelGrid<F: Renderable> {
     // images to disk while exploring the fractal.
     file_prefix: FilePrefix,
 
+    // Measures the render speed on each redraw, and then uses that to adaptively change
+    // the trade-off between render quality and speed. Once the user stops interacting,
+    // the quality will gradually increase, resulting in a progressively better render.
+    // While interacting, this ensures that we have a fast response from the graphics.
+    adaptive_quality_regulator: AdaptiveOptimizationRegulator,
+
     // Encapsulates all details required to render the image.
     // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
     renderer: Arc<Mutex<F>>,
@@ -82,7 +87,7 @@ pub struct PixelGrid<F: Renderable> {
 
     // This flag is set high when we need to trigger another render pass.
     // If set, then it contains the desired speed optimization level for the render.
-    render_required: Option<u32>,
+    render_required: Option<f64>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -110,8 +115,9 @@ where
             renderer: renderer.clone(),
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: Some(0),
+            render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
+            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(time),
         };
         pixel_grid
             .view_control
@@ -149,7 +155,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0);
+        self.render_required = Some(0.0);
     }
 
     fn update(
@@ -168,7 +174,8 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
-            self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
+            // Recompute the "render level" whenever the usere modifies the view port...
+            self.render_required = Some(self.adaptive_quality_regulator.interactive_update(time));
         }
         if let Some(level) = self.render_required {
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
@@ -177,12 +184,11 @@ where
                     .unwrap()
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
                 self.render();
-
-                if level > 0 {
-                    self.render_required = Some(level - 1);
-                } else {
-                    self.render_required = None;
-                }
+                // Also recompute the "render level" when the render completes...
+                // Problem: this is an "inactive update". The view port has not changed and the user is
+                // not waiting on a responsive UI.  Now we should switch the focus and instead just
+                // gradually work on increasing the quality of the image in-place.
+                self.render_required = self.adaptive_quality_regulator.idle_update(time);
             }
         }
 

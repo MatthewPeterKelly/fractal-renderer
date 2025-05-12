@@ -1,4 +1,5 @@
 use image::Rgb;
+use num_traits::Pow;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
@@ -272,8 +273,8 @@ where
         }
     }
 
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        let scale = 1.0 / (2u32.pow(level) as f64);
+    fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
+        let scale = 1.0 / 2.0.pow(level);
 
         self.fractal_params.color_map_mut().histogram_sample_count =
             scale_down_parameter_for_speed(2048.0, cache.histogram_sample_count as f64, scale)
