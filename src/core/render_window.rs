@@ -14,6 +14,29 @@ use super::{
 // For now, just jump to speed level 2. Adaptive later.
 const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.3;
 
+/// Given an optimization "level", store the associated measured
+/// period. This can then be used for an iterative nonlinear root-solver
+/// trying to stabilize to the correct level to hit the desired target period.
+struct AdaptiveOptimizationQuery {
+    period: f64,
+    level: f64,
+}
+
+struct AdaptiveOptimizationRegulator {
+    /// How fast do we ideally want the update period to run?
+    /// implemented as a deadband to avoid chattering on the render settings.
+    target_update_period_min: f64,
+    target_update_period_max: f64,
+
+    /// How long do we wait before cancelling the current render and trying again?
+    threshold_period_for_render_abort: f64, // not sure if this lives here
+
+    /// Bracket the search:
+    Option<AdaptiveOptimizationQuery> upper_bracket,
+    option<AdaptiveOptimizationQuery> lower_bracket,
+
+}
+
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
 /// used by the "explore" GUI to interact with the different fractals.
@@ -69,6 +92,8 @@ pub struct PixelGrid<F: Renderable> {
     // Cache the file prefix so that we can use a consistent directory for writing
     // images to disk while exploring the fractal.
     file_prefix: FilePrefix,
+
+    // MPK:  insert the thing here that computes the speed optimization
 
     // Encapsulates all details required to render the image.
     // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
