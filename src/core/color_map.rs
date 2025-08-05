@@ -20,6 +20,9 @@ pub trait ColorMapper {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
 
+
+// TODO:  make this generic and move over to interpolation!
+
 /**
  * Simple implementation of a "piecewise linear" color map, where the colors
  * are represented by simple linear interpolation in RGB color space. This is
