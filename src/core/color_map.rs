@@ -88,11 +88,6 @@ where
         }
     }
 
-    pub fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
-        let color_rgb = self.compute_raw(query);
-        image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
-    }
-
     /**
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
@@ -123,7 +118,8 @@ where
     F: Interpolator<f32, Vector3<f32>>,
 {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
-        self.compute_pixel(query)
+               let color_rgb = self.compute_raw(query);
+        image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
     }
 }
 
