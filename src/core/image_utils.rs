@@ -198,11 +198,7 @@ impl SpeedOptimizer for RenderOptions {
     fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
         self.downsample_stride = cache.downsample_stride + (level as usize);
 
-        self.subpixel_antialiasing = if cache.subpixel_antialiasing > level {
-            cache.subpixel_antialiasing - level
-        } else {
-            0
-        };
+        self.subpixel_antialiasing = cache.subpixel_antialiasing.saturating_sub(level);
     }
 }
 

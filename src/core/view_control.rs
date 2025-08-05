@@ -210,7 +210,7 @@ impl ViewControl {
                     });
                 }
             }
-            CenterCommand::Idle {} => {
+            CenterCommand::Idle() => {
                 for ctrl in &mut self.pan_control {
                     ctrl.set_idle_target();
                 }

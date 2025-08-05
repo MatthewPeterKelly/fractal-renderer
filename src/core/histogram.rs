@@ -78,7 +78,7 @@ impl Histogram {
         } else {
             100.0 / (total as f32)
         };
-        writeln!(writer, "  total count: {}", total)?;
+        writeln!(writer, "  total count: {total}")?;
         for i in 0..self.bin_counts.len() {
             let count = self.bin_count(i);
             let percent = (count as f32) * percent_scale;

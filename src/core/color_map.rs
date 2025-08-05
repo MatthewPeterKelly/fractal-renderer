@@ -27,8 +27,8 @@ pub trait ColorMapper {
  * practice. For details see:
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
+ *   The `ColorMap` struct is implemented as a KeyframeInterpolator
  */
-/// ColorMap is just a specific KeyframeInterpolator for f32 -> Vector3<f32>
 pub struct ColorMap<F>
 where
     F: Interpolator<f32, Vector3<f32>>,
