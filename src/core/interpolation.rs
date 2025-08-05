@@ -146,21 +146,13 @@ mod tests {
     #[test]
     fn test_linear_interpolator_vector() {
         let interp = LinearInterpolator;
-        let a = Vector3::new(-5.0_f32, 2.0, 6.0);
-        let b = Vector3::new(10.0_f32, 20.0, 30.0);
+        let low = Vector3::new(-5.0_f32, 2.0, 6.0);
+        let upp = Vector3::new(10.0_f32, 20.0, 30.0);
+        assert_relative_eq!(interp.interpolate(0.0, &low, &upp), low, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.0, &low, &upp), upp, epsilon = 1e-6);
         assert_relative_eq!(
-            interp.interpolate(0.0, &a, &b),
-            a,
-            epsilon = 1e-6
-        );
-        assert_relative_eq!(
-            interp.interpolate(1.0, &a, &b),
-            b,
-            epsilon = 1e-6
-        );
-        assert_relative_eq!(
-            interp.interpolate(0.3, &a, &b),
-            0.3 * a + 0.7 * b,
+            interp.interpolate(0.3, &low, &upp),
+            0.7 * low + 0.3 * upp,
             epsilon = 1e-6
         );
     }
@@ -209,18 +201,14 @@ mod tests {
 
         assert_relative_eq!(interp.evaluate(-4.0), low, epsilon = 1e-6); // clamped extrapolate
         assert_relative_eq!(interp.evaluate(-3.0), low, epsilon = 1e-6); // keyframe
-        assert_relative_eq!(
-            interp.evaluate(3.0),
-            0.5 * (low + upp),
-            epsilon = 1e-6
-        ); // interpolate
+        assert_relative_eq!(interp.evaluate(3.0), 0.5 * (low + upp), epsilon = 1e-6); // interpolate
         assert_relative_eq!(
             interp.evaluate(6.0),
             0.25 * low + 0.75 * upp,
             epsilon = 1e-6
         ); // interpolate
         assert_relative_eq!(interp.evaluate(9.0), upp, epsilon = 1e-6); // keyframe
-        assert_relative_eq!(interp.evaluate(100.0), low, epsilon = 1e-6); // clamped extrapolate
+        assert_relative_eq!(interp.evaluate(100.0), upp, epsilon = 1e-6); // clamped extrapolate
     }
 
     #[test]
