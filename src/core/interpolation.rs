@@ -1,47 +1,45 @@
-use nalgebra::Vector3;
+use std::ops::{Add, Mul, Sub};
+use num_traits::Float;
 
-pub trait Interpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32>;
+/// Trait for interpolation between two values
+pub trait Interpolator<T, V>
+where
+    T: Float + Copy,
+    V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
+{
+    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V;
 }
 
-
+/// Step interpolator switches from a to b at a threshold
 #[derive(Default)]
-pub struct StepInterpolator {
-    pub threshold: f32,
+pub struct StepInterpolator<T: Float + Copy> {
+    pub threshold: T,
 }
 
-impl Interpolator for StepInterpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32> {
-        if query > self.threshold {
-            *value_one
+impl<T, V> Interpolator<T, V> for StepInterpolator<T>
+where
+    T: Float + Copy,
+    V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
+{
+    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V {
+        if alpha > self.threshold {
+            *b
         } else {
-            *value_zero
+            *a
         }
     }
 }
 
+/// Linear interpolation: a * (1 - alpha) + b * alpha
 #[derive(Default)]
-pub struct LinearInterpolator {}
+pub struct LinearInterpolator;
 
-impl Interpolator for LinearInterpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32> {
-        value_zero + (value_one - value_zero) * query
+impl<T, V> Interpolator<T, V> for LinearInterpolator
+where
+    T: Float + Copy,
+    V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
+{
+    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V {
+        *a + (*b - *a) * alpha
     }
 }
-
-

@@ -29,13 +29,19 @@ pub trait ColorMapper {
  * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
  * - https://docs.rs/palette/latest/palette/
  */
-pub struct ColorMap<F: Interpolator> {
+pub struct ColorMap<F>
+where
+    F: Interpolator<f32, Vector3<f32>>,
+{
     queries: Vec<f32>,
-    rgb_colors: Vec<Vector3<f32>>, // [0,255], but as f32
+    rgb_colors: Vec<Vector3<f32>>,
     interpolator: F,
 }
 
-impl<F: Interpolator> ColorMap<F> {
+impl<F> ColorMap<F>
+where
+    F: Interpolator<f32, Vector3<f32>>,
+{
     /**
      * Create a color map from a vector of keyframes. The queries must be
      *
@@ -114,7 +120,7 @@ impl<F: Interpolator> ColorMap<F> {
 
 impl<F> ColorMapper for ColorMap<F>
 where
-    F: Interpolator,
+    F: Interpolator<f32, Vector3<f32>>,
 {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
         self.compute_pixel(query)
