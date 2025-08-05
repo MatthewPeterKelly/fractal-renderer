@@ -9,7 +9,8 @@ use crate::core::{
     image_utils::{
         scale_down_parameter_for_speed, ImageSpecification, PixelMapper, RenderOptions, Renderable,
         SpeedOptimizer,
-    }, interpolation::LinearInterpolator,
+    },
+    interpolation::LinearInterpolator,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

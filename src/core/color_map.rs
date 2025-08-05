@@ -20,7 +20,6 @@ pub trait ColorMapper {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
 
-
 /**
  * Simple implementation of a "piecewise linear" color map, where the colors
  * are represented by simple linear interpolation in RGB color space. This is
@@ -92,7 +91,7 @@ where
      * Evaluates the color map, modestly efficient for small numbers of
      * keyframes. Any query outside of [0,1] will be clamped.
      */
-    fn compute_raw(&self, query: f32) -> Vector3<f32> {
+    fn evaluate(&self, query: f32) -> Vector3<f32> {
         if query <= 0.0f32 {
             *self.rgb_colors.first().unwrap()
         } else if query >= 1.0f32 {
@@ -118,11 +117,10 @@ where
     F: Interpolator<f32, Vector3<f32>>,
 {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8> {
-               let color_rgb = self.compute_raw(query);
+        let color_rgb = self.evaluate(query);
         image::Rgb([color_rgb[0] as u8, color_rgb[1] as u8, color_rgb[2] as u8])
     }
 }
-
 
 /**
  * Create a new keyframe vector, using the same colors, but uniformly spaced queries.

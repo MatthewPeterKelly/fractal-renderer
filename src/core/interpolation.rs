@@ -1,5 +1,5 @@
-use std::ops::{Add, Mul, Sub};
 use num_traits::Float;
+use std::ops::{Add, Mul, Sub};
 
 /// Trait for interpolation between two values
 pub trait Interpolator<T, V>
