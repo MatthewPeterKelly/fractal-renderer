@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, LinearInterpolator},
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
     histogram::{CumulativeDistributionFunction, Histogram},
     image_utils::{
         scale_down_parameter_for_speed, ImageSpecification, PixelMapper, RenderOptions, Renderable,
         SpeedOptimizer,
-    },
+    }, interpolation::LinearInterpolator,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

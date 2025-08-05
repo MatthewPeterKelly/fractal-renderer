@@ -3,7 +3,8 @@ use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
-use super::lookup_table::LookupTable;
+use crate::core::interpolation::Interpolator;
+use crate::core::lookup_table::LookupTable;
 
 /**
  * Represents a single "keyframe" of the color map, pairing a
@@ -18,14 +19,7 @@ pub struct ColorMapKeyFrame {
 pub trait ColorMapper {
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
-pub trait Interpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32>;
-}
+
 
 /**
  * Simple implementation of a "piecewise linear" color map, where the colors
@@ -127,39 +121,6 @@ where
     }
 }
 
-#[derive(Default)]
-pub struct StepInterpolator {
-    pub threshold: f32,
-}
-
-impl Interpolator for StepInterpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32> {
-        if query > self.threshold {
-            *value_one
-        } else {
-            *value_zero
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct LinearInterpolator {}
-
-impl Interpolator for LinearInterpolator {
-    fn interpolate(
-        &self,
-        query: f32,
-        value_zero: &Vector3<f32>,
-        value_one: &Vector3<f32>,
-    ) -> Vector3<f32> {
-        value_zero + (value_one - value_zero) * query
-    }
-}
 
 /**
  * Create a new keyframe vector, using the same colors, but uniformly spaced queries.
