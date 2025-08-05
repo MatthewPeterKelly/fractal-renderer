@@ -41,6 +41,15 @@ where
     F: Interpolator<f32, Vector3<f32>>,
 {
     pub fn new(keyframes: &[ColorMapKeyFrame], interpolator: F) -> Self {
+        assert!(!keyframes.is_empty(), "keyframes must not be empty");
+        assert!(
+            keyframes.first().unwrap().query == 0.0,
+            "first keyframe query must be 0.0"
+        );
+        assert!(
+            keyframes.last().unwrap().query == 1.0,
+            "last keyframe query must be 1.0"
+        );
         let internal_keyframes: Vec<InterpolationKeyframe<f32, Vector3<f32>>> = keyframes
             .iter()
             .map(|kf| InterpolationKeyframe {
