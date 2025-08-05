@@ -893,7 +893,7 @@ mod tests {
                 grid_mask.insert(n_grid, [i, j]);
             }
         }
-        assert_eq!(grid_mask.count_ones() as u32, n_grid * n_grid);
+        assert_eq!({ grid_mask.count_ones() }, n_grid * n_grid);
     }
 
     #[test]
@@ -971,12 +971,12 @@ mod tests {
             );
 
             // Now let the "full vector" machinery figure out the pixels
-            assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([10, 0, 20]));
-            assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([20, 0, 0]));
+            assert_eq!(interpolator.interpolate(data_view, 1), Rgb([10, 0, 20]));
+            assert_eq!(interpolator.interpolate(data_view, 3), Rgb([20, 0, 0]));
 
             // We don't expect to query at known points, but lets make sure it doesn't break
-            assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 40]));
-            assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([20, 0, 0]));
+            assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 40]));
+            assert_eq!(interpolator.interpolate(data_view, 2), Rgb([20, 0, 0]));
         }
         {
             // Now, let's add more data and try again:
@@ -987,19 +987,19 @@ mod tests {
             let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
 
             // Check the first points again, but now, expect the index 3 to properly interpolate
-            assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([10, 0, 20]));
-            assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([10, 30, 0]));
+            assert_eq!(interpolator.interpolate(data_view, 1), Rgb([10, 0, 20]));
+            assert_eq!(interpolator.interpolate(data_view, 3), Rgb([10, 30, 0]));
             // Check the keyframes again, as well:
-            assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 40]));
-            assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([20, 0, 0]));
-            assert_eq!(interpolator.interpolate(&data_view, 4), Rgb([0, 60, 0]));
+            assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 40]));
+            assert_eq!(interpolator.interpolate(data_view, 2), Rgb([20, 0, 0]));
+            assert_eq!(interpolator.interpolate(data_view, 4), Rgb([0, 60, 0]));
         }
     }
 
     #[test]
     fn test_linear_pixel_interpolation_stride_3() {
         let downsample_stride: usize = 3;
-        let data = vec![
+        let data = [
             Rgb([0, 0, 33]),
             Rgb([123, 123, 123]), // dummy data, should never be read
             Rgb([123, 123, 123]), // dummy data, should never be read
@@ -1008,7 +1008,7 @@ mod tests {
             Rgb([123, 123, 123]), // dummy data, should never be read
             Rgb([81, 140, 15]),
             Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([123, 123, 123]), // dummy data, should never be read
+            Rgb([123, 123, 123]),
         ];
 
         let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
@@ -1016,18 +1016,18 @@ mod tests {
         let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
 
         // Check interpolated points
-        assert_eq!(interpolator.interpolate(&data_view, 1), Rgb([30, 20, 22]));
-        assert_eq!(interpolator.interpolate(&data_view, 2), Rgb([60, 40, 11]));
-        assert_eq!(interpolator.interpolate(&data_view, 4), Rgb([87, 86, 5]));
-        assert_eq!(interpolator.interpolate(&data_view, 5), Rgb([84, 113, 10]));
+        assert_eq!(interpolator.interpolate(data_view, 1), Rgb([30, 20, 22]));
+        assert_eq!(interpolator.interpolate(data_view, 2), Rgb([60, 40, 11]));
+        assert_eq!(interpolator.interpolate(data_view, 4), Rgb([87, 86, 5]));
+        assert_eq!(interpolator.interpolate(data_view, 5), Rgb([84, 113, 10]));
 
         // Check extrapolated points
-        assert_eq!(interpolator.interpolate(&data_view, 7), Rgb([81, 140, 15]));
-        assert_eq!(interpolator.interpolate(&data_view, 8), Rgb([81, 140, 15]));
+        assert_eq!(interpolator.interpolate(data_view, 7), Rgb([81, 140, 15]));
+        assert_eq!(interpolator.interpolate(data_view, 8), Rgb([81, 140, 15]));
 
         // Check keyframe points
-        assert_eq!(interpolator.interpolate(&data_view, 0), Rgb([0, 0, 33]));
-        assert_eq!(interpolator.interpolate(&data_view, 3), Rgb([90, 60, 0]));
-        assert_eq!(interpolator.interpolate(&data_view, 6), Rgb([81, 140, 15]));
+        assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 33]));
+        assert_eq!(interpolator.interpolate(data_view, 3), Rgb([90, 60, 0]));
+        assert_eq!(interpolator.interpolate(data_view, 6), Rgb([81, 140, 15]));
     }
 }
