@@ -11,7 +11,8 @@ use super::{
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
-// For now, just jump to speed level 2. Adaptive later.
+// For now, jump to an intermediate render quality while interacting to make for a
+// responsive UI. Eventually we'll replace this with an adaptive controller.
 const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
