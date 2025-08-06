@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 use crate::core::{
     color_map::{
         with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper,
-        LinearInterpolator, StepInterpolator,
     },
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::write_image_to_file_or_panic,
+    interpolation::{LinearInterpolator, StepInterpolator},
     stopwatch::Stopwatch,
 };
 

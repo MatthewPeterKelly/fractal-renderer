@@ -212,7 +212,7 @@ where
 
         serialize_to_json_or_panic(
             self.file_prefix
-                .full_path_with_suffix(&format!("_{}.json", datetime)),
+                .full_path_with_suffix(&format!("_{datetime}.json")),
             &self.image_specification(),
         );
 
@@ -230,7 +230,7 @@ where
 
         write_image_to_file_or_panic(
             self.file_prefix
-                .full_path_with_suffix(&format!("_{}.png", datetime)),
+                .full_path_with_suffix(&format!("_{datetime}.png")),
             |f| imgbuf.save(f),
         );
     }
