@@ -8,19 +8,10 @@ use std::{
     path::PathBuf,
 };
 
+use crate::core::interpolation::{Interpolator, LinearInterpolator};
+
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
-
-/// Linear interpolation between two points, with extrapolation:
-///
-/// alpha = 0   --->  low
-/// alpha = 1   --->  upp
-///
-/// TODO:  put this in some math utility library?
-/// Yep:  just use LinearInterpolator::interppolate()
-pub fn interpolate(low: f64, upp: f64, alpha: f64) -> f64 {
-    upp * alpha + (1.0 - alpha) * low
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ImageSpecification {
@@ -200,6 +191,8 @@ pub struct RenderOptions {
     pub subpixel_antialiasing: u32,
 }
 
+const MAX_DOWNSAMPLE_STRIDE: f64 = 8.0;
+
 impl SpeedOptimizer for RenderOptions {
     type ReferenceCache = RenderOptions;
 
@@ -208,12 +201,10 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        let max_downsample_stride = 8.0; // TODO:  param?
-                                         // Note:  1.0 = no downsample stride (one sample per pixel)
-        self.downsample_stride = interpolate(1.0, max_downsample_stride, level) as usize;
-
+         // Note:  1.0 = no downsample stride (one sample per pixel)
+        self.downsample_stride = LinearInterpolator.interpolate(level, &1.0, &MAX_DOWNSAMPLE_STRIDE) as usize;
         self.subpixel_antialiasing =
-            interpolate(cache.subpixel_antialiasing as f64, 0.0, level) as u32;
+            LinearInterpolator.interpolate(level, &(cache.subpixel_antialiasing as f64), &0.0) as u32;
     }
 }
 
@@ -801,12 +792,7 @@ mod tests {
     use super::*;
     use ordered_float::OrderedFloat;
 
-    #[test]
-    fn test_interpolate() {
-        assert_eq!(interpolate(-2.3, 3.0, 0.0), -2.3);
-        assert_eq!(interpolate(-2.3, 3.0, 1.0), 3.0);
-        assert_eq!(interpolate(-5.0, 3.0, 0.5), -1.0);
-    }
+
     #[test]
     fn test_view_port_from_vertices() {
         let vertices = vec![[1.0, 2.0], [3.0, 5.0], [-1.0, -2.0], [2.0, 3.0]];

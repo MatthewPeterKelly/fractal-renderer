@@ -116,6 +116,8 @@ mod tests {
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
 
+ #[test]
+
     #[test]
     fn test_linear_interpolator_scalar() {
         let interp = LinearInterpolator;
