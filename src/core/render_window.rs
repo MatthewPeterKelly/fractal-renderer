@@ -178,8 +178,9 @@ where
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
                 self.render();
                 if level > 0.0 {
-                    // HACK:  asymtotiallcy approach one  (maximum optimization)
-                    self.render_required = Some(0.5 * (1.0 + level));
+                    // HACK:  asymtotiallcy approach zero  (maximum quality)
+                    // We'll fix this properly in a follow-up project.
+                    self.render_required = Some(0.5 * level);
                 } else {
                     self.render_required = None;
                 }
