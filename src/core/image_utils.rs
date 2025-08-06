@@ -17,6 +17,7 @@ use super::stopwatch::Stopwatch;
 /// alpha = 1   --->  upp
 ///
 /// TODO:  put this in some math utility library?
+/// Yep:  just use LinearInterpolator::interppolate()
 pub fn interpolate(low: f64, upp: f64, alpha: f64) -> f64 {
     upp * alpha + (1.0 - alpha) * low
 }
