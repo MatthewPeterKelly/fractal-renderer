@@ -74,7 +74,7 @@ where
     }
 }
 
-/// Step interpolator switches from a to b at a threshold
+/// Step interpolator switches from the lower to upper value above the specified threshold
 #[derive(Default)]
 pub struct StepInterpolator<T: Float + Copy> {
     pub threshold: T,
@@ -85,11 +85,11 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
-    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V {
+    fn interpolate(&self, alpha: T, low: &V, upp: &V) -> V {
         if alpha > self.threshold {
-            *b
+            *upp
         } else {
-            *a
+            *low
         }
     }
 }
@@ -104,8 +104,8 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
-    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V {
-        *a + (*b - *a) * alpha
+    fn interpolate(&self, alpha: T, low: &V, upp: &V) -> V {
+        *low + (*upp - *low) * alpha
     }
 }
 
@@ -119,28 +119,28 @@ mod tests {
     #[test]
     fn test_linear_interpolator_scalar() {
         let interp = LinearInterpolator;
-        let a: f32 = 10.0;
-        let b: f32 = 20.0;
+        let low: f32 = 10.0;
+        let upp: f32 = 20.0;
         // Keyframes
-        assert_relative_eq!(interp.interpolate(0.0, &a, &b), 10.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.interpolate(1.0, &a, &b), 20.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.0, &low, &upp), 10.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.0, &low, &upp), 20.0, epsilon = 1e-6);
         // interpolation and extrapolation
-        assert_relative_eq!(interp.interpolate(0.5, &a, &b), 15.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.interpolate(1.5, &a, &b), 25.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.5, &low, &upp), 15.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.5, &low, &upp), 25.0, epsilon = 1e-6);
     }
 
     #[test]
     fn test_step_interpolator_scalar() {
         let interp = StepInterpolator { threshold: 0.5 };
-        let a: f64 = 1.0;
-        let b: f64 = 5.0;
-        assert_eq!(interp.interpolate(-0.5, &a, &b), 1.0);
-        assert_eq!(interp.interpolate(0.0, &a, &b), 1.0);
-        assert_eq!(interp.interpolate(0.49999, &a, &b), 1.0);
-        assert_eq!(interp.interpolate(0.5, &a, &b), 1.0);
-        assert_eq!(interp.interpolate(0.50001, &a, &b), 5.0);
-        assert_eq!(interp.interpolate(1.0, &a, &b), 5.0);
-        assert_eq!(interp.interpolate(1.5, &a, &b), 5.0);
+        let low: f64 = 1.0;
+        let upp: f64 = 5.0;
+        assert_eq!(interp.interpolate(-0.5, &low, &upp), 1.0);
+        assert_eq!(interp.interpolate(0.0, &low, &upp), 1.0);
+        assert_eq!(interp.interpolate(0.49999, &low, &upp), 1.0);
+        assert_eq!(interp.interpolate(0.5, &low, &upp), 1.0);
+        assert_eq!(interp.interpolate(0.50001, &low, &upp), 5.0);
+        assert_eq!(interp.interpolate(1.0, &low, &upp), 5.0);
+        assert_eq!(interp.interpolate(1.5, &low, &upp), 5.0);
     }
 
     #[test]
