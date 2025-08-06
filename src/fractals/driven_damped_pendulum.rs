@@ -5,6 +5,7 @@ use crate::core::{
     },
     ode_solvers::rk4_simulate,
 };
+use num_traits::Pow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -91,8 +92,8 @@ impl SpeedOptimizer for DrivenDampedPendulumParams {
         }
     }
 
-    fn set_speed_optimization_level(&mut self, level: u32, cache: &Self::ReferenceCache) {
-        let scale = 1.0 / (2u32.pow(level) as f64);
+    fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
+        let scale = 1.0 / 2.0.pow(level);
 
         self.n_max_period =
             scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, scale) as u32;

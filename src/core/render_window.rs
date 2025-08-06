@@ -11,8 +11,9 @@ use super::{
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
-// For now, just jump to speed level 2. Adaptive later.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: u32 = 2;
+// For now, jump to an intermediate render quality while interacting to make for a
+// responsive UI. Eventually we'll replace this with an adaptive controller.
+const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -82,7 +83,7 @@ pub struct PixelGrid<F: Renderable> {
 
     // This flag is set high when we need to trigger another render pass.
     // If set, then it contains the desired speed optimization level for the render.
-    render_required: Option<u32>,
+    render_required: Option<f64>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -110,7 +111,7 @@ where
             renderer: renderer.clone(),
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: Some(0),
+            render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
         };
         pixel_grid
@@ -149,7 +150,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0);
+        self.render_required = Some(0.0);
     }
 
     fn update(
@@ -177,9 +178,10 @@ where
                     .unwrap()
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
                 self.render();
-
-                if level > 0 {
-                    self.render_required = Some(level - 1);
+                if level > 0.0 {
+                    // HACK:  asymtotiallcy approach zero  (maximum quality)
+                    // We'll fix this properly in a follow-up project.
+                    self.render_required = Some(0.5 * level);
                 } else {
                     self.render_required = None;
                 }
