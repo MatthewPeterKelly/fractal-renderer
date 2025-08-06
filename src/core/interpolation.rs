@@ -7,7 +7,7 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
-    fn interpolate(&self, alpha: T, a: &V, b: &V) -> V;
+    fn interpolate(&self, alpha: T, a: V, b: V) -> V;
 }
 
 /// Keyframes, used to construct (and define) a piecewise interpolator
@@ -69,7 +69,7 @@ where
             let val_low = self.queries[idx_low];
             let alpha = (query - val_low) / (self.queries[idx_upp] - val_low);
             self.interpolator
-                .interpolate(alpha, &self.values[idx_low], &self.values[idx_upp])
+                .interpolate(alpha, self.values[idx_low], self.values[idx_upp])
         }
     }
 }
@@ -85,11 +85,11 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
-    fn interpolate(&self, alpha: T, low: &V, upp: &V) -> V {
+    fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
         if alpha > self.threshold {
-            *upp
+            upp
         } else {
-            *low
+            low
         }
     }
 }
@@ -104,8 +104,8 @@ where
     T: Float + Copy,
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
-    fn interpolate(&self, alpha: T, low: &V, upp: &V) -> V {
-        *low + (*upp - *low) * alpha
+    fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
+        low + (upp - low) * alpha
     }
 }
 
@@ -122,11 +122,11 @@ mod tests {
         let low: f32 = 10.0;
         let upp: f32 = 20.0;
         // Keyframes
-        assert_relative_eq!(interp.interpolate(0.0, &low, &upp), 10.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.interpolate(1.0, &low, &upp), 20.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.0, low, upp), 10.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.0, low, upp), 20.0, epsilon = 1e-6);
         // interpolation and extrapolation
-        assert_relative_eq!(interp.interpolate(0.5, &low, &upp), 15.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.interpolate(1.5, &low, &upp), 25.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.5, low, upp), 15.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.5, low, upp), 25.0, epsilon = 1e-6);
     }
 
     #[test]
@@ -134,13 +134,13 @@ mod tests {
         let interp = StepInterpolator { threshold: 0.5 };
         let low: f64 = 1.0;
         let upp: f64 = 5.0;
-        assert_eq!(interp.interpolate(-0.5, &low, &upp), 1.0);
-        assert_eq!(interp.interpolate(0.0, &low, &upp), 1.0);
-        assert_eq!(interp.interpolate(0.49999, &low, &upp), 1.0);
-        assert_eq!(interp.interpolate(0.5, &low, &upp), 1.0);
-        assert_eq!(interp.interpolate(0.50001, &low, &upp), 5.0);
-        assert_eq!(interp.interpolate(1.0, &low, &upp), 5.0);
-        assert_eq!(interp.interpolate(1.5, &low, &upp), 5.0);
+        assert_eq!(interp.interpolate(-0.5, low, upp), 1.0);
+        assert_eq!(interp.interpolate(0.0, low, upp), 1.0);
+        assert_eq!(interp.interpolate(0.49999, low, upp), 1.0);
+        assert_eq!(interp.interpolate(0.5, low, upp), 1.0);
+        assert_eq!(interp.interpolate(0.50001, low, upp), 5.0);
+        assert_eq!(interp.interpolate(1.0, low, upp), 5.0);
+        assert_eq!(interp.interpolate(1.5, low, upp), 5.0);
     }
 
     #[test]
@@ -148,10 +148,10 @@ mod tests {
         let interp = LinearInterpolator;
         let low = Vector3::new(-5.0_f32, 2.0, 6.0);
         let upp = Vector3::new(10.0_f32, 20.0, 30.0);
-        assert_relative_eq!(interp.interpolate(0.0, &low, &upp), low, epsilon = 1e-6);
-        assert_relative_eq!(interp.interpolate(1.0, &low, &upp), upp, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.0, low, upp), low, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(1.0, low, upp), upp, epsilon = 1e-6);
         assert_relative_eq!(
-            interp.interpolate(0.3, &low, &upp),
+            interp.interpolate(0.3, low, upp),
             0.7 * low + 0.3 * upp,
             epsilon = 1e-6
         );
