@@ -201,10 +201,12 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-         // Note:  1.0 = no downsample stride (one sample per pixel)
-        self.downsample_stride = LinearInterpolator.interpolate(level, &1.0, &MAX_DOWNSAMPLE_STRIDE) as usize;
+        // Note:  1.0 = no downsample stride (one sample per pixel)
+        self.downsample_stride =
+            LinearInterpolator.interpolate(level, &1.0, &MAX_DOWNSAMPLE_STRIDE) as usize;
         self.subpixel_antialiasing =
-            LinearInterpolator.interpolate(level, &(cache.subpixel_antialiasing as f64), &0.0) as u32;
+            LinearInterpolator.interpolate(level, &(cache.subpixel_antialiasing as f64), &0.0)
+                as u32;
     }
 }
 
@@ -791,7 +793,6 @@ mod tests {
 
     use super::*;
     use ordered_float::OrderedFloat;
-
 
     #[test]
     fn test_view_port_from_vertices() {

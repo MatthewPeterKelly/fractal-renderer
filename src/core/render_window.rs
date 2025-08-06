@@ -12,7 +12,7 @@ use super::{
 };
 
 // For now, just jump to speed level 2. Adaptive later.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: u32 = 2;
+const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -177,9 +177,9 @@ where
                     .unwrap()
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
                 self.render();
-
-                if level > 0 {
-                    self.render_required = Some(level - 1);
+                if level > 0.0 {
+                    // HACK:  asymtotiallcy approach one  (maximum optimization)
+                    self.render_required = Some(0.5 * (1.0 + level));
                 } else {
                     self.render_required = None;
                 }
