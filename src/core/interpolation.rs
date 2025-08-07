@@ -19,6 +19,8 @@ pub struct InterpolationKeyframe<T, V> {
 }
 
 /// Generic container for performing interpolation between keyframes
+
+#[derive(Clone, Debug)]
 pub struct KeyframeInterpolator<T, V, F>
 where
     T: Float + Copy,
@@ -56,6 +58,29 @@ where
         }
     }
 
+    pub fn set_keyframe_query(&mut self, index: usize, input: T) {
+        assert!(index < self.queries.len(), "Index out of bounds!  Cannot update keyframe input.");
+        if index > 0 {
+            assert!(
+                self.queries[index - 1] < input,
+                "The keyframes must remain strictly monotonic! Violation on lower edge."
+            );
+        }
+        if index < (self.queries.len() - 1) {
+            assert!(
+                input < self.queries[index + 1],
+                "The keyframes must remain strictly monotonic! Violation on upper edge."
+            );
+        }
+        self.queries[index] = input;
+    }
+
+        pub fn set_keyframe_value(&mut self, index: usize, output: V) {
+        assert!(index < self.queries.len(), "Index out of bounds!  Cannot update keyframe output.");
+        // No need to check monotonicity for output values, as they can be any value.
+        self.values[index] = output;
+    }
+
     /// Evaluates the value of the trajectory by interpolating between keyframes.
     /// The query will be clamped to the valid domain of the keyframes (no extrapolation).
     pub fn evaluate(&self, query: T) -> V {
@@ -75,7 +100,7 @@ where
 }
 
 /// Step interpolator switches from the lower to upper value above the specified threshold
-#[derive(Default)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct StepInterpolator<T: Float + Copy> {
     pub threshold: T,
 }
@@ -96,7 +121,7 @@ where
 
 /// Linear interpolation: a * (1 - alpha) + b * alpha
 /// Extrapolate if alpha is not in [0,1]
-#[derive(Default)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct LinearInterpolator;
 
 impl<T, V> Interpolator<T, V> for LinearInterpolator
