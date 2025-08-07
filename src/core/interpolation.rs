@@ -62,7 +62,7 @@ where
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
-            "Index out of bounds!  Cannot update keyframe input."
+            "Index out of bounds!  Cannot update keyframe query."
         );
         if index > 0 {
             assert!(
@@ -83,7 +83,7 @@ where
     pub fn set_keyframe_value(&mut self, index: usize, value: V) {
         assert!(
             index < self.queries.len(),
-            "Index out of bounds!  Cannot update keyframe output."
+            "Index out of bounds!  Cannot update keyframe value."
         );
         // No need to check monotonicity for output values, as they can be any value.
         self.values[index] = value;
@@ -335,12 +335,42 @@ mod tests {
         interp.set_keyframe_value(1, 200.0);
         assert_relative_eq!(interp.evaluate(-1.0), 20.0, epsilon = 1e-6); // extrapolate (clamped)
         assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
-
         assert_relative_eq!(interp.evaluate(3.0), 128.0, epsilon = 1e-6); // interpolate
         assert_relative_eq!(interp.evaluate(5.0), 200.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolate
-
         assert_relative_eq!(interp.evaluate(10.0), 0.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(18.0), 0.0, epsilon = 1e-6); // extrapolate (clamped)
+    }
+
+    #[test]
+    #[should_panic(expected = "Index out of bounds!  Cannot update keyframe query.")]
+    fn test_keyframe_update_panic_query_bounds() {
+        let mut interp = make_test_scalar_interpolator();
+        interp.set_keyframe_query(10, 5.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Index out of bounds!  Cannot update keyframe value.")]
+    fn test_keyframe_update_panic_value_bounds() {
+        let mut interp = make_test_scalar_interpolator();
+        interp.set_keyframe_value(10, 5.0);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The keyframes must remain strictly monotonic! Violation on lower edge."
+    )]
+    fn test_keyframe_update_panic_query_low_monotonic() {
+        let mut interp = make_test_scalar_interpolator();
+        interp.set_keyframe_query(1, -100.0);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The keyframes must remain strictly monotonic! Violation on upper edge."
+    )]
+    fn test_keyframe_update_panic_query_upp_monotonic() {
+        let mut interp = make_test_scalar_interpolator();
+        interp.set_keyframe_query(1, 100.0);
     }
 }
