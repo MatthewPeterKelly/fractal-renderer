@@ -53,8 +53,8 @@ where
         let internal_keyframes: Vec<InterpolationKeyframe<f32, Vector3<f32>>> = keyframes
             .iter()
             .map(|kf| InterpolationKeyframe {
-                input: kf.query,
-                output: Vector3::new(
+                query: kf.query,
+                value: Vector3::new(
                     kf.rgb_raw[0] as f32,
                     kf.rgb_raw[1] as f32,
                     kf.rgb_raw[2] as f32,

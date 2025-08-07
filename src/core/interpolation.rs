@@ -14,8 +14,8 @@ where
 /// Generic keyframe: maps an input (query) to an output value.
 #[derive(Clone, Copy)]
 pub struct InterpolationKeyframe<T, V> {
-    pub input: T,
-    pub output: V,
+    pub query: T,
+    pub value: V,
 }
 
 /// Generic container for performing interpolation between keyframes
@@ -43,13 +43,13 @@ where
 
         for pair in keyframes.windows(2) {
             assert!(
-                pair[0].input < pair[1].input,
+                pair[0].query < pair[1].query,
                 "keyframes must be strictly increasing"
             );
         }
 
-        let queries = keyframes.iter().map(|k| k.input).collect();
-        let values = keyframes.iter().map(|k| k.output).collect();
+        let queries = keyframes.iter().map(|k| k.query).collect();
+        let values = keyframes.iter().map(|k| k.value).collect();
 
         Self {
             queries,
@@ -58,27 +58,35 @@ where
         }
     }
 
-    pub fn set_keyframe_query(&mut self, index: usize, input: T) {
-        assert!(index < self.queries.len(), "Index out of bounds!  Cannot update keyframe input.");
+    #[cfg(test)]
+    pub fn set_keyframe_query(&mut self, index: usize, query: T) {
+        assert!(
+            index < self.queries.len(),
+            "Index out of bounds!  Cannot update keyframe input."
+        );
         if index > 0 {
             assert!(
-                self.queries[index - 1] < input,
+                self.queries[index - 1] < query,
                 "The keyframes must remain strictly monotonic! Violation on lower edge."
             );
         }
         if index < (self.queries.len() - 1) {
             assert!(
-                input < self.queries[index + 1],
+                query < self.queries[index + 1],
                 "The keyframes must remain strictly monotonic! Violation on upper edge."
             );
         }
-        self.queries[index] = input;
+        self.queries[index] = query;
     }
 
-        pub fn set_keyframe_value(&mut self, index: usize, output: V) {
-        assert!(index < self.queries.len(), "Index out of bounds!  Cannot update keyframe output.");
+    #[cfg(test)]
+    pub fn set_keyframe_value(&mut self, index: usize, value: V) {
+        assert!(
+            index < self.queries.len(),
+            "Index out of bounds!  Cannot update keyframe output."
+        );
         // No need to check monotonicity for output values, as they can be any value.
-        self.values[index] = output;
+        self.values[index] = value;
     }
 
     /// Evaluates the value of the trajectory by interpolating between keyframes.
@@ -141,6 +149,24 @@ mod tests {
     use approx::assert_relative_eq;
     use nalgebra::Vector3;
 
+    fn make_test_scalar_interpolator() -> KeyframeInterpolator<f32, f32, LinearInterpolator> {
+        let keyframes: Vec<InterpolationKeyframe<f32, f32>> = vec![
+            InterpolationKeyframe {
+                query: -2.0,
+                value: 1.0,
+            },
+            InterpolationKeyframe {
+                query: 2.0,
+                value: 11.0,
+            },
+            InterpolationKeyframe {
+                query: 6.0,
+                value: 12.0,
+            },
+        ];
+        KeyframeInterpolator::new(keyframes, LinearInterpolator)
+    }
+
     #[test]
     fn test_linear_interpolator_scalar() {
         let interp = LinearInterpolator;
@@ -184,21 +210,7 @@ mod tests {
 
     #[test]
     fn test_keyframe_interpolator_scalar_linear() {
-        let keyframes: Vec<InterpolationKeyframe<f32, f32>> = vec![
-            InterpolationKeyframe {
-                input: -2.0,
-                output: 1.0,
-            },
-            InterpolationKeyframe {
-                input: 2.0,
-                output: 11.0,
-            },
-            InterpolationKeyframe {
-                input: 6.0,
-                output: 12.0,
-            },
-        ];
-        let interp = KeyframeInterpolator::new(keyframes, LinearInterpolator);
+        let interp = make_test_scalar_interpolator();
         assert_relative_eq!(interp.evaluate(-6.0), 1.0, epsilon = 1e-6); // extrapolate (clamped)
         assert_relative_eq!(interp.evaluate(-2.0), 1.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(1.0), 8.5, epsilon = 1e-6); // interpolate
@@ -214,12 +226,12 @@ mod tests {
         let upp = Vector3::new(100.0, 50.0, -30.0);
         let keyframes: Vec<InterpolationKeyframe<f32, Vector3<f32>>> = vec![
             InterpolationKeyframe {
-                input: -3.0,
-                output: low,
+                query: -3.0,
+                value: low,
             },
             InterpolationKeyframe {
-                input: 9.0,
-                output: upp,
+                query: 9.0,
+                value: upp,
             },
         ];
         let interp = KeyframeInterpolator::new(keyframes, LinearInterpolator);
@@ -247,22 +259,88 @@ mod tests {
     fn test_non_monotonic_keyframes_panics() {
         let keyframes = vec![
             InterpolationKeyframe {
-                input: 0.0f32,
-                output: 1.0,
+                query: 0.0f32,
+                value: 1.0,
             },
             InterpolationKeyframe {
-                input: 0.5,
-                output: 2.0,
+                query: 0.5,
+                value: 2.0,
             },
             InterpolationKeyframe {
-                input: 0.5,
-                output: 3.0,
+                query: 0.5,
+                value: 3.0,
             },
             InterpolationKeyframe {
-                input: 1.0,
-                output: 4.0,
+                query: 1.0,
+                value: 4.0,
             },
         ];
         let _ = KeyframeInterpolator::new(keyframes, LinearInterpolator);
+    }
+
+    #[test]
+    fn test_keyframe_mutable_update() {
+        let mut interp = make_test_scalar_interpolator();
+        // Baseline!
+        assert_relative_eq!(interp.evaluate(-6.0), 1.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-2.0), 1.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(1.0), 8.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(2.0), 11.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(3.0), 11.25, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(6.0), 12.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(8.0), 12.0, epsilon = 1e-6); // extrapolate (clamped)
+
+        // Now let's modify the query of the first keyframe:
+        interp.set_keyframe_query(0, 0.0);
+        assert_relative_eq!(interp.evaluate(-1.0), 1.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-0.0), 1.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(1.0), 6.0, epsilon = 1e-6); // interpolate (updated!)
+        assert_relative_eq!(interp.evaluate(2.0), 11.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(3.0), 11.25, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(6.0), 12.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(8.0), 12.0, epsilon = 1e-6); // extrapolate (clamped)
+
+        // Now let's modify the value of the first keyframe:
+        interp.set_keyframe_value(0, 20.0);
+        assert_relative_eq!(interp.evaluate(-1.0), 20.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(1.0), 15.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(2.0), 11.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(3.0), 11.25, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(6.0), 12.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(8.0), 12.0, epsilon = 1e-6); // extrapolate (clamped)
+
+        // Now let's modify the query of the last keyframe:
+        interp.set_keyframe_query(2, 10.0);
+        assert_relative_eq!(interp.evaluate(-1.0), 20.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(1.0), 15.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(2.0), 11.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(6.0), 11.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(10.0), 12.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(18.0), 12.0, epsilon = 1e-6); // extrapolate (clamped)
+
+        // Now let's modify the value of the last keyframe:
+        interp.set_keyframe_value(2, 0.0);
+        assert_relative_eq!(interp.evaluate(-1.0), 20.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(1.0), 15.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(2.0), 11.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(6.0), 5.5, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(10.0), 0.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(18.0), 0.0, epsilon = 1e-6); // extrapolate (clamped)
+
+        // And the middle keyframe
+        interp.set_keyframe_query(1, 5.0);
+        interp.set_keyframe_value(1, 200.0);
+        assert_relative_eq!(interp.evaluate(-1.0), 20.0, epsilon = 1e-6); // extrapolate (clamped)
+        assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
+
+        assert_relative_eq!(interp.evaluate(3.0), 128.0, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(5.0), 200.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolate
+
+        assert_relative_eq!(interp.evaluate(10.0), 0.0, epsilon = 1e-6);
+        assert_relative_eq!(interp.evaluate(18.0), 0.0, epsilon = 1e-6); // extrapolate (clamped)
     }
 }
