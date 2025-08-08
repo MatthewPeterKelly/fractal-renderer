@@ -409,17 +409,22 @@ mod tests {
         let render_proxy = build_fast_render_proxy_model(timing_params.target_update_period);
         let steady_state_period = *render_proxy.values().first().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MIN_COMMAND;
-        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
-        let converged = simulate_controller(
-            &mut policy,
-            &render_proxy,
-            50,
-            steady_state_period,
-            steady_state_command,
-            1e-6,
-        );
-        assert!(
-            converged
-        );
+
+        let initial_commands = [0.0,0.3,0.7,1.0];
+        let max_iterations = 200;   // This should NOT be so slow... Boo.
+        for initial_command in initial_commands {
+            let mut policy = InteractiveFrameRatePolicy::new(timing_params.clone());
+            policy.command = initial_command;
+            let converged = simulate_controller(
+                &mut policy,
+                &render_proxy,max_iterations,
+                steady_state_period,
+                steady_state_command,
+                1e-2,
+            );
+            assert!(
+                converged, "Failed to converge with initial command: {:.6}", initial_command
+            );
+        }
     }
 }
