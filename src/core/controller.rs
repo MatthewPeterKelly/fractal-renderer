@@ -166,7 +166,7 @@ impl InteractiveFrameRatePolicy {
     pub const MIN_PERIOD: f64 = 0.0;
 
     pub fn new(timing_params: InteractiveFrameRateTimingParams) -> InteractiveFrameRatePolicy {
-        let nominal_command  = Self::MIN_COMMAND;
+        let nominal_command = Self::MIN_COMMAND;
         let command_margin =
             timing_params.normalized_margin * (Self::MAX_COMMAND - Self::MIN_COMMAND);
         let period_margin = timing_params.normalized_margin
@@ -232,6 +232,8 @@ impl AdaptiveOptimizationRegulator {
 
 #[cfg(test)]
 mod tests {
+    use crate::cli::render;
+
     use super::*;
     use approx::assert_relative_eq;
     use more_asserts::{assert_ge, assert_le};
@@ -239,6 +241,70 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::Rng;
     use rand::SeedableRng;
+
+    /// Model that maps from a command to a period, enulating the I/O behavior of the full
+    /// render pipeline. The "fast" variant will emulate a system that always renders faster
+    /// than the target period, regardless of the command. It does however satisfy the requirement
+    /// that a higher command will always yield a shorter period.
+    fn build_fast_render_proxy_model(
+        target_period: f64,
+    ) -> KeyframeInterpolator<f64, f64, LinearInterpolator> {
+        let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
+            InterpolationKeyframe {
+                query: 0.0,
+                value: 0.95 * target_period,
+            },
+            InterpolationKeyframe {
+                query: 0.1,
+                value: 0.7 * target_period,
+            },
+            InterpolationKeyframe {
+                query: 0.4,
+                value: 0.4 * target_period,
+            },
+            InterpolationKeyframe {
+                query: 1.0,
+                value: 0.05 * target_period,
+            },
+        ];
+        KeyframeInterpolator::new(keyframes, LinearInterpolator)
+    }
+
+    /// Simulates a combined "controller and render pipeline proxy", allowing us to
+    /// test the closed-loop performance in various scenarios. It monitors convergence
+    /// of the system toward the expected steadty state behavior, and returns true if the system
+    /// converged within the specified number of iterations.
+    fn simulate_controller(
+        policy: &mut InteractiveFrameRatePolicy,
+        render_proxy: &KeyframeInterpolator<f64, f64, LinearInterpolator>,
+        num_iterations: usize,
+        steady_state_period: f64,
+        steady_state_command: f64,
+        convergence_tol: f64,
+    ) -> bool {
+        for _ in 0..num_iterations {
+            let prev_command = policy.command;
+            let prev_period = render_proxy.evaluate(prev_command);
+            let next_command = policy.evaluate_policy(prev_period);
+            let next_period = render_proxy.evaluate(next_command);
+
+            let prev_cmd_err = (prev_command - steady_state_command).abs();
+            let next_cmd_err = (next_command - steady_state_command).abs();
+            assert_le!(next_cmd_err, prev_cmd_err);
+
+            let prev_period_err = (prev_period - steady_state_period).abs();
+            let next_period_err = (next_period - steady_state_period).abs();
+            assert_le!(next_period_err, prev_period_err);
+
+            // If the command and period errors are both small enough, we can consider the system
+            // to have converged to a steady state.
+            if next_cmd_err < convergence_tol && next_period_err < convergence_tol {
+                return true;
+            }
+        }
+        // If we reach here, the system did not converge within the specified iterations.
+        false
+    }
 
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
@@ -322,5 +388,26 @@ mod tests {
             assert_le!(command, InteractiveFrameRatePolicy::MAX_COMMAND);
             assert_ge!(command, InteractiveFrameRatePolicy::MIN_COMMAND);
         }
+    }
+
+    #[test]
+    fn test_interactive_frame_rate_policy_closed_loop_fast_render() {
+        let timing_params = InteractiveFrameRateTimingParams::new();
+        let render_proxy = build_fast_render_proxy_model(timing_params.target_update_period);
+        let steady_state_period = *render_proxy.values().last().unwrap();
+        let steady_state_command = InteractiveFrameRatePolicy::MAX_COMMAND;
+        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let converged = simulate_controller(
+            &mut policy,
+            &render_proxy,
+            50,
+            steady_state_period,
+            steady_state_command,
+            1e-6,
+        );
+        assert!(
+            converged,
+            "The controller did not converge to the expected steady state behavior."
+        );
     }
 }
