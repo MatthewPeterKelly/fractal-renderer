@@ -180,6 +180,23 @@ impl InteractiveFrameRatePolicy {
                 query: timing_params.target_update_period,
                 value: nominal_command,
             },
+
+            // MPK:  problem here. This data point is sometimes *really* bad.
+            // The system still converges, but it takes a long time.
+            // Probably a good idea here is to add two probe values at the edges.
+            // First evaluation runs at command = 1.0.
+            // Second evaluation runs at command = 0.0.
+            // Then, set the value of the middle keyframe as linear interpolation
+            // between the two probes. THEN start the regular algorithm.
+            // Also, rather than always updating this middle keyframe, we can
+            // update the closest of the three keyframes to the measured period...
+            // We we need to be careful to ensure that the model remains invertable.
+            // ... this is a modification on linear K-nearest-neighbor interpolation...
+            // But it should fix the convergence issues.
+            //
+            // ... could go even simpler, with a two-point model, which would make the check
+            // for which point and also for monotonicity much easier. But probably nice to have
+            // the three-point model for faster convergence.
             InterpolationKeyframe {
                 query: timing_params.max_expected_period + period_margin,
                 value: Self::MIN_COMMAND - command_margin,
