@@ -161,9 +161,9 @@ pub struct InteractiveFrameRatePolicy {
 }
 
 impl InteractiveFrameRatePolicy {
-    const MAX_COMMAND: f64 = 1.0;
-    const MIN_COMMAND: f64 = 0.0;
-    const MIN_PERIOD: f64 = 0.0;
+   pub const MAX_COMMAND: f64 = 1.0;
+  pub  const MIN_COMMAND: f64 = 0.0;
+  pub  const MIN_PERIOD: f64 = 0.0;
 
     pub fn new(timing_params: InteractiveFrameRateTimingParams) -> InteractiveFrameRatePolicy {
         let nominal_command: f64 = 0.5 * (Self::MAX_COMMAND + Self::MIN_COMMAND);
@@ -228,3 +228,55 @@ impl AdaptiveOptimizationRegulator {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+    use more_asserts::{assert_gt, assert_lt};
+
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
+        // Given the nominal period, the command should not change.
+        let timing_params = InteractiveFrameRateTimingParams::new();
+        let nominal_period = timing_params.target_update_period;
+        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let initial_command = policy.command;
+        for _ in 0..10 {
+            let command = policy.evaluate_policy(nominal_period);
+            assert_relative_eq!(command, initial_command, epsilon = 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_too_slow() {
+        let timing_params = InteractiveFrameRateTimingParams::new();
+        let render_period_too_slow = 4.0 * timing_params.target_update_period;
+
+        // Given a slow period, the command should increase, eventually saturating at 1.0.
+        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        for _ in 0..10 {
+            let prev_command = policy.command;
+            let next_command = policy.evaluate_policy(render_period_too_slow);
+            assert_gt!(next_command, prev_command);
+            assert_lt!(next_command, InteractiveFrameRatePolicy::MAX_COMMAND);
+        }
+        assert_relative_eq!(policy.command, InteractiveFrameRatePolicy::MAX_COMMAND, epsilon = 1e-3);
+    }
+
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_too_fast() {
+        let timing_params = InteractiveFrameRateTimingParams::new();
+        let render_period_too_slow = 4.0 * timing_params.target_update_period;
+
+        // Given a slow period, the command should increase, eventually saturating at 1.0.
+        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        for _ in 0..10 {
+            let prev_command = policy.command;
+            let next_command = policy.evaluate_policy(render_period_too_slow);
+            assert_lt!(next_command, prev_command);
+            assert_gt!(next_command, InteractiveFrameRatePolicy::MIN_COMMAND);
+        }
+        assert_relative_eq!(policy.command, InteractiveFrameRatePolicy::MIN_COMMAND, epsilon = 1e-3);
+    }
+
+}
