@@ -5,12 +5,11 @@ use std::sync::{
 
 use image::Rgb;
 
-use crate::core::controller::AdaptiveOptimizationRegulator;
-
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
     image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
+    controller::AdaptiveOptimizationRegulator,
 };
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
@@ -173,10 +172,7 @@ where
         // be copied to the screen using the `draw` method. The `render_task_is_busy` flag
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
-        if self.view_control.update(time, center_command, zoom_command) {
-            // Recompute the "render level" whenever the usere modifies the view port...
-            self.render_required = Some(self.adaptive_quality_regulator.interactive_update(time));
-        }
+        let user_interaction =self.view_control.update(time, center_command, zoom_command);
         if let Some(level) = self.render_required {
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 self.renderer
@@ -188,7 +184,7 @@ where
                 // Problem: this is an "inactive update". The view port has not changed and the user is
                 // not waiting on a responsive UI.  Now we should switch the focus and instead just
                 // gradually work on increasing the quality of the image in-place.
-                self.render_required = self.adaptive_quality_regulator.idle_update(time);
+                self.render_required = self.adaptive_quality_regulator.update(time, user_interaction);
             }
         }
 

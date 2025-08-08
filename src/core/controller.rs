@@ -1,5 +1,3 @@
-use std::{f32::MIN_POSITIVE, os::raw};
-
 use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, LinearInterpolator};
 
 #[derive(Clone, Debug)]
@@ -152,29 +150,29 @@ impl InteractiveFrameRatePolicy {
     const MIN_PERIOD: f64 = 0.0;
 
     pub fn new(timing_params: InteractiveFrameRateTimingParams) -> InteractiveFrameRatePolicy {
-        const NOMINAL_COMMAND: f64 = 0.5 * (Self::MAX_COMMAND + Self::MIN_COMMAND);
+        let nominal_command: f64 = 0.5 * (Self::MAX_COMMAND + Self::MIN_COMMAND);
         let command_margin =
             timing_params.normalized_margin * (Self::MAX_COMMAND - Self::MIN_COMMAND);
         let period_margin = timing_params.normalized_margin
             * (timing_params.max_expected_period - Self::MIN_PERIOD);
         let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
             InterpolationKeyframe {
-                input: Self::MIN_PERIOD - period_margin,
-                output: Self::MIN_COMMAND - command_margin,
+                query: Self::MIN_PERIOD - period_margin,
+                value: Self::MIN_COMMAND - command_margin,
             },
             InterpolationKeyframe {
-                input: timing_params.target_update_period,
-                output: NOMINAL_COMMAND,
+                query: timing_params.target_update_period,
+                value: nominal_command,
             },
             InterpolationKeyframe {
-                input: timing_params.max_expected_period + period_margin,
-                output: Self::MAX_COMMAND + command_margin,
+                query: timing_params.max_expected_period + period_margin,
+                value: Self::MAX_COMMAND + command_margin,
             },
         ];
         InteractiveFrameRatePolicy {
             timing_params,
             policy: KeyframeInterpolator::new(keyframes, LinearInterpolator),
-            command: NOMINAL_COMMAND,
+            command: nominal_command,
         }
     }
 
@@ -198,5 +196,20 @@ impl InteractiveFrameRatePolicy {
         self.command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
 
         self.command
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AdaptiveOptimizationRegulator {
+
+}
+
+impl AdaptiveOptimizationRegulator {
+    pub fn new(_time: f64) -> Self {
+        Self {}
+    }
+
+    pub fn update(&mut self, _period: f64, _user_interaction: bool) -> Option<f64> {
+None
     }
 }
