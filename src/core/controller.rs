@@ -127,9 +127,25 @@ pub struct InteractiveFrameRateTimingParams {
     normalized_margin: f64,
 }
 
+impl InteractiveFrameRateTimingParams {
+    pub fn new() -> InteractiveFrameRateTimingParams {
+        Self {
+            target_update_period: 0.040, // 25 frames per second
+            max_expected_period: 0.5,
+            normalized_margin: 0.05,
+        }
+    }
+}
+
+impl Default for InteractiveFrameRateTimingParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct InteractiveFrameRatePolicy {
-    // User-specified parameters for the timing policy -- do not change after construction.
+    // User-specified parameters for the timing policy, which do not change after construction.
     timing_params: InteractiveFrameRateTimingParams,
 
     // The policy is implemented by linear interpolation between keyframes,
@@ -200,9 +216,7 @@ impl InteractiveFrameRatePolicy {
 }
 
 #[derive(Clone, Debug)]
-pub struct AdaptiveOptimizationRegulator {
-
-}
+pub struct AdaptiveOptimizationRegulator {}
 
 impl AdaptiveOptimizationRegulator {
     pub fn new(_time: f64) -> Self {
@@ -210,6 +224,7 @@ impl AdaptiveOptimizationRegulator {
     }
 
     pub fn update(&mut self, _period: f64, _user_interaction: bool) -> Option<f64> {
-None
+        None
     }
 }
+
