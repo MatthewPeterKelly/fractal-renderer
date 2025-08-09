@@ -186,17 +186,18 @@ impl InteractiveFrameRatePolicy {
             // Probably a good idea here is to add two probe values at the edges.
             // First evaluation runs at command = 1.0.
             // Second evaluation runs at command = 0.0.
-            // Then, set the value of the middle keyframe as linear interpolation
-            // between the two probes. THEN start the regular algorithm.
-            // Also, rather than always updating this middle keyframe, we can
-            // update the closest of the three keyframes to the measured period...
-            // We we need to be careful to ensure that the model remains invertable.
-            // ... this is a modification on linear K-nearest-neighbor interpolation...
-            // But it should fix the convergence issues.
             //
-            // ... could go even simpler, with a two-point model, which would make the check
-            // for which point and also for monotonicity much easier. But probably nice to have
-            // the three-point model for faster convergence.
+            // I think the piecewise linear model is not a good fit for this problem.
+            // The problem is that it might not be monotonic, and it is unclear how
+            // to most effectively update the model.
+            // We know from first principles (and the code) that the computational
+            // complexity should drop off exponentially as the command increases
+            // toward 1.0... So, let's just make that the model.
+            // We can fit it to the first two probes, and then just scale the
+            // amplitude on each iteration to adaptive to the dynamic complexity
+            // of the render pipeline.
+
+
             InterpolationKeyframe {
                 query: timing_params.max_expected_period + period_margin,
                 value: Self::MIN_COMMAND - command_margin,
@@ -233,6 +234,70 @@ impl InteractiveFrameRatePolicy {
         self.command
     }
 }
+
+
+
+
+///////////////////////////////////////////////////////////////////////////
+
+
+            ///
+            ///
+            /// In code...
+            ///
+pub fn forward(a: f64, b: f64, x: f64) -> f64 {
+    a * (-b * x).exp()
+}
+
+/// Computes the inverse: x(f) = -(1 / B) * ln(f / A)
+/// Panics if `a <= 0.0` or `f <= 0.0` because the logarithm is undefined.
+pub fn inverse(a: f64, b: f64, f: f64) -> f64 {
+    assert!(a > 0.0, "Parameter 'a' must be positive");
+    assert!(f > 0.0, "Value 'f' must be positive");
+    - (f / a).ln() / b
+}
+
+
+
+/// Fits the model y = A * exp(-B * x) to two data points.
+/// Returns (A, B).
+/// Panics if y0 <= 0.0 or y1 <= 0.0 because the logarithm is undefined,
+/// or if x0 == x1.
+pub fn fit_two_points(x0: f64, y0: f64, x1: f64, y1: f64) -> (f64, f64) {
+    assert!(y0 > 0.0 && y1 > 0.0, "y values must be positive");
+    assert!(x0 != x1, "x0 and x1 must be distinct");
+
+    let b = -((y1 / y0).ln()) / (x1 - x0);
+    let a = y0 * (b * x0).exp();
+
+    (a, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fit_two_points() {
+        // True parameters
+        let a_true = 2.0;
+        let b_true = 0.5;
+
+        // Generate two points
+        let x0 = 1.0;
+        let x1 = 4.0;
+        let y0 = super::forward(a_true, b_true, x0);
+        let y1 = super::forward(a_true, b_true, x1);
+
+        // Fit model
+        let (a_est, b_est) = fit_two_points(x0, y0, x1, y1);
+
+        assert!((a_est - a_true).abs() < 1e-12);
+        assert!((b_est - b_true).abs() < 1e-12);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Debug)]
 pub struct AdaptiveOptimizationRegulator {}
