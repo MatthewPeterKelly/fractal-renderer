@@ -240,38 +240,55 @@ impl InteractiveFrameRatePolicy {
 
 ///////////////////////////////////////////////////////////////////////////
 
-
-            ///
-            ///
-            /// In code...
-            ///
-pub fn forward(a: f64, b: f64, x: f64) -> f64 {
-    a * (-b * x).exp()
+/// This model approximates the mapping from command to period as:
+/// period(command) = A * exp(-B * command)
+//// where A and B are positive constants.
+/// This model is always positive and monotonic, and has a single unique
+/// solution for any period in the range (0, A].
+/// It is initially fit to two data points, sampled at the bounds of the command range,
+/// and is then updated on each iteration by scaling the amplitude A to
+/// match the most recent measurement.
+struct ExponentialRenderPeriodModel {
+    a: f64,
+    b: f64,
 }
 
-/// Computes the inverse: x(f) = -(1 / B) * ln(f / A)
-/// Panics if `a <= 0.0` or `f <= 0.0` because the logarithm is undefined.
-pub fn inverse(a: f64, b: f64, f: f64) -> f64 {
-    assert!(a > 0.0, "Parameter 'a' must be positive");
-    assert!(f > 0.0, "Value 'f' must be positive");
-    - (f / a).ln() / b
+struct RenderPeriodSample {
+    command: f64,
+    period: f64,
 }
 
+impl ExponentialRenderPeriodModel {
+    pub fn new(sample_0: RenderPeriodSample, sample_1: RenderPeriodSample) -> Self {
 
+        let x0 = sample_0.command;
+        let y0 = sample_0.period;
+        let x1 = sample_1.command;
+        let y1 = sample_1.period;
 
-/// Fits the model y = A * exp(-B * x) to two data points.
-/// Returns (A, B).
-/// Panics if y0 <= 0.0 or y1 <= 0.0 because the logarithm is undefined,
-/// or if x0 == x1.
-pub fn fit_two_points(x0: f64, y0: f64, x1: f64, y1: f64) -> (f64, f64) {
-    assert!(y0 > 0.0 && y1 > 0.0, "y values must be positive");
-    assert!(x0 != x1, "x0 and x1 must be distinct");
+   assert!(y0 > 0.0 && y1 > 0.0, "Sampled periods must be positive!");
+    assert!(x0 != x1, "Sampled commands must be distinct!");
 
     let b = -((y1 / y0).ln()) / (x1 - x0);
     let a = y0 * (b * x0).exp();
 
-    (a, b)
+    assert!(a > 0.0, "Internal error:  output scaling parametrer 'a' must be positive");
+    assert!(b > 0.0, "Internal error:  input scaling parameter 'b' must be positive");
+    Self { a, b }
+
+    }
+
+    pub fn predict_period_from_command(&self, command: f64) -> f64 {
+        self.a * (-self.b * command).exp()
+    }
+
+    pub fn predict_command_from_period(&self, period: f64) -> f64 {
+        - (period / self.a).ln() / self.b
+    }
+
 }
+
+
 
 #[cfg(test)]
 mod tests {
