@@ -241,60 +241,60 @@ mod tests {
 
     }
 
-    // #[test]
-    // fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
-    //     // Given the nominal period, the command should not change.
-    //     let target_update_period = 0.025;
-    //     let nominal_period = target_update_period;
-    //     let mut policy: InteractiveFrameRatePolicy = InteractiveFrameRatePolicy::new(target_update_period);
-    //     policy.command = 0.5; // Set an initial non-trivial command for this test.
-    //     let initial_command = policy.command;
-    //     for _ in 0..10 {
-    //         let command = policy.evaluate_policy(nominal_period);
-    //         assert_relative_eq!(command, initial_command, epsilon = 1e-6);
-    //     }
-    // }
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
+        // Given the nominal period, the command should not change.
+        let target_update_period = 0.025;
+        let nominal_period = target_update_period;
+        let mut policy: InteractiveFrameRatePolicy = InteractiveFrameRatePolicy::new(target_update_period);
+        policy.command = 0.5; // Set an initial non-trivial command for this test.
+        let initial_command = policy.command;
+        for _ in 0..10 {
+            let command = policy.evaluate_policy(nominal_period);
+            assert_relative_eq!(command, initial_command, epsilon = 1e-6);
+        }
+    }
 
-    // #[test]
-    // fn test_interactive_frame_rate_policy_steady_state_convergence_too_slow() {
-    //     let target_update_period = 0.025;
-    //     let render_period_too_slow = 4.0 * target_update_period;
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_too_slow() {
+        let target_update_period = 0.025;
+        let render_period_too_slow = 4.0 * target_update_period;
 
-    //     // Given a slow period, the command should increase, eventually saturating at 1.0.
-    //     let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-    //     for _ in 0..25 {
-    //         let prev_command = policy.command;
-    //         let next_command = policy.evaluate_policy(render_period_too_slow);
-    //         assert_ge!(next_command, prev_command);
-    //         assert_le!(next_command, InteractiveFrameRatePolicy::MAX_COMMAND);
-    //     }
-    //     assert_relative_eq!(
-    //         policy.command,
-    //         InteractiveFrameRatePolicy::MAX_COMMAND,
-    //         epsilon = 1e-3
-    //     );
-    // }
+        // Given a slow period, the command should increase, eventually saturating at 1.0.
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
+        for _ in 0..25 {
+            let prev_command = policy.command;
+            let next_command = policy.evaluate_policy(render_period_too_slow);
+            assert_ge!(next_command, prev_command);
+            assert_le!(next_command, InteractiveFrameRatePolicy::MAX_COMMAND);
+        }
+        assert_relative_eq!(
+            policy.command,
+            InteractiveFrameRatePolicy::MAX_COMMAND,
+            epsilon = 1e-3
+        );
+    }
 
-    // #[test]
-    // fn test_interactive_frame_rate_policy_steady_state_convergence_too_fast() {
-    //     let target_update_period = 0.025;
-    //     let render_period_too_fast = 0.2 * target_update_period;
+    #[test]
+    fn test_interactive_frame_rate_policy_steady_state_convergence_too_fast() {
+        let target_update_period = 0.025;
+        let render_period_too_fast = 0.2 * target_update_period;
 
-    //     // Given a slow period, the command should increase, eventually saturating at 1.0.
-    //     let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-    //     policy.command = 0.05; // Set an initial non-trivial command to check convergence.
-    //     for _ in 0..25 {
-    //         let prev_command = policy.command;
-    //         let next_command = policy.evaluate_policy(render_period_too_fast);
-    //         assert_le!(next_command, prev_command);
-    //         assert_ge!(next_command, InteractiveFrameRatePolicy::MIN_COMMAND);
-    //     }
-    //     assert_relative_eq!(
-    //         policy.command,
-    //         InteractiveFrameRatePolicy::MIN_COMMAND,
-    //         epsilon = 1e-3
-    //     );
-    // }
+        // Given a slow period, the command should increase, eventually saturating at 1.0.
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
+        policy.command = 0.05; // Set an initial non-trivial command to check convergence.
+        for _ in 0..25 {
+            let prev_command = policy.command;
+            let next_command = policy.evaluate_policy(render_period_too_fast);
+            assert_le!(next_command, prev_command);
+            assert_ge!(next_command, InteractiveFrameRatePolicy::MIN_COMMAND);
+        }
+        assert_relative_eq!(
+            policy.command,
+            InteractiveFrameRatePolicy::MIN_COMMAND,
+            epsilon = 1e-3
+        );
+    }
 
     #[test]
     fn test_interactive_frame_rate_policy_bad_input_fuzz_test() {
