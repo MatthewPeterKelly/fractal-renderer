@@ -248,6 +248,13 @@ impl InteractiveFrameRatePolicy {
 /// It is initially fit to two data points, sampled at the bounds of the command range,
 /// and is then updated on each iteration by scaling the amplitude A to
 /// match the most recent measurement.
+///
+/// EDIT:  This is way fancier than it needs to be.  I ran the data, and I think we're better
+/// just hard-coding B to 1.0, and then just scaling A to match the most recent measurement.
+/// This model is simpler, but also more robust, because it does not require us to "latch and
+/// remeber" the first two samples, which quickly beomce irrelevant as the system converges.
+/// We're modifying the model live, so we jsut need it to give the correct overall trends, not the
+/// exact values.
 struct ExponentialRenderPeriodModel {
     a: f64,
     b: f64,
