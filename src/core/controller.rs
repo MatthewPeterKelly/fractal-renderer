@@ -187,8 +187,8 @@ impl InteractiveFrameRatePolicy {
         self.command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
 
         println!(
-            "Evaluating policy: measured_period = {:.6}, command = {:.6} -> {:.6}",
-            measured_period, prev_cmd, self.command
+            "Evaluating policy: measured_period = {:.6}, command = {:.6} -> {:.6} -> {:.6}",
+            measured_period, prev_cmd, raw_command, self.command
         ); // HACK!!! Remove this in production code.
 
         self.command
@@ -325,7 +325,7 @@ mod tests {
 
 
 
-    /// Model that maps from a command to a period, enulating the I/O behavior of the full
+    /// Model that maps from a command to a period, emulating the I/O behavior of the full
     /// render pipeline. The "fast" variant will emulate a system that always renders faster
     /// than the target period, regardless of the command. It does however satisfy the requirement
     /// that a higher command will always yield a shorter period.
@@ -371,18 +371,18 @@ mod tests {
             let next_command = policy.evaluate_policy(prev_period);
             let next_period = render_proxy.evaluate(next_command);
 
-            println!(
-                "Prev Command: {:.6}, Prev Period: {:.6}, Next Command: {:.6}, Next Period: {:.6}",
-                prev_command, prev_period, next_command, next_period
-            );  // HACK!!!
+            // println!(
+            //     "Prev Command: {:.6}, Prev Period: {:.6}, Next Command: {:.6}, Next Period: {:.6}",
+            //     prev_command, prev_period, next_command, next_period
+            // );  // HACK!!!
 
             let prev_cmd_err = (prev_command - steady_state_command).abs();
             let next_cmd_err = (next_command - steady_state_command).abs();
-            // assert_le!(next_cmd_err, prev_cmd_err);
+            assert_le!(next_cmd_err, prev_cmd_err);
 
             let prev_period_err = (prev_period - steady_state_period).abs();
             let next_period_err = (next_period - steady_state_period).abs();
-            // assert_le!(next_period_err, prev_period_err);
+            assert_le!(next_period_err, prev_period_err);
 
             // println!(
             //     "Prev Command Error: {:.6}, Next Command Error: {:.6}, Prev Period Error: {:.6}, Next Period Error: {:.6}",
@@ -408,7 +408,7 @@ mod tests {
         let steady_state_command = InteractiveFrameRatePolicy::MIN_COMMAND;
 
         let initial_commands = [0.0,0.3,0.7,1.0];
-        let max_iterations = 200;   // This should NOT be so slow... Boo.
+        let max_iterations = 10;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
