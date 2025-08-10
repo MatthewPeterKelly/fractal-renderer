@@ -18,29 +18,44 @@ with open(csv_file, newline="") as f:
         except ValueError:
             continue  # skip rows with non-numeric data
 
-# Split into independent traces
+# Split into independent traces (tolerant to floating point error)
 traces = []
 current_trace = []
+EPS = 1e-9
 
 for x, y in data:
     current_trace.append((x, y))
-    if x == 1.0:
+    if abs(x - 1.0) < EPS:
         traces.append(current_trace)
         current_trace = []
 
-# In case the file doesn't end exactly at x=1.0
 if current_trace:
     traces.append(current_trace)
 
-# Plot all traces
+# --- First plot: linear scale ---
 plt.figure()
-for trace in traces:
+for i, trace in enumerate(traces, start=1):
     xs, ys = zip(*trace)
-    plt.plot(xs, ys, marker='o', linestyle='-', label=f"Trace {len(plt.gca().lines)+1}")
+    plt.plot(xs, ys, marker='o', linestyle='-', label=f"Trace {i}")
 
 plt.xlabel("Cyclic Incrementer Output")
 plt.ylabel("Measured Data")
-plt.title("Repeated Measurements vs Incrementer Value")
+plt.title("Repeated Measurements vs Incrementer Value (Linear Y)")
 plt.grid(True)
 plt.legend()
+
+# --- Second plot: log scale ---
+plt.figure()
+for i, trace in enumerate(traces, start=1):
+    xs, ys = zip(*trace)
+    plt.plot(xs, ys, marker='o', linestyle='-', label=f"Trace {i}")
+
+plt.xlabel("Cyclic Incrementer Output")
+plt.ylabel("Measured Data (log scale)")
+plt.title("Repeated Measurements vs Incrementer Value (Log Y)")
+plt.yscale("log")
+plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+plt.legend()
+
+# Show both plots
 plt.show()
