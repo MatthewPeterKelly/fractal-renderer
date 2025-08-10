@@ -1,7 +1,7 @@
-use std::sync::{
+use std::{fs::File, io::Write, sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
-};
+}};
 
 use image::Rgb;
 
@@ -23,6 +23,7 @@ pub struct CyclicIncrementer {
     current_step: usize,
     value: f64,
     prev_time: Option<f64>,
+    diagnostic_file_dump: Arc<Mutex<File>>,
 }
 
 impl CyclicIncrementer {
@@ -34,13 +35,15 @@ impl CyclicIncrementer {
             current_step: 0,
             value: 0.0,
             prev_time: None,
+            diagnostic_file_dump:Arc::new(Mutex::new( File::create(r"src\core\test_assets\mandelbrot_frame_rate_sweep_50.csv")
+                .expect("Failed to create diagnostic file"))),
         }
     }
 
     /// Advance one step and return the current value in [0, 1].
     pub fn update(&mut self, time: f64) -> f64 {
         if let Some(prev_time) = self.prev_time {
-            println!("{}, {}", self.value, time - prev_time);
+            let _ = writeln!(self.diagnostic_file_dump.lock().unwrap(), "{}, {}", self.value, time - prev_time);
         }
         self.prev_time = Some(time);
         self.value = self.current_step as f64 / self.n as f64;
@@ -152,7 +155,7 @@ where
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
-            cyclic_incrementer: CyclicIncrementer::new(25),
+            cyclic_incrementer: CyclicIncrementer::new(50),
         };
         pixel_grid
             .view_control

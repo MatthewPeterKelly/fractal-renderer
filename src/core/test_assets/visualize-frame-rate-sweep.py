@@ -1,12 +1,11 @@
 import csv
-import math
-from typing import List, Tuple, Optional
-
+import random
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import List, Tuple, Optional
 
 # Path to your CSV file
-csv_file = r"C:\Users\matth\Documents\GitHub\fractal-renderer\src\core\test_assets\mandelbrot_frame_rate_sweep.csv"
+csv_file = r"C:\Users\matth\Documents\GitHub\fractal-renderer\src\core\test_assets\mandelbrot_frame_rate_sweep_50.csv"
 
 # ---------- Load CSV (two columns, no header) ----------
 data: List[Tuple[float, float]] = []
@@ -36,7 +35,7 @@ for x, y in data:
 if current_trace:
     traces.append(current_trace)
 
-# ---------- Fitting: y = A * exp(-B * x) via log-linear least squares ----------
+# ---------- Fitting: y = A * exp(-B * x) ----------
 def fit_exp_model(xs: np.ndarray, ys: np.ndarray) -> Optional[Tuple[float, float]]:
     """
     Fit y = A * exp(-B * x). Returns (A, B) or None if not enough valid data.
@@ -48,11 +47,15 @@ def fit_exp_model(xs: np.ndarray, ys: np.ndarray) -> Optional[Tuple[float, float
     x_fit = xs[mask]
     y_fit = ys[mask]
     ln_y = np.log(y_fit)
-    # ln(y) = ln(A) - B*x -> linear fit: ln(y) = c + m*x
-    m, c = np.polyfit(x_fit, ln_y, 1)
+    m, c = np.polyfit(x_fit, ln_y, 1)  # ln(y) = c + m*x
     A = float(np.exp(c))
     B = float(-m)
     return (A, B)
+
+# ---------- Randomly select up to 10 traces ----------
+if len(traces) > 10:
+    random.seed(42)  # fixed seed for reproducibility
+    traces = random.sample(traces, 10)
 
 # Precompute fits and labels
 fit_params: List[Optional[Tuple[float, float]]] = []
