@@ -15,16 +15,14 @@ use super::{
 // responsive UI. Eventually we'll replace this with an adaptive controller.
 const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
-
-
 /////////////////////////////////////////////////
-
 
 #[derive(Debug, Clone)]
 pub struct CyclicIncrementer {
     n: usize,
     current_step: usize,
     value: f64,
+    prev_time: Option<f64>,
 }
 
 impl CyclicIncrementer {
@@ -35,26 +33,23 @@ impl CyclicIncrementer {
             n,
             current_step: 0,
             value: 0.0,
+            prev_time: None,
         }
     }
 
-    pub fn value(&self) -> f64 {
-        self.value
-    }
-
     /// Advance one step and return the current value in [0, 1].
-    pub fn update(&mut self) -> f64 {
+    pub fn update(&mut self, time: f64) -> f64 {
+        if let Some(prev_time) = self.prev_time {
+            println!("{}, {}", self.value, time - prev_time);
+        }
+        self.prev_time = Some(time);
         self.value = self.current_step as f64 / self.n as f64;
         self.current_step = (self.current_step + 1) % (self.n + 1);
         self.value
     }
 }
 
-
-
-
 /////////////////////////////////
-
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -186,9 +181,6 @@ where
     }
 }
 
-
-
-
 impl<F> RenderWindow for PixelGrid<F>
 where
     F: Renderable + 'static,
@@ -199,7 +191,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0.0);  // NOTE:  messes with the cyclic incrementer
+        self.render_required = Some(0.0); // NOTE:  messes with the cyclic incrementer
     }
 
     fn update(
@@ -218,15 +210,16 @@ where
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
         if self.view_control.update(time, center_command, zoom_command) {
-            // self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
-            self.render_required = Some(self.cyclic_incrementer.update());  // HACK
+            self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
         }
-        if let Some(level) = self.render_required {
+        if let Some(_level) = self.render_required {
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                let level_hack = self.cyclic_incrementer.update(time); // HACK
+
                 self.renderer
                     .lock()
                     .unwrap()
-                    .set_speed_optimization_level(level, &self.speed_optimizer_cache);
+                    .set_speed_optimization_level(level_hack, &self.speed_optimizer_cache);
                 self.render();
                 // if level > 0.0 {
                 //     // HACK:  asymtotiallcy approach zero  (maximum quality)
