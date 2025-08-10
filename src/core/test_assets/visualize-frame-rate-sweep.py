@@ -5,6 +5,9 @@ from typing import List, Tuple, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 
+### Simple diagnostic script to visualize frame rate sweep data.
+### Generated using Chat GPT 5, with interactive code review.
+
 # ----------------- CONFIG -----------------
 csv_file = r"C:\Users\matth\Documents\GitHub\fractal-renderer\src\core\test_assets\mandelbrot_frame_rate_sweep.csv"
 USE_TWO_PARAM_MODEL = False   # True => y = A*exp(-B*x), False => y = A*exp(-x)
