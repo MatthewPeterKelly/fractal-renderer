@@ -1,9 +1,7 @@
 import csv
-import math
-from typing import List, Tuple, Optional
-
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import List, Tuple, Optional
 
 # Path to your CSV file
 csv_file = r"C:\Users\matth\Documents\GitHub\fractal-renderer\src\core\test_assets\mandelbrot_frame_rate_sweep.csv"
@@ -36,39 +34,32 @@ for x, y in data:
 if current_trace:
     traces.append(current_trace)
 
-# ---------- Fitting: y = A * exp(-B * x) via log-linear least squares ----------
-def fit_exp_model(xs: np.ndarray, ys: np.ndarray) -> Optional[Tuple[float, float]]:
+# ---------- Fitting: y = A * exp(-x) ----------
+def fit_exp_fixed(xs: np.ndarray, ys: np.ndarray) -> Optional[float]:
     """
-    Fit y = A * exp(-B * x). Returns (A, B) or None if not enough valid data.
-    Uses log-linear regression on y>0.
+    Fit y = A * exp(-x) with B fixed at 1. Returns A or None if insufficient data.
     """
     mask = ys > 0.0
-    if mask.sum() < 2:
+    if mask.sum() < 1:
         return None
-    x_fit = xs[mask]
-    y_fit = ys[mask]
-    ln_y = np.log(y_fit)
-    # ln(y) = ln(A) - B*x -> linear fit: ln(y) = c + m*x
-    m, c = np.polyfit(x_fit, ln_y, 1)
-    A = float(np.exp(c))
-    B = float(-m)
-    return (A, B)
+    # y / exp(-x) = A
+    A_vals = ys[mask] / np.exp(-xs[mask])
+    return float(np.mean(A_vals))
 
 # Precompute fits and labels
-fit_params: List[Optional[Tuple[float, float]]] = []
+fit_params: List[Optional[float]] = []
 legend_labels: List[str] = []
 
 for i, trace in enumerate(traces, start=1):
     xs, ys = zip(*trace)
     xs_arr = np.asarray(xs, dtype=float)
     ys_arr = np.asarray(ys, dtype=float)
-    params = fit_exp_model(xs_arr, ys_arr)
-    fit_params.append(params)
-    if params is None:
+    A = fit_exp_fixed(xs_arr, ys_arr)
+    fit_params.append(A)
+    if A is None:
         label = f"Trace {i} (fit: insufficient data)"
     else:
-        A, B = params
-        label = f"Trace {i} (A={A:.3g}, B={B:.3g})"
+        label = f"Trace {i} (A={A:.3g})"
     legend_labels.append(label)
 
 # ---------- First plot: linear y ----------
@@ -78,11 +69,10 @@ for i, trace in enumerate(traces, start=1):
     line_plot, = plt.plot(xs, ys, marker='o', linestyle='-', label=legend_labels[i-1])
 
     # Plot fitted curve if available
-    params = fit_params[i-1]
-    if params is not None:
-        A, B = params
+    A = fit_params[i-1]
+    if A is not None:
         x_smooth = np.linspace(0.0, 1.0, 200)
-        y_smooth = A * np.exp(-B * x_smooth)
+        y_smooth = A * np.exp(-x_smooth)
         plt.plot(x_smooth, y_smooth, linestyle='--', color=line_plot.get_color())
 
 plt.xlabel("Cyclic Incrementer Output")
@@ -98,11 +88,10 @@ for i, trace in enumerate(traces, start=1):
     line_plot, = plt.plot(xs, ys, marker='o', linestyle='-', label=legend_labels[i-1])
 
     # Plot fitted curve if available
-    params = fit_params[i-1]
-    if params is not None:
-        A, B = params
+    A = fit_params[i-1]
+    if A is not None:
         x_smooth = np.linspace(0.0, 1.0, 200)
-        y_smooth = A * np.exp(-B * x_smooth)
+        y_smooth = A * np.exp(-x_smooth)
         plt.plot(x_smooth, y_smooth, linestyle='--', color=line_plot.get_color())
 
 plt.xlabel("Cyclic Incrementer Output")
