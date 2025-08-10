@@ -1,3 +1,5 @@
+use more_asserts::{assert_ge, assert_gt};
+
 use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, LinearInterpolator};
 
 #[derive(Clone, Debug)]
@@ -76,85 +78,72 @@ impl PointTracker {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// The frame rate policy is a mapping from the measured period to the
-/// command that should be used on the next render, conditioned on the
-/// command that was used to generate the current measured period.
-///
-/// This can be thought of as a root-finding exercise, where the the
-/// objective is to find the command that will yield the desired period.
-/// In this case, the "function" that we're iterating over is the entire
-/// render pipeline.
-///
-/// One way to do this root-solve is with quassi-Newton method, which requires
-/// that we be able to locally approximate the function with a linear model.
-/// Directly computing the derivative of the function is not possible, because
-/// the render pipeline is not consistent across frames -- the CPU load might
-///
-/// change, and also the fractal being rendered might change, so we've got to
-/// work with a single evaluation.
-///
-/// There is another tricky detail -- we need to ensure that the command is bounded
-/// to the domain of [0,1], which is not typically part of a quassi newton method.
-///
-/// This problem has some nice features that we can exploit. The first is that we
-/// know the render pipeline is monotonic -- increasing the command will always
-/// reduce the period, until it saturates (given a fixed CPU and render task).
-/// Additionally, the command is
-/// bounded to [0,1], and the period is bounded to [0, max_expected_period].
-///
-/// We can use this information to construct a piecewise linear model of the function
-/// that is always invertible, and which is guaranteed to have a single unique solution
-/// for any period in the range [0, max_expected_period]. The model is constructed
-/// by interpolation between three keyframes, where the first and last keyframes are
-/// specified by the problem itself, and the middle keyframe is updated each time based
-/// on the measured period and the command that produced it. As a result, this model is
-/// most accurate near the current measurement, and the two boundary keyframes primarily
-/// serve to provide a reasonable guess at the local deriviatives.
-#[derive(Clone, Debug)]
-pub struct InteractiveFrameRateTimingParams {
-    // How fast do we ideally want the update period to run?
-    // implemented as a deadband to avoid chattering on the render settings.
-    target_update_period: f64,
+// The frame rate policy is a mapping from the measured period to the
+// command that should be used on the next render, conditioned on the
+// command that was used to generate the current measured period.
+//
+// This can be thought of as a root-finding exercise, where the the
+// objective is to find the command that will yield the desired period.
+// In this case, the "function" that we're iterating over is the entire
+// render pipeline.
+//
+// One way to do this root-solve is with quassi-Newton method, which requires
+// that we be able to locally approximate the function with a linear model.
+// Directly computing the derivative of the function is not possible, because
+// the render pipeline is not consistent across frames -- the CPU load might
+//
+// change, and also the fractal being rendered might change, so we've got to
+// work with a single evaluation.
+//
+// There is another tricky detail -- we need to ensure that the command is bounded
+// to the domain of [0,1], which is not typically part of a quassi newton method.
+//
+// This problem has some nice features that we can exploit. The first is that we
+// know the render pipeline is monotonic -- increasing the command will always
+// reduce the period, until it saturates (given a fixed CPU and render task).
+// Additionally, the command is
+// bounded to [0,1], and the period is bounded to [0, max_expected_period].
+//
+// We can use this information to construct a piecewise linear model of the function
+// that is always invertible, and which is guaranteed to have a single unique solution
+// for any period in the range [0, max_expected_period]. The model is constructed
+// by interpolation between three keyframes, where the first and last keyframes are
+// specified by the problem itself, and the middle keyframe is updated each time based
+// on the measured period and the command that produced it. As a result, this model is
+// most accurate near the current measurement, and the two boundary keyframes primarily
+// serve to provide a reasonable guess at the local deriviatives.
 
-    // Above this value, the command will saturate. We assume that the render
-    // will be aborted if it reaches this period, allowing us to try again with
-    // higher optimization command.
-    max_expected_period: f64, // the maximum expected period, in seconds.
 
-    // Controller margin, used to ensure that the model (command as a function of period)
-    // remains invertable. It is used for both the period and the command, and is normalized
-    // by the acceptable range of each.
-    normalized_margin: f64,
+// This model approximates the mapping from command to period as:
+// period(command) = scale * exp(-command)
+/// where scale is a positive constants.
+struct ExponentialRenderPeriodModel {
+    scale: f64,
 }
 
-impl InteractiveFrameRateTimingParams {
-    pub fn new() -> InteractiveFrameRateTimingParams {
-        Self {
-            target_update_period: 0.040, // 25 frames per second
-            max_expected_period: 0.5,
-            normalized_margin: 0.05,
-        }
+
+impl ExponentialRenderPeriodModel {
+
+        /// Fits a new exponential model to a single point
+    pub fn new(command: f64, period: f64, ) -> Self {
+
+   assert_ge!(command, 0.0, "Sampled command must be positive!");
+   assert_gt!(period, 0.0, "Sampled period must be positive!");
+    let scale = period / (-command).exp();
+    Self { scale }
     }
+
+    pub fn evaluate(&self, command: f64) -> f64 {
+        self.scale * (-command).exp()
+    }
+
 }
 
-impl Default for InteractiveFrameRateTimingParams {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct InteractiveFrameRatePolicy {
     // User-specified parameters for the timing policy, which do not change after construction.
-    timing_params: InteractiveFrameRateTimingParams,
-
-    // The policy is implemented by linear interpolation between keyframes,
-    // mapping from the measured period (given previous command) to the command that
-    // should be used on the next frame to hit the target period. This is effectively a
-    // model of the inverse of the render pipeline. Evaluating it does two things:
-    // (1) updates the model based on the most recent measurement data
-    // (2) solves: render_pipeline_period_model(next_command) - desired_period = 0
-    policy: KeyframeInterpolator<f64, f64, LinearInterpolator>,
+    target_update_period: f64,
 
     // The command is cached here for use on the next evaluation to update the model.
     command: f64, // The command that was produced by the last evaluation.
@@ -165,48 +154,10 @@ impl InteractiveFrameRatePolicy {
     pub const MIN_COMMAND: f64 = 0.0;
     pub const MIN_PERIOD: f64 = 0.0;
 
-    pub fn new(timing_params: InteractiveFrameRateTimingParams) -> InteractiveFrameRatePolicy {
-        let nominal_command = Self::MIN_COMMAND;
-        let command_margin =
-            timing_params.normalized_margin * (Self::MAX_COMMAND - Self::MIN_COMMAND);
-        let period_margin = timing_params.normalized_margin
-            * (timing_params.max_expected_period - Self::MIN_PERIOD);
-        let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
-            InterpolationKeyframe {
-                query: Self::MIN_PERIOD - period_margin,
-                value: Self::MAX_COMMAND + command_margin,
-            },
-            InterpolationKeyframe {
-                query: timing_params.target_update_period,
-                value: nominal_command,
-            },
-
-            // MPK:  problem here. This data point is sometimes *really* bad.
-            // The system still converges, but it takes a long time.
-            // Probably a good idea here is to add two probe values at the edges.
-            // First evaluation runs at command = 1.0.
-            // Second evaluation runs at command = 0.0.
-            //
-            // I think the piecewise linear model is not a good fit for this problem.
-            // The problem is that it might not be monotonic, and it is unclear how
-            // to most effectively update the model.
-            // We know from first principles (and the code) that the computational
-            // complexity should drop off exponentially as the command increases
-            // toward 1.0... So, let's just make that the model.
-            // We can fit it to the first two probes, and then just scale the
-            // amplitude on each iteration to adaptive to the dynamic complexity
-            // of the render pipeline.
-
-
-            InterpolationKeyframe {
-                query: timing_params.max_expected_period + period_margin,
-                value: Self::MIN_COMMAND - command_margin,
-            },
-        ];
+    pub fn new( target_update_period: f64) -> InteractiveFrameRatePolicy {
         InteractiveFrameRatePolicy {
-            timing_params,
-            policy: KeyframeInterpolator::new(keyframes, LinearInterpolator),
-            command: nominal_command,
+            target_update_period,
+            command:Self::MIN_COMMAND,
         }
     }
 
@@ -214,17 +165,13 @@ impl InteractiveFrameRatePolicy {
         // (0) Ensure that the measurement is within the expected range, which in turn
         //     will ensure that the model remains invertable (and we can update the policy).
         let clamped_measured_period =
-            measured_period.clamp(Self::MIN_PERIOD, self.timing_params.max_expected_period);
+            measured_period.max(Self::MIN_PERIOD);
 
-        // (1) Update the policy based on the most recent measurement and cached command.
-        self.policy.set_keyframe_query(1, clamped_measured_period);
-        self.policy.set_keyframe_value(1, self.command);
+        // (1) Construct a simple exponential model of the system, based on measured period.
+            let model = ExponentialRenderPeriodModel::new(self.command, clamped_measured_period);
 
-        // (2) Evaluate the policy, relying on the clamping behavior of the interpolator
-        //     to manage any out-of-bounds input on `update_period`.
-        let raw_command = self
-            .policy
-            .evaluate(self.timing_params.target_update_period);
+        // (2) Evaluate the model at the target update period.
+        let raw_command = model.evaluate(self.target_update_period);
 
         // (3) The policy will sometimes produce out-of-bounds commands. This is intentional, and
         //     is what allows the model to correctly handle saturation in the cases where there is
@@ -236,90 +183,6 @@ impl InteractiveFrameRatePolicy {
 }
 
 
-
-
-///////////////////////////////////////////////////////////////////////////
-
-/// This model approximates the mapping from command to period as:
-/// period(command) = A * exp(-B * command)
-//// where A and B are positive constants.
-/// This model is always positive and monotonic, and has a single unique
-/// solution for any period in the range (0, A].
-/// It is initially fit to two data points, sampled at the bounds of the command range,
-/// and is then updated on each iteration by scaling the amplitude A to
-/// match the most recent measurement.
-///
-/// EDIT:  This is way fancier than it needs to be.  I ran the data, and I think we're better
-/// just hard-coding B to 1.0, and then just scaling A to match the most recent measurement.
-/// This model is simpler, but also more robust, because it does not require us to "latch and
-/// remeber" the first two samples, which quickly beomce irrelevant as the system converges.
-/// We're modifying the model live, so we jsut need it to give the correct overall trends, not the
-/// exact values.
-struct ExponentialRenderPeriodModel {
-    a: f64,
-    b: f64,
-}
-
-struct RenderPeriodSample {
-    command: f64,
-    period: f64,
-}
-
-impl ExponentialRenderPeriodModel {
-    pub fn new(sample_0: RenderPeriodSample, sample_1: RenderPeriodSample) -> Self {
-
-        let x0 = sample_0.command;
-        let y0 = sample_0.period;
-        let x1 = sample_1.command;
-        let y1 = sample_1.period;
-
-   assert!(y0 > 0.0 && y1 > 0.0, "Sampled periods must be positive!");
-    assert!(x0 != x1, "Sampled commands must be distinct!");
-
-    let b = -((y1 / y0).ln()) / (x1 - x0);
-    let a = y0 * (b * x0).exp();
-
-    assert!(a > 0.0, "Internal error:  output scaling parametrer 'a' must be positive");
-    assert!(b > 0.0, "Internal error:  input scaling parameter 'b' must be positive");
-    Self { a, b }
-
-    }
-
-    pub fn predict_period_from_command(&self, command: f64) -> f64 {
-        self.a * (-self.b * command).exp()
-    }
-
-    pub fn predict_command_from_period(&self, period: f64) -> f64 {
-        - (period / self.a).ln() / self.b
-    }
-
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fit_two_points() {
-        // True parameters
-        let a_true = 2.0;
-        let b_true = 0.5;
-
-        // Generate two points
-        let x0 = 1.0;
-        let x1 = 4.0;
-        let y0 = super::forward(a_true, b_true, x0);
-        let y1 = super::forward(a_true, b_true, x1);
-
-        // Fit model
-        let (a_est, b_est) = fit_two_points(x0, y0, x1, y1);
-
-        assert!((a_est - a_true).abs() < 1e-12);
-        assert!((b_est - b_true).abs() < 1e-12);
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -338,7 +201,6 @@ impl AdaptiveOptimizationRegulator {
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::render;
 
     use super::*;
     use approx::assert_relative_eq;
@@ -348,12 +210,30 @@ mod tests {
     use rand::Rng;
     use rand::SeedableRng;
 
+
+    #[test]
+    fn test_exponential_render_period_model() {
+        {
+            let command = 0.0;
+            let period = 0.1;
+            let model = ExponentialRenderPeriodModel::new(command, period);
+            assert_relative_eq!(model.evaluate(command), period, epsilon = 1e-6);
+        }
+          {
+            let command = 1.0;
+            let period = 0.01;
+            let model = ExponentialRenderPeriodModel::new(command, period);
+            assert_relative_eq!(model.evaluate(command), period, epsilon = 1e-6);
+        }
+
+    }
+
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
         // Given the nominal period, the command should not change.
-        let timing_params = InteractiveFrameRateTimingParams::new();
-        let nominal_period = timing_params.target_update_period;
-        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let target_update_period = 0.025;
+        let nominal_period = target_update_period;
+        let mut policy: InteractiveFrameRatePolicy = InteractiveFrameRatePolicy::new(target_update_period);
         policy.command = 0.5; // Set an initial non-trivial command for this test.
         let initial_command = policy.command;
         for _ in 0..10 {
@@ -364,11 +244,11 @@ mod tests {
 
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_too_slow() {
-        let timing_params = InteractiveFrameRateTimingParams::new();
-        let render_period_too_slow = 4.0 * timing_params.target_update_period;
+        let target_update_period = 0.025;
+        let render_period_too_slow = 4.0 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
         for _ in 0..25 {
             let prev_command = policy.command;
             let next_command = policy.evaluate_policy(render_period_too_slow);
@@ -384,11 +264,11 @@ mod tests {
 
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_too_fast() {
-        let timing_params = InteractiveFrameRateTimingParams::new();
-        let render_period_too_fast = 0.2 * timing_params.target_update_period;
+        let target_update_period = 0.025;
+        let render_period_too_fast = 0.2 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
         policy.command = 0.05; // Set an initial non-trivial command to check convergence.
         for _ in 0..25 {
             let prev_command = policy.command;
@@ -405,27 +285,26 @@ mod tests {
 
     #[test]
     fn test_interactive_frame_rate_policy_bad_input_fuzz_test() {
-        let timing_params = InteractiveFrameRateTimingParams::new();
+        let target_update_period = 0.025;
 
         let periods_to_test = [
             -1.0,
-            InteractiveFrameRatePolicy::MIN_PERIOD,
-            timing_params.max_expected_period,
-            0.01 * timing_params.max_expected_period,
-            0.4 * timing_params.max_expected_period,
-            0.5 * timing_params.max_expected_period,
-            1.1 * timing_params.max_expected_period,
-            0.9 * timing_params.target_update_period,
-            0.99 * timing_params.target_update_period,
-            1.01 * timing_params.target_update_period,
-            1.1 * timing_params.target_update_period,
+            0.0,
+            0.01 ,
+            0.4 ,
+            0.5 ,
+            1.1 ,
+            0.9 ,
+            0.99 ,
+            1.01 ,
+            1.1 ,
         ];
         let mut rng = StdRng::seed_from_u64(82326745);
 
-        let mut policy = InteractiveFrameRatePolicy::new(timing_params);
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
         for _ in 0..500 {
             let index = rng.gen_range(0..periods_to_test.len());
-            let period = periods_to_test[index];
+            let period = target_update_period * periods_to_test[index];
             let command = policy.evaluate_policy(period);
             assert_le!(command, InteractiveFrameRatePolicy::MAX_COMMAND);
             assert_ge!(command, InteractiveFrameRatePolicy::MIN_COMMAND);
@@ -511,15 +390,15 @@ mod tests {
 
     #[test]
     fn test_interactive_frame_rate_policy_closed_loop_fast_render() {
-        let timing_params = InteractiveFrameRateTimingParams::new();
-        let render_proxy = build_fast_render_proxy_model(timing_params.target_update_period);
+        let target_update_period = 0.025;
+        let render_proxy = build_fast_render_proxy_model(target_update_period);
         let steady_state_period = *render_proxy.values().first().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MIN_COMMAND;
 
         let initial_commands = [0.0,0.3,0.7,1.0];
         let max_iterations = 200;   // This should NOT be so slow... Boo.
         for initial_command in initial_commands {
-            let mut policy = InteractiveFrameRatePolicy::new(timing_params.clone());
+            let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
             let converged = simulate_controller(
                 &mut policy,
