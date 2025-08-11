@@ -184,11 +184,13 @@ impl InteractiveFrameRatePolicy {
         // (3) The policy will sometimes produce out-of-bounds commands. This is intentional, and
         //     is what allows the model to correctly handle saturation in the cases where there is
         //     no solution (all values of the command result in a period that is either above or below the target).
-        self.command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
+        let command_mid = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
+
+        self.command = command_mid.clamp(prev_cmd - 0.1, prev_cmd + 0.1);
 
         println!(
-            "Evaluating policy: measured_period = {:.6}, command = {:.6} -> {:.6} -> {:.6}",
-            measured_period, prev_cmd, raw_command, self.command
+            "Evaluating policy: measured_period = {:.6}, prev command = {:.6};  Result: {:.6} ->  {:.6} -> {:.6}",
+            measured_period, prev_cmd, raw_command, command_mid, self.command
         ); // HACK!!! Remove this in production code.
 
         self.command
@@ -393,11 +395,11 @@ mod tests {
             },
 
             InterpolationKeyframe {
-                query: 0.2,
+                query: 0.321,
                 value: target_period,
             },
             InterpolationKeyframe {
-                query: 0.4,
+                query: 0.5,
                 value: 0.7* target_period,
             },
             InterpolationKeyframe {
@@ -433,11 +435,11 @@ mod tests {
 
             let prev_cmd_err = (prev_command - steady_state_command).abs();
             let next_cmd_err = (next_command - steady_state_command).abs();
-            // assert_le!(next_cmd_err, prev_cmd_err);
+            assert_le!(next_cmd_err, prev_cmd_err);
 
             let prev_period_err = (prev_period - steady_state_period).abs();
             let next_period_err = (next_period - steady_state_period).abs();
-            // assert_le!(next_period_err, prev_period_err);
+            assert_le!(next_period_err, prev_period_err);
 
             println!(
                 "Prev Command Error: {:.6}, Next Command Error: {:.6}, Prev Period Error: {:.6}, Next Period Error: {:.6}",
@@ -515,7 +517,7 @@ mod tests {
         let steady_state_command = render_proxy.queries()[target_index];
 
         let initial_commands = [0.0,0.3,0.7,1.0];
-        let max_iterations = 10;
+        let max_iterations = 15;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
@@ -524,11 +526,13 @@ mod tests {
                 &render_proxy,max_iterations,
                 steady_state_period,
                 steady_state_command,
-                1e-2,
+                1e-3,
             );
             assert!(
                 converged, "Failed to converge with initial command: {:.6}", initial_command
             );
+        println!("==========================================")
         }
+
     }
 }
