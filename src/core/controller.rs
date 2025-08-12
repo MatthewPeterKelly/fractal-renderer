@@ -76,6 +76,8 @@ impl PointTracker {
     }
 }
 
+// TODO:  just split this following out into a new file... maybe "render_control" or something.
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // The frame rate policy is a mapping from the measured period to the
@@ -166,6 +168,15 @@ impl InteractiveFrameRatePolicy {
         }
     }
 
+
+    // WE don't always know the update period here. On this first tick, we have not yet i
+    // issued a command, so the period is meaningless -- in that case we should open loop
+    // send out the "default command" that we are constructed with.
+
+    // Similarily, with the "passive update" policy, we also want to cache the initial
+    // command on construction. IN both cases, we can probably construct a new object
+    // on entry and then destroy it when we switch FSM state. This keeps the logic simpler.
+
     pub fn evaluate_policy(&mut self, measured_period: f64) -> f64 {
 
         let prev_cmd = self.command;  // HACK!!! Save the previous command for debugging.
@@ -201,18 +212,55 @@ impl InteractiveFrameRatePolicy {
 
 ///////////////////////////////////////////////////////////////////////////
 
+
 #[derive(Clone, Debug)]
-pub struct AdaptiveOptimizationRegulator {}
+pub struct AdaptiveOptimizationRegulator {
+    // Time recorded during update or construction; stateful; used to compute period.
+    time: f64,
+
+    // TODO
+    command: Option<f64>,
+
+    // Policy that is evaluated to adjust frame rate while the user is actively interacting.
+    interactive_frame_rate_policy: InteractiveFrameRatePolicy,
+
+}
 
 impl AdaptiveOptimizationRegulator {
-    pub fn new(_time: f64) -> Self {
-        Self {}
+    pub fn new(time: f64,  target_update_period: f64) -> Self {
+        Self {
+            time,
+            interactive_frame_rate_policy: InteractiveFrameRatePolicy::new(target_update_period),
+        }
     }
 
-    pub fn update(&mut self, _period: f64, _user_interaction: bool) -> Option<f64> {
-        None
+    pub fn update(&mut self, time: f64, user_interaction: bool) -> Option<f64> {
+        let measured_period = time - self.time;
+        self.time = time;
+        if user_interaction{
+           self.command =  Some(self.interactive_frame_rate_policy.evaluate_policy(measured_period));
+        } else {
+            // if let Some(prev_cmd) = self.command {
+            //     if
+            //     let next_command = prev_cmd - 0.1;
+
+            // }
+
+            // Ok - this is slightly more subtle than I had thought. We should just make a simple 3-state FSM to correctly
+            // handle these three modes:
+            // -- active update
+            // -- passive update
+            // -- idle
+
+
+None()
+
+        }
+        self.command
     }
 }
+
+///////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
