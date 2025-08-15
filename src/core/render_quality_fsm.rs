@@ -29,8 +29,9 @@ where
     F: Fn(f64, f64) -> f64,
 {
     pub fn new(initial_command: f64, get_interactive_command: F) -> Self {
-        // TODO: ensure on range [0,1] inclusive
+        // Ensure on range [0,1] inclusive
         debug_assert!(initial_command.is_finite(), "initial_command must be finite");
+        let initial_command = initial_command.clamp(0.0, 1.0);
         Self {
             prev_time: None,
             command: initial_command,
@@ -38,15 +39,21 @@ where
         }
     }
 
-    // TODO:  add a reset method that is called on any transition out of this mode,
-    // which unsets the previouis time, so that on the first tick in the mode it
-    // will always just return the previous command.
+    /// Clear timing so that the next first tick in Interactive uses the prior command.
+    pub fn reset(&mut self) {
+        self.prev_time = None;
+    }
 
-        // TODO: unused
+    pub fn prev_time(&self) -> Option<f64> { self.prev_time }
+
     pub fn command(&self) -> f64 { self.command }
 
-    // TODO:  rename to update
-    pub fn step(&mut self, time: f64, max_command_delta: f64) -> f64 {
+    /// One interactive tick.
+    /// - If `prev_time` is Some, compute period = max(time - prev, 0).
+    ///   Then evaluate policy(period, max_command_delta).
+    /// - If None, reuse the last interactive command.
+    /// Updates `prev_time` and `command`, and returns the command.
+    pub fn update(&mut self, time: f64, max_command_delta: f64) -> f64 {
         let cmd = if let Some(prev_t) = self.prev_time {
             let mut period = time - prev_t;
             if !period.is_finite() || period < 0.0 {
@@ -105,27 +112,32 @@ where
     pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
         debug_assert!(time.is_finite(), "time must be finite");
 
-            // TODO: split up the transition and udpate of the FSM, each handled by a
-            // match statement. The first match does the transitions (discrete mode
-            // changes and reset logic), then the second performs actions.
-
-        if is_interactive {
-            // Enter/Remain Interactive
-            self.mode = Mode::Interactive;
-            let cmd = self.interactive.step(time, self.max_command_delta);
-            self.prev_command = cmd; // FSM-wide last command
-            return Some(cmd);
+        // --- Transitions & reset logic ---
+        match (self.mode, is_interactive) {
+            // Any -> Interactive when the flag is true
+            (_, true) => {
+                self.mode = Mode::Interactive;
+                // Note: no reset here; we want to keep interactive.prev_time=None
+                // only when *leaving* interactive, not when entering.
+            }
+            // Interactive -> Background when the flag is false
+            (Mode::Interactive, false) => {
+                self.mode = Mode::Background;
+                self.interactive.reset();
+            }
+            // Otherwise, remain in current mode
+            _ => { /* no-op */ }
         }
 
-        // Not interactive this tick
-        if self.mode == Mode::Interactive {
-            self.mode = Mode::Background;
-        }
-
+        // --- Actions (mode-specific behavior) ---
         match self.mode {
+            Mode::Interactive => {
+                let cmd = self.interactive.update(time, self.max_command_delta);
+                self.prev_command = cmd;
+                Some(cmd)
+            }
             Mode::Background => self.step_background(),
             Mode::Idle => None,
-            Mode::Interactive => unreachable!("handled above"),
         }
     }
 
