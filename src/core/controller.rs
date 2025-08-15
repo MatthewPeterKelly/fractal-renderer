@@ -115,7 +115,6 @@ impl PointTracker {
 // most accurate near the current measurement, and the two boundary keyframes primarily
 // serve to provide a reasonable guess at the local deriviatives.
 
-
 // This model approximates the mapping from command to period as:
 // period(command) = scale * exp(-command)
 /// where scale is a positive constants.
@@ -123,16 +122,13 @@ struct ExponentialRenderPeriodModel {
     scale: f64,
 }
 
-
 impl ExponentialRenderPeriodModel {
-
-        /// Fits a new exponential model to a single point
-    pub fn new(command: f64, period: f64, ) -> Self {
-
-   assert_ge!(command, 0.0, "Sampled command must be positive!");
-   assert_gt!(period, 0.0, "Sampled period must be positive!");
-    let scale = period / (-command).exp();
-    Self { scale }
+    /// Fits a new exponential model to a single point
+    pub fn new(command: f64, period: f64) -> Self {
+        assert_ge!(command, 0.0, "Sampled command must be positive!");
+        assert_gt!(period, 0.0, "Sampled period must be positive!");
+        let scale = period / (-command).exp();
+        Self { scale }
     }
 
     pub fn compute_period_from_command(&self, command: f64) -> f64 {
@@ -141,11 +137,9 @@ impl ExponentialRenderPeriodModel {
 
     pub fn compute_command_from_period(&self, period: f64) -> f64 {
         assert_gt!(period, 0.0, "Period must be positive!");
-        - (period / self.scale).ln()
+        -(period / self.scale).ln()
     }
-
 }
-
 
 #[derive(Clone, Debug)]
 pub struct InteractiveFrameRatePolicy {
@@ -161,13 +155,12 @@ impl InteractiveFrameRatePolicy {
     pub const MIN_COMMAND: f64 = 0.0;
     pub const MIN_PERIOD: f64 = 0.0;
 
-    pub fn new( target_update_period: f64) -> InteractiveFrameRatePolicy {
+    pub fn new(target_update_period: f64) -> InteractiveFrameRatePolicy {
         InteractiveFrameRatePolicy {
             target_update_period,
-            command:Self::MIN_COMMAND,
+            command: Self::MIN_COMMAND,
         }
     }
-
 
     // WE don't always know the update period here. On this first tick, we have not yet i
     // issued a command, so the period is meaningless -- in that case we should open loop
@@ -178,16 +171,14 @@ impl InteractiveFrameRatePolicy {
     // on entry and then destroy it when we switch FSM state. This keeps the logic simpler.
 
     pub fn evaluate_policy(&mut self, measured_period: f64) -> f64 {
-
-        let prev_cmd = self.command;  // HACK!!! Save the previous command for debugging.
+        let prev_cmd = self.command; // HACK!!! Save the previous command for debugging.
 
         // (0) Ensure that the measurement is within the expected range, which in turn
         //     will ensure that the model remains invertable (and we can update the policy).
-        let clamped_measured_period =
-            measured_period.max(Self::MIN_PERIOD);
+        let clamped_measured_period = measured_period.max(Self::MIN_PERIOD);
 
         // (1) Construct a simple exponential model of the system, based on measured period.
-            let model = ExponentialRenderPeriodModel::new(self.command, clamped_measured_period);
+        let model = ExponentialRenderPeriodModel::new(self.command, clamped_measured_period);
 
         // (2) Evaluate the model at the target update period.
         let raw_command = model.compute_command_from_period(self.target_update_period);
@@ -207,8 +198,6 @@ impl InteractiveFrameRatePolicy {
         self.command
     }
 }
-
-
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -238,22 +227,28 @@ mod tests {
     use rand::Rng;
     use rand::SeedableRng;
 
-
     #[test]
     fn test_exponential_render_period_model() {
         {
             let command = 0.0;
             let period = 0.1;
             let model = ExponentialRenderPeriodModel::new(command, period);
-            assert_relative_eq!(model.compute_period_from_command(command), period, epsilon = 1e-6);
+            assert_relative_eq!(
+                model.compute_period_from_command(command),
+                period,
+                epsilon = 1e-6
+            );
         }
-          {
+        {
             let command = 1.0;
             let period = 0.01;
             let model = ExponentialRenderPeriodModel::new(command, period);
-            assert_relative_eq!(model.compute_period_from_command(command), period, epsilon = 1e-6);
+            assert_relative_eq!(
+                model.compute_period_from_command(command),
+                period,
+                epsilon = 1e-6
+            );
         }
-
     }
 
     #[test]
@@ -261,7 +256,8 @@ mod tests {
         // Given the nominal period, the command should not change.
         let target_update_period = 0.025;
         let nominal_period = target_update_period;
-        let mut policy: InteractiveFrameRatePolicy = InteractiveFrameRatePolicy::new(target_update_period);
+        let mut policy: InteractiveFrameRatePolicy =
+            InteractiveFrameRatePolicy::new(target_update_period);
         policy.command = 0.5; // Set an initial non-trivial command for this test.
         let initial_command = policy.command;
         for _ in 0..10 {
@@ -315,17 +311,7 @@ mod tests {
     fn test_interactive_frame_rate_policy_bad_input_fuzz_test() {
         let target_update_period = 0.025;
 
-        let periods_to_test = [
-            0.01 ,
-            0.4 ,
-            1.1 ,
-            0.9 ,
-            0.99 ,
-            1.01 ,
-            1.1 ,
-            10.0 ,
-            100.0 ,
-        ];
+        let periods_to_test = [0.01, 0.4, 1.1, 0.9, 0.99, 1.01, 1.1, 10.0, 100.0];
         let mut rng = StdRng::seed_from_u64(82326745);
 
         let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
@@ -337,8 +323,6 @@ mod tests {
             assert_ge!(command, InteractiveFrameRatePolicy::MIN_COMMAND);
         }
     }
-
-
 
     /// Model that maps from a command to a period, emulating the I/O behavior of the full
     /// render pipeline. The "fast" variant will emulate a system that always renders faster
@@ -369,7 +353,7 @@ mod tests {
     }
 
     // Same as above, but for a proxy that will never hit the target period.
-        fn build_slow_render_proxy_model(
+    fn build_slow_render_proxy_model(
         target_period: f64,
     ) -> KeyframeInterpolator<f64, f64, LinearInterpolator> {
         let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
@@ -394,7 +378,7 @@ mod tests {
     }
 
     // Same as above, but for a proxy that will hit the target at an intermediate command.
-        fn build_nominal_render_proxy_model(
+    fn build_nominal_render_proxy_model(
         target_period: f64,
     ) -> KeyframeInterpolator<f64, f64, LinearInterpolator> {
         let keyframes: Vec<InterpolationKeyframe<f64, f64>> = vec![
@@ -406,14 +390,13 @@ mod tests {
                 query: 0.1,
                 value: 1.3 * target_period,
             },
-
             InterpolationKeyframe {
                 query: 0.321,
                 value: target_period,
             },
             InterpolationKeyframe {
                 query: 0.5,
-                value: 0.7* target_period,
+                value: 0.7 * target_period,
             },
             InterpolationKeyframe {
                 query: 1.0,
@@ -457,7 +440,7 @@ mod tests {
             println!(
                 "Prev Command Error: {:.6}, Next Command Error: {:.6}, Prev Period Error: {:.6}, Next Period Error: {:.6}",
                 prev_cmd_err, next_cmd_err, prev_period_err, next_period_err
-            );  // HACK!!
+            ); // HACK!!
 
             // If the command and period errors are both small enough, we can consider the system
             // to have converged to a steady state.
@@ -469,7 +452,6 @@ mod tests {
         false
     }
 
-
     #[test]
     fn test_interactive_frame_rate_policy_closed_loop_fast_render() {
         let target_update_period = 0.025;
@@ -477,51 +459,56 @@ mod tests {
         let steady_state_period = *render_proxy.values().first().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MIN_COMMAND;
 
-        let initial_commands = [0.0,0.3,0.7,1.0];
+        let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
             let converged = simulate_controller(
                 &mut policy,
-                &render_proxy,max_iterations,
+                &render_proxy,
+                max_iterations,
                 steady_state_period,
                 steady_state_command,
                 1e-2,
             );
             assert!(
-                converged, "Failed to converge with initial command: {:.6}", initial_command
+                converged,
+                "Failed to converge with initial command: {:.6}",
+                initial_command
             );
         }
     }
 
-        #[test]
+    #[test]
     fn test_interactive_frame_rate_policy_closed_loop_slow_render() {
         let target_update_period = 0.025;
         let render_proxy = build_slow_render_proxy_model(target_update_period);
         let steady_state_period = *render_proxy.values().last().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MAX_COMMAND;
 
-        let initial_commands = [0.0,0.3,0.7,1.0];
+        let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
             let converged = simulate_controller(
                 &mut policy,
-                &render_proxy,max_iterations,
+                &render_proxy,
+                max_iterations,
                 steady_state_period,
                 steady_state_command,
                 1e-2,
             );
             assert!(
-                converged, "Failed to converge with initial command: {:.6}", initial_command
+                converged,
+                "Failed to converge with initial command: {:.6}",
+                initial_command
             );
         }
     }
 
-
-        #[test]
+    #[test]
     fn test_interactive_frame_rate_policy_closed_loop_nominal_render() {
         let target_update_period = 0.025;
         let render_proxy = build_nominal_render_proxy_model(target_update_period);
@@ -529,23 +516,25 @@ mod tests {
         let steady_state_period = render_proxy.values()[target_index];
         let steady_state_command = render_proxy.queries()[target_index];
 
-        let initial_commands = [0.0,0.3,0.7,1.0];
+        let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 15;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             policy.command = initial_command;
             let converged = simulate_controller(
                 &mut policy,
-                &render_proxy,max_iterations,
+                &render_proxy,
+                max_iterations,
                 steady_state_period,
                 steady_state_command,
                 1e-3,
             );
             assert!(
-                converged, "Failed to converge with initial command: {:.6}", initial_command
+                converged,
+                "Failed to converge with initial command: {:.6}",
+                initial_command
             );
-        println!("==========================================")
+            println!("==========================================")
         }
-
     }
 }

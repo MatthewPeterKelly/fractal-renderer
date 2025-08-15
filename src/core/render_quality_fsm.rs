@@ -6,11 +6,22 @@
 //! quality regardless of frame rate. Finally, once we've rendered at
 //! high quality, we should shut down the render pipeline to conserve
 //! resources (no need to spin at max CPU while idle...).
+
+use more_asserts::{assert_ge, assert_gt, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Interactive,
     Background,
     Idle,
+}
+
+/// The state of the interactive mode. On entry, it returns the initial command
+/// and caches the time. Then, on the next tick, it uses the previous time to
+/// compute the command.
+#[derive(Debug, Clone, Copy)]
+enum InteractiveState {
+    InitialCommand(f64),
+    TimePreviousCommand(f64),
 }
 
 /// Per-mode continuous data for the Interactive mode.
@@ -19,59 +30,54 @@ pub struct InteractiveData<F>
 where
     F: Fn(f64, f64) -> f64,
 {
-    prev_time: Option<f64>,
-    command: f64,
-    get_interactive_command: F,
+    state: InteractiveState,
+    command_policy: F,
 }
 
 impl<F> InteractiveData<F>
 where
     F: Fn(f64, f64) -> f64,
 {
-    pub fn new(initial_command: f64, get_interactive_command: F) -> Self {
-        // Ensure on range [0,1] inclusive
-        debug_assert!(initial_command.is_finite(), "initial_command must be finite");
+    pub fn new(initial_command: f64, command_policy: F) -> Self {
+        debug_assert!(
+            initial_command.is_finite(),
+            "initial_command must be finite"
+        );
         let initial_command = initial_command.clamp(0.0, 1.0);
         Self {
-            prev_time: None,
-            command: initial_command,
-            get_interactive_command,
+            state: InteractiveState::InitialCommand(initial_command),
+            command_policy,
         }
     }
 
-    /// Clear timing so that the next first tick in Interactive uses the prior command.
-    pub fn reset(&mut self) {
-        self.prev_time = None;
+    /// Resets the state of this mode. The first call to update after reset will
+    /// return the initial command and then cache the time for subsequent use.
+    pub fn reset(&mut self, initial_command: f64) {
+        let initial_command = initial_command.clamp(0.0, 1.0);
+        self.state = InteractiveState::InitialCommand(initial_command);
     }
 
-    pub fn prev_time(&self) -> Option<f64> { self.prev_time }
-
-    pub fn command(&self) -> f64 { self.command }
-
-    /// One interactive tick.
-    /// - If `prev_time` is Some, compute period = max(time - prev, 0).
-    ///   Then evaluate policy(period, max_command_delta).
-    /// - If None, reuse the last interactive command.
-    /// Updates `prev_time` and `command`, and returns the command.
+    /// One interactive tick. On the first call after reset (or construction),
+    /// this will return the cached command. Otherwise, it will compute the period
+    /// between the previous update and this one, and then use that to evaluate
+    /// the command policy.
     pub fn update(&mut self, time: f64, max_command_delta: f64) -> f64 {
-        let cmd = if let Some(prev_t) = self.prev_time {
-            let mut period = time - prev_t;
-            if !period.is_finite() || period < 0.0 {
-                period = 0.0;
+        let command = match self.state {
+            InteractiveState::InitialCommand(command) => command,
+            InteractiveState::TimePreviousCommand(prev_time) => {
+                let  period = time - prev_time;
+                assert_gt!(period, 0.0);
+                (self.command_policy)(period, max_command_delta)
             }
-            (self.get_interactive_command)(period, max_command_delta)
-        } else {
-            self.command
         };
-
-        self.prev_time = Some(time);
-        self.command = cmd;
-        cmd
+        // Cache the time; used to compute period on next update call.
+        self.state = InteractiveState::TimePreviousCommand(time);
+        command
     }
 }
 
 #[derive(Debug)]
-pub struct Fsm<F>
+pub struct FiniteStateMachine<F>
 where
     F: Fn(f64, f64) -> f64,
 {
@@ -81,21 +87,23 @@ where
     interactive: InteractiveData<F>,
 }
 
-impl<F> Fsm<F>
+impl<F> FiniteStateMachine<F>
 where
     F: Fn(f64, f64) -> f64,
 {
     /// Create a new FSM.
     ///
     /// - `initial_command` initializes both the global `prev_command` and the
-    ///   interactive state's `command`.
+    ///   interactive state's command/clock.
     /// - `max_command_delta` must be finite and >= 0.0.
     /// - `get_interactive_command(period, max_command_delta)` returns the interactive command.
     pub fn new(initial_command: f64, max_command_delta: f64, get_interactive_command: F) -> Self {
-        debug_assert!(initial_command.is_finite(), "initial_command must be finite");
-        debug_assert!(max_command_delta.is_finite(), "max_command_delta must be finite");
-        debug_assert!(max_command_delta >= 0.0, "max_command_delta must be >= 0");
+        assert_ge!(initial_command, 0.0);
+        assert_le!(initial_command, 1.0);
+        assert_ge!(max_command_delta, 0.0);
+        assert_le!(max_command_delta, 1.0);
 
+        let initial_command = initial_command.clamp(0.0, 1.0);
         Self {
             mode: Mode::Background,
             prev_command: initial_command,
@@ -103,62 +111,60 @@ where
             interactive: InteractiveData::new(initial_command, get_interactive_command),
         }
     }
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+    pub fn prev_command(&self) -> f64 {
+        self.prev_command
+    }
+    pub fn interactive_data(&self) -> &InteractiveData<F> {
+        &self.interactive
+    }
 
-    pub fn mode(&self) -> Mode { self.mode }
-    pub fn prev_command(&self) -> f64 { self.prev_command }
-    pub fn interactive_data(&self) -> &InteractiveData<F> { &self.interactive }
-
-    /// Update the render FSM and return the render command, if any is needed.
-    pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
-        debug_assert!(time.is_finite(), "time must be finite");
-
-        // --- Transitions & reset logic ---
+    fn transition_logic(&mut self, is_interactive: bool) {
         match (self.mode, is_interactive) {
-            // Any -> Interactive when the flag is true
-            (_, true) => {
+            (Mode::Background, true) => {
                 self.mode = Mode::Interactive;
-                // Note: no reset here; we want to keep interactive.prev_time=None
-                // only when *leaving* interactive, not when entering.
             }
-            // Interactive -> Background when the flag is false
             (Mode::Interactive, false) => {
+                self.interactive.reset(self.prev_command);
                 self.mode = Mode::Background;
-                self.interactive.reset();
+            }
+            (Mode::Idle, true) => {
+                self.mode = Mode::Interactive;
             }
             // Otherwise, remain in current mode
             _ => { /* no-op */ }
         }
+    }
+
+    /// Update the render FSM and return the render command, if any is needed.
+    pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
+        self.transition_logic(is_interactive);
 
         // --- Actions (mode-specific behavior) ---
         match self.mode {
             Mode::Interactive => {
-                let cmd = self.interactive.update(time, self.max_command_delta);
-                self.prev_command = cmd;
-                Some(cmd)
+                self.prev_command = self.interactive.update(time, self.max_command_delta);
+                Some(self.prev_command)
             }
-            Mode::Background => self.step_background(),
+            Mode::Background => self.background_update(),
             Mode::Idle => None,
         }
     }
 
-    /// Background behavior:
-    /// - Decay `prev_command` by `max_command_delta`.
-    /// - If still positive, stay in Background and return Some(next).
-    /// - If non-positive, move to Idle and return a final Some(0.0) once.
-    fn step_background(&mut self) -> Option<f64> {
-        let mut next = self.prev_command - self.max_command_delta;
-        if !next.is_finite() {
-            next = 0.0;
-        }
+    /// Implementation of the update while in background mode. Gradually reduce the
+    /// command toward zero, and then switch to Idle mode once we get there.
+    fn background_update(&mut self) -> Option<f64> {
+        let  raw_command = self.prev_command - self.max_command_delta;
 
-        if next > 0.0 {
-            self.prev_command = next;
-            Some(next)
+        self.prev_command = if raw_command > 0.0 {
+            raw_command
         } else {
             self.mode = Mode::Idle;
-            self.prev_command = 0.0;
-            Some(0.0)
-        }
+            0.0
+        };
+        Some(self.prev_command)
     }
 }
 
@@ -189,7 +195,7 @@ mod tests {
         let mut fsm = Fsm::new(0.3, 0.1, policy);
         let out = fsm.update(1.0, true); // interactive
         assert_eq!(fsm.mode(), Mode::Interactive);
-        assert!(fsm.interactive_data().prev_time().is_some());
+        assert!(fsm.interactive_data().prev_time().is_some()); // cached time
         assert_relative_eq!(out.unwrap(), 0.3);
         assert_relative_eq!(fsm.prev_command(), 0.3);
     }
@@ -198,7 +204,7 @@ mod tests {
     fn interactive_period_computes_policy_command() {
         let mut fsm = Fsm::new(0.3, 0.1, policy);
         let _ = fsm.update(1.0, true); // first interactive tick returns prior interactive cmd
-        // Next tick: period=0.1 => cmd = 2*0.1 + 0.5*0.1 = 0.2 + 0.05 = 0.25
+                                       // Next tick: period=0.1 => cmd = 2*0.1 + 0.5*0.1 = 0.2 + 0.05 = 0.25
         let out = fsm.update(1.1, true);
         assert_eq!(fsm.mode(), Mode::Interactive);
         assert_relative_eq!(out.unwrap(), 0.25);
@@ -212,7 +218,7 @@ mod tests {
     fn interactive_nonmonotonic_time_is_clamped() {
         let mut fsm = Fsm::new(0.3, 0.2, policy);
         let _ = fsm.update(2.0, true); // first interactive tick
-        // time went backwards -> period clamped to 0 => cmd = 2*0 + 0.5*0.2 = 0.1
+                                       // time went backwards -> period clamped to 0 => cmd = 2*0 + 0.5*0.2 = 0.1
         let out = fsm.update(1.9, true);
         assert_relative_eq!(out.unwrap(), 0.1);
         assert_relative_eq!(fsm.prev_command(), 0.1);
@@ -223,7 +229,7 @@ mod tests {
     fn interactive_to_background_then_decay() {
         let mut fsm = Fsm::new(0.3, 0.1, policy);
         let _ = fsm.update(1.0, true); // returns 0.3
-        // period=0.2 => cmd=2*0.2+0.05=0.45
+                                       // period=0.2 => cmd=2*0.2+0.05=0.45
         let _ = fsm.update(1.2, true);
         assert_relative_eq!(fsm.prev_command(), 0.45);
 
