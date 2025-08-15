@@ -65,7 +65,7 @@ where
         let command = match self.state {
             InteractiveState::InitialCommand(command) => command,
             InteractiveState::TimePreviousCommand(prev_time) => {
-                let  period = time - prev_time;
+                let period = time - prev_time;
                 assert_gt!(period, 0.0);
                 (self.command_policy)(period, max_command_delta)
             }
@@ -73,6 +73,17 @@ where
         // Cache the time; used to compute period on next update call.
         self.state = InteractiveState::TimePreviousCommand(time);
         command
+    }
+}
+
+#[cfg(test)]
+impl<F> InteractiveData<F>
+where
+    F: Fn(f64, f64) -> f64,
+{
+    /// Test-only helper to assert whether we've cached a previous time.
+    pub fn is_time_cached(&self) -> bool {
+        matches!(self.state, InteractiveState::TimePreviousCommand(_))
     }
 }
 
@@ -93,10 +104,8 @@ where
 {
     /// Create a new FSM.
     ///
-    /// - `initial_command` initializes both the global `prev_command` and the
-    ///   interactive state's command/clock.
-    /// - `max_command_delta` must be finite and >= 0.0.
-    /// - `get_interactive_command(period, max_command_delta)` returns the interactive command.
+    /// - `initial_command`: will be returned by the first call to interactive update.
+/// - get_interactive_command: callback used to evaluate the interactive command policy as a function of period and max command delta.
     pub fn new(initial_command: f64, max_command_delta: f64, get_interactive_command: F) -> Self {
         assert_ge!(initial_command, 0.0);
         assert_le!(initial_command, 1.0);
@@ -156,7 +165,7 @@ where
     /// Implementation of the update while in background mode. Gradually reduce the
     /// command toward zero, and then switch to Idle mode once we get there.
     fn background_update(&mut self) -> Option<f64> {
-        let  raw_command = self.prev_command - self.max_command_delta;
+        let raw_command = self.prev_command - self.max_command_delta;
 
         self.prev_command = if raw_command > 0.0 {
             raw_command
@@ -175,61 +184,66 @@ mod tests {
     use more_asserts::{assert_ge, assert_le};
 
     fn policy(period: f64, max_delta: f64) -> f64 {
-        // Example policy that uses both inputs:
-        // base = 2 * period; nudge by 0.5 * max_delta to show it's plumbed through.
+        // Simple policy that uses both inputs:
+        // base = 2 * period; nudge by 0.5 * max_delta to prove plumbing.
         2.0 * period + 0.5 * max_delta
     }
 
     #[test]
     fn construction_defaults() {
-        let fsm = Fsm::new(0.3, 0.1, policy);
+        let fsm = FiniteStateMachine::new(0.3, 0.1, policy);
         assert_eq!(fsm.mode(), Mode::Background);
         assert_relative_eq!(fsm.prev_command(), 0.3);
-        assert!(fsm.interactive_data().prev_time().is_none());
-        assert_relative_eq!(fsm.interactive_data().command(), 0.3);
+        assert!(!fsm.interactive_data().is_time_cached());
         assert_ge!(fsm.prev_command(), 0.0);
     }
 
     #[test]
-    fn first_interactive_tick_uses_previous_interactive_command() {
-        let mut fsm = Fsm::new(0.3, 0.1, policy);
+    fn first_interactive_tick_returns_initial_and_caches_time() {
+        let mut fsm = FiniteStateMachine::new(0.3, 0.1, policy);
         let out = fsm.update(1.0, true); // interactive
         assert_eq!(fsm.mode(), Mode::Interactive);
-        assert!(fsm.interactive_data().prev_time().is_some()); // cached time
+        assert!(fsm.interactive_data().is_time_cached());
         assert_relative_eq!(out.unwrap(), 0.3);
         assert_relative_eq!(fsm.prev_command(), 0.3);
     }
 
     #[test]
     fn interactive_period_computes_policy_command() {
-        let mut fsm = Fsm::new(0.3, 0.1, policy);
-        let _ = fsm.update(1.0, true); // first interactive tick returns prior interactive cmd
-                                       // Next tick: period=0.1 => cmd = 2*0.1 + 0.5*0.1 = 0.2 + 0.05 = 0.25
+        let mut fsm = FiniteStateMachine::new(0.3, 0.1, policy);
+        let _ = fsm.update(1.0, true); // first interactive tick returns initial command
+        // Next tick: period=0.1 => cmd = 2*0.1 + 0.5*0.1 = 0.2 + 0.05 = 0.25
         let out = fsm.update(1.1, true);
         assert_eq!(fsm.mode(), Mode::Interactive);
         assert_relative_eq!(out.unwrap(), 0.25);
-        assert_relative_eq!(fsm.interactive_data().command(), 0.25);
         assert_relative_eq!(fsm.prev_command(), 0.25);
         assert_ge!(fsm.prev_command(), 0.0);
-        assert_le!(fsm.prev_command(), 10.0); // arbitrary sanity guard
+        assert_le!(fsm.prev_command(), 1.0); // stays within [0,1]
     }
 
     #[test]
-    fn interactive_nonmonotonic_time_is_clamped() {
-        let mut fsm = Fsm::new(0.3, 0.2, policy);
+    #[should_panic]
+    fn interactive_nonmonotonic_time_panics() {
+        let mut fsm = FiniteStateMachine::new(0.3, 0.2, policy);
         let _ = fsm.update(2.0, true); // first interactive tick
-                                       // time went backwards -> period clamped to 0 => cmd = 2*0 + 0.5*0.2 = 0.1
-        let out = fsm.update(1.9, true);
-        assert_relative_eq!(out.unwrap(), 0.1);
-        assert_relative_eq!(fsm.prev_command(), 0.1);
-        assert_relative_eq!(fsm.interactive_data().command(), 0.1);
+        // time went backwards -> period <= 0 triggers assert_gt! panic
+        let _ = fsm.update(1.9, true);
+    }
+
+    #[test]
+    #[should_panic]
+    fn interactive_zero_period_panics() {
+        let mut fsm = FiniteStateMachine::new(0.3, 0.2, policy);
+        let _ = fsm.update(2.0, true);
+        // Same timestamp => period == 0.0 -> panic
+        let _ = fsm.update(2.0, true);
     }
 
     #[test]
     fn interactive_to_background_then_decay() {
-        let mut fsm = Fsm::new(0.3, 0.1, policy);
+        let mut fsm = FiniteStateMachine::new(0.3, 0.1, policy);
         let _ = fsm.update(1.0, true); // returns 0.3
-                                       // period=0.2 => cmd=2*0.2+0.05=0.45
+        // period=0.2 => cmd=2*0.2+0.05=0.45
         let _ = fsm.update(1.2, true);
         assert_relative_eq!(fsm.prev_command(), 0.45);
 
@@ -248,13 +262,14 @@ mod tests {
 
     #[test]
     fn background_to_idle_on_zero_crossing() {
-        let mut fsm = Fsm::new(0.15, 0.1, policy);
+        let mut fsm = FiniteStateMachine::new(0.15, 0.1, policy);
         assert_eq!(fsm.mode(), Mode::Background);
 
         // 0.15 -> 0.05
         let out1 = fsm.update(10.0, false);
         assert_eq!(fsm.mode(), Mode::Background);
         assert_relative_eq!(out1.unwrap(), 0.05);
+
         // 0.05 -> 0.00, transitions to Idle and returns a final 0.0 once
         let out2 = fsm.update(11.0, false);
         assert_eq!(fsm.mode(), Mode::Idle);
@@ -264,7 +279,7 @@ mod tests {
 
     #[test]
     fn idle_returns_none_until_interactive() {
-        let mut fsm = Fsm::new(0.05, 0.1, policy);
+        let mut fsm = FiniteStateMachine::new(0.05, 0.1, policy);
         // Background -> immediate decay to 0 -> Idle
         let _ = fsm.update(0.0, false); // 0.05 -> 0.0 & idle
         assert_eq!(fsm.mode(), Mode::Idle);
@@ -277,8 +292,28 @@ mod tests {
         // Any-state -> Interactive when flag set
         let out_interactive = fsm.update(2.0, true);
         assert_eq!(fsm.mode(), Mode::Interactive);
-        // First interactive tick uses previous interactive command (which was initial 0.05)
+        // First interactive tick returns the initial command (0.05)
         assert_relative_eq!(out_interactive.unwrap(), 0.05);
         assert_relative_eq!(fsm.prev_command(), 0.05);
+    }
+
+    #[test]
+    fn reenter_interactive_returns_last_interactive_command() {
+        let mut fsm = FiniteStateMachine::new(0.3, 0.1, policy);
+        // First interactive tick -> 0.3
+        let _ = fsm.update(1.0, true);
+        // Second interactive tick: period=0.2 => 0.45
+        let _ = fsm.update(1.2, true);
+        assert_relative_eq!(fsm.prev_command(), 0.45);
+
+        // Leave to background: reset stores 0.45 for next entry
+        let _ = fsm.update(1.3, false); // decays output to 0.35, but reset kept 0.45
+        assert_eq!(fsm.mode(), Mode::Background);
+
+        // Re-enter interactive: should return stored 0.45 (not the decayed 0.35)
+        let out = fsm.update(2.0, true);
+        assert_eq!(fsm.mode(), Mode::Interactive);
+        assert_relative_eq!(out.unwrap(), 0.45);
+        assert_relative_eq!(fsm.prev_command(), 0.45);
     }
 }
