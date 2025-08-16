@@ -1,5 +1,7 @@
 use more_asserts::{assert_ge, assert_gt};
 
+use crate::core::render_quality_fsm::RenderQualityPolicy;
+
 #[derive(Clone, Debug)]
 pub enum Target {
     Position { pos_ref: f64, max_vel: f64 },
@@ -150,18 +152,15 @@ pub struct InteractiveFrameRatePolicy {
 }
 
 impl InteractiveFrameRatePolicy {
-    // TOODO:  move to render policy trait
-    pub const MAX_COMMAND: f64 = 1.0;
-    pub const MIN_COMMAND: f64 = 0.0;
-    pub const MIN_PERIOD: f64 = 0.0;
-
     pub fn new(target_update_period: f64, max_command_delta: f64) -> InteractiveFrameRatePolicy {
         InteractiveFrameRatePolicy {
             target_update_period,
             max_command_delta,
         }
     }
+}
 
+impl RenderQualityPolicy for InteractiveFrameRatePolicy {
     // WE don't always know the update period here. On this first tick, we have not yet i
     // issued a command, so the period is meaningless -- in that case we should open loop
     // send out the "default command" that we are constructed with.
@@ -170,7 +169,7 @@ impl InteractiveFrameRatePolicy {
     // command on construction. IN both cases, we can probably construct a new object
     // on entry and then destroy it when we switch FSM state. This keeps the logic simpler.
 
-    pub fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64 {
+    fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64 {
         // (0) Ensure that the measurement is within the expected range, which in turn
         //     will ensure that the model remains invertable (and we can update the policy).
         let clamped_measured_period = measured_period.max(Self::MIN_PERIOD);

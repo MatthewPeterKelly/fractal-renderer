@@ -14,11 +14,19 @@
 // (5) use the same interface and design pattern for both interactive and background modes.
 
 pub trait RenderQualityPolicy {
+    const MAX_COMMAND: f64 = 1.0;
+    const MIN_COMMAND: f64 = 0.0;
+    const MIN_PERIOD: f64 = 0.0;
+
     /// @param previous_command: last render command that was completed
     /// @param measured_period: how long did that render command take to complete?
     /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
     ///     out of bound commands will be clamped to [0,1]
     fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64;
+
+    fn clamp_command(command: f64) -> f64 {
+        command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND)
+    }
 }
 
 use more_asserts::{assert_ge, assert_gt, assert_le};
@@ -78,12 +86,14 @@ where
         if !is_interactive {
             self.mode = Mode::Background;
         }
-        self.prev_render_command = self
+
+        let raw_command = self
             .interactive_policy
-            .evaluate(self.prev_render_command, period)
-            .clamp(0.0, 1.0);
+            .evaluate(self.prev_render_command, period);
+        self.prev_render_command = F::clamp_command(raw_command);
         Some(self.prev_render_command)
     }
+
     pub fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::Interactive;
@@ -94,9 +104,10 @@ where
         if raw_render_command <= 0.0 {
             self.mode = Mode::Idle;
         }
-        self.prev_render_command = raw_render_command.clamp(0.0, 1.0);
+        self.prev_render_command = G::clamp_command(raw_render_command);
         Some(self.prev_render_command)
     }
+
     pub fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::BeginRendering;
