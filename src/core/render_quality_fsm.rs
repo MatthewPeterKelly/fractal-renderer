@@ -15,17 +15,17 @@
 // (5) use the same interface and design pattern for both interactive and background modes.
 
 
-// pub trait RenderQualityPolicy {
+pub trait RenderQualityPolicy {
 
-//     /// @param time: time right now. Used to compute frame rate.
-//     /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
-//     ///     or None (indicating that the render pipeline should not run).
-//     fn evaluate(&mut self, time: f64, previous_command: f64) -> Option<f64>;
+    /// @param time: time right now. Used to compute frame rate.
+    /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
+    ///     or None (indicating that the render pipeline should not run).
+    fn evaluate(&mut self, time: f64, previous_command: f64) -> Option<f64>;
 
-//     /// @param previous_command: value of the last non-trivial render command that was sent by any policy.
-//     fn on_entry(&mut self, previous_command: f64);
+    /// @param previous_command: value of the last non-trivial render command that was sent by any policy.
+    fn on_entry(&mut self, previous_command: f64);
 
-// }
+}
 
 use more_asserts::{assert_ge, assert_gt, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
