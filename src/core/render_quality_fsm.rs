@@ -7,6 +7,26 @@
 //! high quality, we should shut down the render pipeline to conserve
 //! resources (no need to spin at max CPU while idle...).
 
+
+// (1) updat the Interactive state to go back to the optional f64 for time. I realized that we always need the previous command.
+// (2) pass the previous command to the user policy (making it stateless)
+// (3) use the same generic interface for the "idle policy" (allow the user to pass in an idle and a interactive policy).
+// (4) make max delta an implementation detail of the user policies
+// (5) use the same interface and design pattern for both interactive and background modes.
+
+
+// pub trait RenderQualityPolicy {
+
+//     /// @param time: time right now. Used to compute frame rate.
+//     /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
+//     ///     or None (indicating that the render pipeline should not run).
+//     fn evaluate(&mut self, time: f64, previous_command: f64) -> Option<f64>;
+
+//     /// @param previous_command: value of the last non-trivial render command that was sent by any policy.
+//     fn on_entry(&mut self, previous_command: f64);
+
+// }
+
 use more_asserts::{assert_ge, assert_gt, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {

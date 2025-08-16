@@ -1,7 +1,5 @@
 use more_asserts::{assert_ge, assert_gt};
 
-use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, LinearInterpolator};
-
 #[derive(Clone, Debug)]
 pub enum Target {
     Position { pos_ref: f64, max_vel: f64 },
@@ -146,8 +144,9 @@ pub struct InteractiveFrameRatePolicy {
     // User-specified parameters for the timing policy, which do not change after construction.
     target_update_period: f64,
 
-    // The command is cached here for use on the next evaluation to update the model.
-    command: f64, // The command that was produced by the last evaluation.
+    // Clamp the max change in command to avoid instability in the fixed-point iteration.
+    // (the exponential model fit is only valid locally, so this is a heuristic trust region)
+    max_command_delta: f64,
 }
 
 impl InteractiveFrameRatePolicy {
@@ -155,10 +154,10 @@ impl InteractiveFrameRatePolicy {
     pub const MIN_COMMAND: f64 = 0.0;
     pub const MIN_PERIOD: f64 = 0.0;
 
-    pub fn new(target_update_period: f64) -> InteractiveFrameRatePolicy {
+    pub fn new(target_update_period: f64, max_command_delta: f64) -> InteractiveFrameRatePolicy {
         InteractiveFrameRatePolicy {
             target_update_period,
-            command: Self::MIN_COMMAND,
+            max_command_delta,
         }
     }
 
@@ -170,32 +169,21 @@ impl InteractiveFrameRatePolicy {
     // command on construction. IN both cases, we can probably construct a new object
     // on entry and then destroy it when we switch FSM state. This keeps the logic simpler.
 
-    pub fn evaluate_policy(&mut self, measured_period: f64) -> f64 {
-        let prev_cmd = self.command; // HACK!!! Save the previous command for debugging.
-
+    pub fn evaluate_policy(&mut self, measured_period: f64, previous_command: f64) -> f64 {
         // (0) Ensure that the measurement is within the expected range, which in turn
         //     will ensure that the model remains invertable (and we can update the policy).
         let clamped_measured_period = measured_period.max(Self::MIN_PERIOD);
 
         // (1) Construct a simple exponential model of the system, based on measured period.
-        let model = ExponentialRenderPeriodModel::new(self.command, clamped_measured_period);
+        let model = ExponentialRenderPeriodModel::new(previous_command, clamped_measured_period);
 
         // (2) Evaluate the model at the target update period.
         let raw_command = model.compute_command_from_period(self.target_update_period);
 
-        // (3) The policy will sometimes produce out-of-bounds commands. This is intentional, and
-        //     is what allows the model to correctly handle saturation in the cases where there is
-        //     no solution (all values of the command result in a period that is either above or below the target).
-        let command_mid = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
-
-        self.command = command_mid.clamp(prev_cmd - 0.1, prev_cmd + 0.1);
-
-        println!(
-            "Evaluating policy: measured_period = {:.6}, prev command = {:.6};  Result: {:.6} ->  {:.6} -> {:.6}",
-            measured_period, prev_cmd, raw_command, command_mid, self.command
-        ); // HACK!!! Remove this in production code.
-
-        self.command
+        // (3) Clamp the output of the policy to a valid domain. This is done in two stages.
+        // The first clamps it to the valid command range, and the second enforces the trust
+        // region where the model is valid around the previous command.
+raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND).clamp(previous_command - self.max_command_delta, previous_command + self.max_command_delta)
     }
 }
 
@@ -218,6 +206,9 @@ impl AdaptiveOptimizationRegulator {
 
 #[cfg(test)]
 mod tests {
+
+
+use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, LinearInterpolator};
 
     use super::*;
     use approx::assert_relative_eq;
@@ -255,13 +246,13 @@ mod tests {
     fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {
         // Given the nominal period, the command should not change.
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let nominal_period = target_update_period;
         let mut policy: InteractiveFrameRatePolicy =
-            InteractiveFrameRatePolicy::new(target_update_period);
-        policy.command = 0.5; // Set an initial non-trivial command for this test.
-        let initial_command = policy.command;
+            InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
+        let initial_command = 0.5; // Set an initial non-trivial command for this test.
         for _ in 0..10 {
-            let command = policy.evaluate_policy(nominal_period);
+            let command = policy.evaluate_policy(nominal_period, initial_command);
             assert_relative_eq!(command, initial_command, epsilon = 1e-6);
         }
     }
@@ -269,18 +260,20 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_too_slow() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let render_period_too_slow = 4.0 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
+        let mut prev_command = 0.0;
         for _ in 0..25 {
-            let prev_command = policy.command;
-            let next_command = policy.evaluate_policy(render_period_too_slow);
+            let next_command = policy.evaluate_policy(render_period_too_slow, prev_command);
             assert_ge!(next_command, prev_command);
             assert_le!(next_command, InteractiveFrameRatePolicy::MAX_COMMAND);
+            prev_command = next_command;
         }
         assert_relative_eq!(
-            policy.command,
+           prev_command,
             InteractiveFrameRatePolicy::MAX_COMMAND,
             epsilon = 1e-3
         );
@@ -289,19 +282,20 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_too_fast() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let render_period_too_fast = 0.2 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-        policy.command = 0.05; // Set an initial non-trivial command to check convergence.
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
+        let mut prev_command = 0.05;
         for _ in 0..25 {
-            let prev_command = policy.command;
-            let next_command = policy.evaluate_policy(render_period_too_fast);
+            let next_command = policy.evaluate_policy(render_period_too_fast, prev_command);
             assert_le!(next_command, prev_command);
             assert_ge!(next_command, InteractiveFrameRatePolicy::MIN_COMMAND);
+            prev_command = next_command;
         }
         assert_relative_eq!(
-            policy.command,
+            prev_command,
             InteractiveFrameRatePolicy::MIN_COMMAND,
             epsilon = 1e-3
         );
@@ -310,15 +304,17 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_bad_input_fuzz_test() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
 
         let periods_to_test = [0.01, 0.4, 1.1, 0.9, 0.99, 1.01, 1.1, 10.0, 100.0];
         let mut rng = StdRng::seed_from_u64(82326745);
 
-        let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
+        let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
+        let mut command = 0.0;
         for _ in 0..500 {
             let index = rng.gen_range(0..periods_to_test.len());
             let period = target_update_period * periods_to_test[index];
-            let command = policy.evaluate_policy(period);
+            command = policy.evaluate_policy(period, command);
             assert_le!(command, InteractiveFrameRatePolicy::MAX_COMMAND);
             assert_ge!(command, InteractiveFrameRatePolicy::MIN_COMMAND);
         }
@@ -412,16 +408,17 @@ mod tests {
     /// converged within the specified number of iterations.
     fn simulate_controller(
         policy: &mut InteractiveFrameRatePolicy,
+        initial_command: f64,
         render_proxy: &KeyframeInterpolator<f64, f64, LinearInterpolator>,
         num_iterations: usize,
         steady_state_period: f64,
         steady_state_command: f64,
         convergence_tol: f64,
     ) -> bool {
+        let mut prev_command = initial_command;
         for _ in 0..num_iterations {
-            let prev_command = policy.command;
             let prev_period = render_proxy.evaluate(prev_command);
-            let next_command = policy.evaluate_policy(prev_period);
+            let next_command = policy.evaluate_policy(prev_period, prev_command);
             let next_period = render_proxy.evaluate(next_command);
 
             // println!(
@@ -442,6 +439,8 @@ mod tests {
                 prev_cmd_err, next_cmd_err, prev_period_err, next_period_err
             ); // HACK!!
 
+            prev_command = next_command;
+
             // If the command and period errors are both small enough, we can consider the system
             // to have converged to a steady state.
             if next_cmd_err < convergence_tol && next_period_err < convergence_tol {
@@ -455,6 +454,7 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_closed_loop_fast_render() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let render_proxy = build_fast_render_proxy_model(target_update_period);
         let steady_state_period = *render_proxy.values().first().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MIN_COMMAND;
@@ -462,10 +462,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
-            let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-            policy.command = initial_command;
+            let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
             let converged = simulate_controller(
                 &mut policy,
+                initial_command,
                 &render_proxy,
                 max_iterations,
                 steady_state_period,
@@ -483,6 +483,7 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_closed_loop_slow_render() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let render_proxy = build_slow_render_proxy_model(target_update_period);
         let steady_state_period = *render_proxy.values().last().unwrap();
         let steady_state_command = InteractiveFrameRatePolicy::MAX_COMMAND;
@@ -490,10 +491,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
-            let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-            policy.command = initial_command;
+            let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
             let converged = simulate_controller(
                 &mut policy,
+                initial_command,
                 &render_proxy,
                 max_iterations,
                 steady_state_period,
@@ -511,6 +512,7 @@ mod tests {
     #[test]
     fn test_interactive_frame_rate_policy_closed_loop_nominal_render() {
         let target_update_period = 0.025;
+        let max_command_delta = 0.1;
         let render_proxy = build_nominal_render_proxy_model(target_update_period);
         let target_index = 2;
         let steady_state_period = render_proxy.values()[target_index];
@@ -519,10 +521,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 15;
         for initial_command in initial_commands {
-            let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
-            policy.command = initial_command;
+            let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
             let converged = simulate_controller(
                 &mut policy,
+                initial_command,
                 &render_proxy,
                 max_iterations,
                 steady_state_period,
