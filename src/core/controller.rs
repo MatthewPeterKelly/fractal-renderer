@@ -169,7 +169,7 @@ impl InteractiveFrameRatePolicy {
     // command on construction. IN both cases, we can probably construct a new object
     // on entry and then destroy it when we switch FSM state. This keeps the logic simpler.
 
-    pub fn evaluate_policy(&mut self,  previous_command: f64,measured_period: f64) -> f64 {
+    pub fn evaluate(&mut self,  previous_command: f64,measured_period: f64) -> f64 {
         // (0) Ensure that the measurement is within the expected range, which in turn
         //     will ensure that the model remains invertable (and we can update the policy).
         let clamped_measured_period = measured_period.max(Self::MIN_PERIOD);
@@ -252,7 +252,7 @@ use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, Li
             InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
         let initial_command = 0.5; // Set an initial non-trivial command for this test.
         for _ in 0..10 {
-            let command = policy.evaluate_policy( initial_command, nominal_period);
+            let command = policy.evaluate( initial_command, nominal_period);
             assert_relative_eq!(command, initial_command, epsilon = 1e-6);
         }
     }
@@ -267,7 +267,7 @@ use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, Li
         let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
         let mut prev_command = 0.0;
         for _ in 0..25 {
-            let next_command = policy.evaluate_policy( prev_command, render_period_too_slow);
+            let next_command = policy.evaluate( prev_command, render_period_too_slow);
             assert_ge!(next_command, prev_command);
             assert_le!(next_command, InteractiveFrameRatePolicy::MAX_COMMAND);
             prev_command = next_command;
@@ -289,7 +289,7 @@ use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, Li
         let mut policy = InteractiveFrameRatePolicy::new(target_update_period, max_command_delta);
         let mut prev_command = 0.05;
         for _ in 0..25 {
-            let next_command = policy.evaluate_policy( prev_command, render_period_too_fast);
+            let next_command = policy.evaluate( prev_command, render_period_too_fast);
             assert_le!(next_command, prev_command);
             assert_ge!(next_command, InteractiveFrameRatePolicy::MIN_COMMAND);
             prev_command = next_command;
@@ -314,7 +314,7 @@ use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, Li
         for _ in 0..500 {
             let index = rng.gen_range(0..periods_to_test.len());
             let period = target_update_period * periods_to_test[index];
-            command = policy.evaluate_policy( command, period);
+            command = policy.evaluate( command, period);
             assert_le!(command, InteractiveFrameRatePolicy::MAX_COMMAND);
             assert_ge!(command, InteractiveFrameRatePolicy::MIN_COMMAND);
         }
@@ -418,7 +418,7 @@ use crate::core::interpolation::{InterpolationKeyframe, KeyframeInterpolator, Li
         let mut prev_command = initial_command;
         for _ in 0..num_iterations {
             let prev_period = render_proxy.evaluate(prev_command);
-            let next_command = policy.evaluate_policy( prev_command, prev_period);
+            let next_command = policy.evaluate( prev_command, prev_period);
             let next_period = render_proxy.evaluate(next_command);
 
             // println!(

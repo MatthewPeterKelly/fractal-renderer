@@ -16,142 +16,66 @@
 
 
 pub trait RenderQualityPolicy {
-
-    /// @param time: time right now. Used to compute frame rate.
+    /// @param previous_command: last render command that was completed
+    /// @param measured_period: how long did that render command take to complete?
     /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
     ///     or None (indicating that the render pipeline should not run).
-    fn evaluate(&mut self, time: f64, previous_command: f64) -> Option<f64>;
-
-    /// @param previous_command: value of the last non-trivial render command that was sent by any policy.
-    fn on_entry(&mut self, previous_command: f64);
-
+    fn evaluate(&mut self,  previous_command: f64, measured_period: f64) -> Option<f64>;
 }
 
 use more_asserts::{assert_ge, assert_gt, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
+    BeginRendering,
     Interactive,
     Background,
     Idle,
 }
 
-/// The state of the interactive mode. On entry, it returns the initial command
-/// and caches the time. Then, on the next tick, it uses the previous time to
-/// compute the command.
-#[derive(Debug, Clone, Copy)]
-enum InteractiveState {
-    InitialCommand(f64),
-    TimePreviousCommand(f64),
-}
-
-/// Per-mode continuous data for the Interactive mode.
-#[derive(Debug, Clone)]
-pub struct InteractiveData<F>
-where
-    F: Fn(f64, f64) -> f64,
-{
-    state: InteractiveState,
-    command_policy: F,
-}
-
-impl<F> InteractiveData<F>
-where
-    F: Fn(f64, f64) -> f64,
-{
-    pub fn new(initial_command: f64, command_policy: F) -> Self {
-        debug_assert!(
-            initial_command.is_finite(),
-            "initial_command must be finite"
-        );
-        let initial_command = initial_command.clamp(0.0, 1.0);
-        Self {
-            state: InteractiveState::InitialCommand(initial_command),
-            command_policy,
-        }
-    }
-
-    /// Resets the state of this mode. The first call to update after reset will
-    /// return the initial command and then cache the time for subsequent use.
-    pub fn reset(&mut self, initial_command: f64) {
-        let initial_command = initial_command.clamp(0.0, 1.0);
-        self.state = InteractiveState::InitialCommand(initial_command);
-    }
-
-    /// One interactive tick. On the first call after reset (or construction),
-    /// this will return the cached command. Otherwise, it will compute the period
-    /// between the previous update and this one, and then use that to evaluate
-    /// the command policy.
-    pub fn update(&mut self, time: f64, max_command_delta: f64) -> f64 {
-        let command = match self.state {
-            InteractiveState::InitialCommand(command) => command,
-            InteractiveState::TimePreviousCommand(prev_time) => {
-                let period = time - prev_time;
-                assert_gt!(period, 0.0);
-                (self.command_policy)(period, max_command_delta)
-            }
-        };
-        // Cache the time; used to compute period on next update call.
-        self.state = InteractiveState::TimePreviousCommand(time);
-        command
-    }
-}
-
-#[cfg(test)]
-impl<F> InteractiveData<F>
-where
-    F: Fn(f64, f64) -> f64,
-{
-    /// Test-only helper to assert whether we've cached a previous time.
-    pub fn is_time_cached(&self) -> bool {
-        matches!(self.state, InteractiveState::TimePreviousCommand(_))
-    }
-}
 
 #[derive(Debug)]
-pub struct FiniteStateMachine<F>
+pub struct FiniteStateMachine<F,G>
 where
-    F: Fn(f64, f64) -> f64,
+    F: RenderQualityPolicy,
+    G: RenderQualityPolicy,
 {
-    mode: Mode,
-    prev_command: f64,
-    max_command_delta: f64,
-    interactive: InteractiveData<F>,
+    mode: Mode,  // which mode are we in right now?
+    begin_rendering_command: f64,  // what is the command to send when we first start rendering?
+    prev_render_command: f64,
+    prev_render_time: f64,
+    interactive_policy: F,
+    background_policy: G,
 }
 
-impl<F> FiniteStateMachine<F>
+impl<F,G> FiniteStateMachine<F, G>
 where
-    F: Fn(f64, f64) -> f64,
+    F: RenderQualityPolicy,
+    G: RenderQualityPolicy,
 {
-    /// Create a new FSM.
-    ///
-    /// - `initial_command`: will be returned by the first call to interactive update.
-/// - get_interactive_command: callback used to evaluate the interactive command policy as a function of period and max command delta.
-    pub fn new(initial_command: f64, max_command_delta: f64, get_interactive_command: F) -> Self {
+    /// Create a new FSM for regularing the render quality.
+    pub fn new(initial_command: f64,interactive_policy: F, background_policy: G) -> Self {
         assert_ge!(initial_command, 0.0);
         assert_le!(initial_command, 1.0);
-        assert_ge!(max_command_delta, 0.0);
-        assert_le!(max_command_delta, 1.0);
-
         let initial_command = initial_command.clamp(0.0, 1.0);
         Self {
-            mode: Mode::Background,
-            prev_command: initial_command,
-            max_command_delta,
-            interactive: InteractiveData::new(initial_command, get_interactive_command),
+            mode: Mode::BeginRendering,
+            begin_rendering_command: initial_command,
+            prev_render_command: initial_command,
+            prev_render_time: 0.0,
+            interactive_policy,
+            background_policy,
         }
-    }
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-    pub fn prev_command(&self) -> f64 {
-        self.prev_command
-    }
-    pub fn interactive_data(&self) -> &InteractiveData<F> {
-        &self.interactive
     }
 
     fn transition_logic(&mut self, is_interactive: bool) {
         match (self.mode, is_interactive) {
+            (Mode::BeginRendering, true) => {
+                self.mode = Mode::Interactive;
+            }
+                     (Mode::BeginRendering, false) => {
+                self.mode = Mode::Background;
+                // TODO?
+            }
             (Mode::Background, true) => {
                 self.mode = Mode::Interactive;
             }
