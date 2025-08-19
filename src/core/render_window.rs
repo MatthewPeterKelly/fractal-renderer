@@ -107,6 +107,11 @@ where
 
         let renderer = Arc::new(Mutex::new(renderer));
 
+        // HACK -- render pipeline parameters
+        let initial_render_command = 0.0;
+        let target_update_period = 1.0 / 24.0;
+        let max_command_delta = 0.1;
+
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
@@ -116,7 +121,9 @@ where
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
-            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(time),
+            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(     initial_render_command,
+         target_update_period,
+         max_command_delta),
         };
         pixel_grid
             .view_control

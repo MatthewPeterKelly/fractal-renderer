@@ -7,12 +7,6 @@
 //! high quality, we should shut down the render pipeline to conserve
 //! resources (no need to spin at max CPU while idle...).
 
-// (1) updat the Interactive state to go back to the optional f64 for time. I realized that we always need the previous command.
-// (2) pass the previous command to the user policy (making it stateless)
-// (3) use the same generic interface for the "idle policy" (allow the user to pass in an idle and a interactive policy).
-// (4) make max delta an implementation detail of the user policies
-// (5) use the same interface and design pattern for both interactive and background modes.
-
 pub trait RenderQualityPolicy {
     const MAX_COMMAND: f64 = 1.0;
     const MIN_COMMAND: f64 = 0.0;
@@ -29,7 +23,7 @@ pub trait RenderQualityPolicy {
     }
 }
 
-use more_asserts::{assert_ge, assert_gt, assert_le};
+use more_asserts::{assert_ge,  assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     BeginRendering,
@@ -38,7 +32,7 @@ pub enum Mode {
     Idle,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FiniteStateMachine<F, G>
 where
     F: RenderQualityPolicy,
@@ -72,7 +66,7 @@ where
         }
     }
 
-    pub fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
+     fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::Interactive;
         } else {
@@ -82,7 +76,7 @@ where
         Some(self.prev_render_command)
     }
 
-    pub fn update_interactive(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+     fn update_interactive(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
         if !is_interactive {
             self.mode = Mode::Background;
         }
@@ -94,7 +88,7 @@ where
         Some(self.prev_render_command)
     }
 
-    pub fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+     fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::Interactive;
         }
@@ -108,7 +102,7 @@ where
         Some(self.prev_render_command)
     }
 
-    pub fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
+     fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::BeginRendering;
         }
@@ -117,7 +111,7 @@ where
 
     pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
         let period = time - self.prev_update_time;
-        match (self.mode) {
+        match self.mode {
             Mode::BeginRendering => self.update_begin_rendering(is_interactive),
             Mode::Interactive => self.update_interactive(period, is_interactive),
             Mode::Background => self.update_background(period, is_interactive),
@@ -125,3 +119,6 @@ where
         }
     }
 }
+
+
+// TODO:  testing
