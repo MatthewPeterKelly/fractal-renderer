@@ -106,7 +106,7 @@ where
         // HACK -- render pipeline parameters
         let initial_render_command = 0.0;
         let target_update_period = 1.0 / 24.0;
-        let max_command_delta = 0.1;
+        let max_command_delta = 0.05;
 
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
