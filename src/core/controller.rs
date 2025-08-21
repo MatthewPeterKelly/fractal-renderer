@@ -221,6 +221,9 @@ pub struct AdaptiveOptimizationRegulator {
         InteractiveFrameRatePolicy,
         BackgroundFrameRatePolicy,
     >,
+    render_start_time: Option<f64>,
+    render_period: Option<f64>,
+    render_command: Option<f64>,
 }
 
 impl AdaptiveOptimizationRegulator {
@@ -236,11 +239,43 @@ impl AdaptiveOptimizationRegulator {
                     command_decrement: max_command_delta,
                 },
             ),
+            render_start_time: None,
+            render_period: None,
+            render_command: None,
         }
     }
 
-    pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
-        self.render_policy_fsm.update(time, is_interactive)
+    pub fn reset(&mut self) {
+        self.render_policy_fsm.reset();
+        self.render_start_time = None;
+        self.render_period = None;
+        self.render_command = None;
+    }
+
+    pub fn render_required(&mut self, is_interactive: bool) -> Option<f64> {
+        self.render_policy_fsm.render_required(
+            self.render_period,
+            self.render_command,
+            is_interactive,
+        )
+    }
+
+    // Called by the render pipeline whenever a new render begins.
+    pub fn begin_rendering(&mut self, time: f64, command: f64) {
+        self.render_start_time = Some(time);
+        self.render_period = None;
+        self.render_command = Some(command);
+    }
+
+    // Called by the render pipeline whenever the render is completed
+    pub fn finish_rendering(&mut self, time: f64) {
+        if let Some(start_time) = self.render_start_time {
+            self.render_period = Some(time - start_time);
+            self.render_start_time = None;
+        } else {
+            println!("ERROR: 'finish_rendering' called before 'begin_rendering'!");
+            panic!();
+        }
     }
 }
 

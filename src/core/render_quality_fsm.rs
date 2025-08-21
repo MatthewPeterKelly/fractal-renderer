@@ -40,8 +40,6 @@ where
 {
     mode: Mode,                   // which mode are we in right now?
     begin_rendering_command: f64, // what is the command to send when we first start rendering?
-    prev_render_command: f64,
-    prev_update_time: f64,
     interactive_policy: F,
     background_policy: G,
 }
@@ -59,10 +57,33 @@ where
         Self {
             mode: Mode::BeginRendering,
             begin_rendering_command: initial_command,
-            prev_render_command: initial_command,
-            prev_update_time: 0.0,
             interactive_policy,
             background_policy,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.mode = Mode::BeginRendering;
+    }
+
+    /// @param previous_render_command: previous render command, if one has been set
+    /// @param render_period: if the command has been completed, how long did it take?
+    /// @param is_interactive:  is the user interacting with the fractal view port?
+    pub fn render_required(
+        &mut self,
+        previous_render_command: Option<f64>,
+        render_period: Option<f64>,
+        is_interactive: bool,
+    ) -> Option<f64> {
+        match self.mode {
+            Mode::BeginRendering => self.update_begin_rendering(is_interactive),
+            Mode::Interactive => {
+                self.update_interactive(previous_render_command, render_period, is_interactive)
+            }
+            Mode::Background => {
+                self.update_background(previous_render_command, render_period, is_interactive)
+            }
+            Mode::Idle => self.update_idle(is_interactive),
         }
     }
 
@@ -73,36 +94,58 @@ where
         } else {
             self.mode = Mode::Background;
         }
-        self.prev_render_command = self.begin_rendering_command;
-        Some(self.prev_render_command)
+        Some(self.begin_rendering_command)
     }
 
-    fn update_interactive(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+    fn update_interactive(
+        &mut self,
+        prev_command: Option<f64>,
+        period: Option<f64>,
+        is_interactive: bool,
+    ) -> Option<f64> {
         println!("FSM:   interactive");
         if !is_interactive {
             self.mode = Mode::Background;
         }
-
+        if period.is_none() {
+            // We're waiting on the result of an active render... No need to render.
+            return None;
+        }
+        if prev_command.is_none() {
+            println!("ERROR: period data was set, but there is no matching command!");
+            panic!();
+        }
         let raw_command = self
             .interactive_policy
-            .evaluate(self.prev_render_command, period);
-        self.prev_render_command = F::clamp_command(raw_command);
-        Some(self.prev_render_command)
+            .evaluate(prev_command.unwrap(), period.unwrap());
+        Some(F::clamp_command(raw_command))
     }
 
-    fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+    fn update_background(
+        &mut self,
+        prev_command: Option<f64>,
+        period: Option<f64>,
+        is_interactive: bool,
+    ) -> Option<f64> {
         println!("FSM:   background");
         if is_interactive {
             self.mode = Mode::Interactive;
         }
+        if period.is_none() {
+            // We're waiting on the result of an active render... No need to render.
+            return None;
+        }
+        if prev_command.is_none() {
+            println!("ERROR: period data was set, but there is no matching command!");
+            panic!();
+        }
         let raw_render_command = self
             .background_policy
-            .evaluate(self.prev_render_command, period);
+            .evaluate(prev_command.unwrap(), period.unwrap());
         if raw_render_command <= 0.0 {
             self.mode = Mode::Idle;
         }
-        self.prev_render_command = G::clamp_command(raw_render_command);
-        Some(self.prev_render_command)
+        Some(G::clamp_command(raw_render_command))
     }
 
     fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
@@ -111,16 +154,6 @@ where
             self.mode = Mode::BeginRendering;
         }
         None
-    }
-
-    pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
-        let period = time - self.prev_update_time;
-        match self.mode {
-            Mode::BeginRendering => self.update_begin_rendering(is_interactive),
-            Mode::Interactive => self.update_interactive(period, is_interactive),
-            Mode::Background => self.update_background(period, is_interactive),
-            Mode::Idle => self.update_idle(is_interactive),
-        }
     }
 }
 

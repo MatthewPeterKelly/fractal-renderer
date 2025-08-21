@@ -84,10 +84,6 @@ pub struct PixelGrid<F: Renderable> {
     // Lock, used to ensure that we only run a single render background task.
     render_task_is_busy: Arc<AtomicBool>,
 
-    // This flag is set high when we need to trigger another render pass.
-    // If set, then it contains the desired speed optimization level for the render.
-    render_required: Option<f64>,
-
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
     redraw_required: Arc<AtomicBool>,
@@ -119,7 +115,6 @@ where
             renderer: renderer.clone(),
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 initial_render_command,
@@ -163,7 +158,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0.0);
+        self.adaptive_quality_regulator.reset();
     }
 
     fn update(
@@ -181,22 +176,29 @@ where
         // be copied to the screen using the `draw` method. The `render_task_is_busy` flag
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
+
+        // There are two reasons that we might want to render the fractal:
+        // (1) the view control reports that user-interaction has changed the view port onto the fractal
+        // (2) the adaptive quality regulator reports that the render quality needs to be modified
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
-        if let Some(level) = self.render_required {
+        let render_required = self
+            .adaptive_quality_regulator
+            .render_required(user_interaction);
+        if let Some(command) = render_required {
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 self.renderer
                     .lock()
                     .unwrap()
-                    .set_speed_optimization_level(level, &self.speed_optimizer_cache);
-                println!("Rendering now at level = {}...", level);
+                    .set_speed_optimization_level(command, &self.speed_optimizer_cache);
+                self.adaptive_quality_regulator
+                    .begin_rendering(time, command);
+                println!("Rendering now at level = {}...", command);
                 self.render();
             }
         }
         let redraw_required = self.redraw_required.load(Ordering::Acquire);
-        if user_interaction || redraw_required {
-            self.render_required = self
-                .adaptive_quality_regulator
-                .update(time, user_interaction);
+        if redraw_required {
+            self.adaptive_quality_regulator.finish_rendering(time);
         }
         redraw_required
     }
