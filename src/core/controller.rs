@@ -254,8 +254,8 @@ impl AdaptiveOptimizationRegulator {
 
     pub fn render_required(&mut self, is_interactive: bool) -> Option<f64> {
         self.render_policy_fsm.render_required(
-            self.render_period,
             self.render_command,
+            self.render_period,
             is_interactive,
         )
     }

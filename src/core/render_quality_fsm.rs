@@ -107,17 +107,11 @@ where
         if !is_interactive {
             self.mode = Mode::Background;
         }
-        if period.is_none() {
-            // We're waiting on the result of an active render... No need to render.
-            return None;
-        }
-        if prev_command.is_none() {
-            println!("ERROR: period data was set, but there is no matching command!");
-            panic!();
-        }
+        let period = period?;
+        let prev_command = prev_command.expect("ERROR: period data was set, but there is no matching command!");
         let raw_command = self
             .interactive_policy
-            .evaluate(prev_command.unwrap(), period.unwrap());
+            .evaluate(prev_command, period);
         Some(F::clamp_command(raw_command))
     }
 
@@ -131,17 +125,11 @@ where
         if is_interactive {
             self.mode = Mode::Interactive;
         }
-        if period.is_none() {
-            // We're waiting on the result of an active render... No need to render.
-            return None;
-        }
-        if prev_command.is_none() {
-            println!("ERROR: period data was set, but there is no matching command!");
-            panic!();
-        }
+        let period = period?;
+        let prev_command = prev_command.expect("ERROR: period data was set, but there is no matching command!");
         let raw_render_command = self
             .background_policy
-            .evaluate(prev_command.unwrap(), period.unwrap());
+            .evaluate(prev_command, period);
         if raw_render_command <= 0.0 {
             self.mode = Mode::Idle;
         }

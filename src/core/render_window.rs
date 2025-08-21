@@ -125,7 +125,7 @@ where
         pixel_grid
             .view_control
             .update(time, center_command, ZoomVelocityCommand::zero());
-        pixel_grid.render();
+        // pixel_grid.render();
         pixel_grid
     }
 
