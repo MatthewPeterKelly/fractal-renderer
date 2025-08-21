@@ -8,6 +8,7 @@ pub enum Target {
     Velocity { vel_ref: f64 },
 }
 
+// MPK: TODO:  docs
 #[derive(Clone, Debug)]
 pub struct PointTracker {
     position: f64,
@@ -118,6 +119,14 @@ impl PointTracker {
 // This model approximates the mapping from command to period as:
 // period(command) = scale * exp(-command)
 /// where scale is a positive constants.
+///
+//================================================================================
+/// MPK:  I'm not actually convinced this is a good idea. The model is not very good,
+/// unless we fit a 2-3 parameter exponential... and even then it bounces around with the
+/// CPU usage and specific fractal and render view.
+///
+/// I'm beginning to thing we should just make this a PD controller and be done with it.
+//================================================================================
 struct ExponentialRenderPeriodModel {
     scale: f64,
 }

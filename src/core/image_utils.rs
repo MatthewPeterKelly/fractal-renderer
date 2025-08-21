@@ -189,6 +189,11 @@ pub struct RenderOptions {
     /// 2 = some antialiasing (at 9x CPU time)
     /// 6 = high antialiasing (at cost of 49x CPU time)
     pub subpixel_antialiasing: u32,
+
+    // MPK:  I wonder if these two values should just be combined:
+    // if negative, then it is downsample stride
+    // zero = just one sample per pixel
+    // positive, then run antialiasing.
 }
 
 const MAX_DOWNSAMPLE_STRIDE: f64 = 8.0;
@@ -201,9 +206,15 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
+        // TODO:  make this start to kick in at some non-zero value. Say about 0.4 or something.
+        // We should prefer the other "continuous" knobs first, using this as a last resort.
         // Note:  1.0 = no downsample stride (one sample per pixel)
         self.downsample_stride =
             LinearInterpolator.interpolate(level, 1.0, MAX_DOWNSAMPLE_STRIDE) as usize;
+            // TODO:  we want to drop off the subpixel antialiasing really fast.
+            // It is probably the least noticable while running, and it is a huge performnce boost.
+            // Also, the downsample stride and subpixel antialiasing are really the same thing, but in
+            // opposite directions.
         self.subpixel_antialiasing =
             LinearInterpolator.interpolate(level, cache.subpixel_antialiasing as f64, 0.0) as u32;
     }
