@@ -58,7 +58,14 @@ where
         }
     }
 
-    #[cfg(test)]
+    pub fn queries(&self) -> &[T] {
+        &self.queries
+    }
+
+    pub fn values(&self) -> &[V] {
+        &self.values
+    }
+
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
@@ -79,7 +86,6 @@ where
         self.queries[index] = query;
     }
 
-    #[cfg(test)]
     pub fn set_keyframe_value(&mut self, index: usize, value: V) {
         assert!(
             index < self.queries.len(),
@@ -337,7 +343,7 @@ mod tests {
         assert_relative_eq!(interp.evaluate(-0.0), 20.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(3.0), 128.0, epsilon = 1e-6); // interpolate
         assert_relative_eq!(interp.evaluate(5.0), 200.0, epsilon = 1e-6);
-        assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolate
+        assert_relative_eq!(interp.evaluate(7.0), 120.0, epsilon = 1e-6); // interpolateg
         assert_relative_eq!(interp.evaluate(10.0), 0.0, epsilon = 1e-6);
         assert_relative_eq!(interp.evaluate(18.0), 0.0, epsilon = 1e-6); // extrapolate (clamped)
     }

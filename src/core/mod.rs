@@ -8,6 +8,7 @@ pub mod image_utils;
 pub mod interpolation;
 pub mod lookup_table;
 pub mod ode_solvers;
+pub mod render_quality_fsm;
 pub mod render_window;
 pub mod stopwatch;
 pub mod view_control;
