@@ -42,6 +42,7 @@ where
     begin_rendering_command: f64, // what is the command to send when we first start rendering?
     interactive_policy: F,
     background_policy: G,
+    previous_interactive_render_command: f64,
 }
 
 impl<F, G> FiniteStateMachine<F, G>
@@ -59,6 +60,7 @@ where
             begin_rendering_command: initial_command,
             interactive_policy,
             background_policy,
+            previous_interactive_render_command: initial_command,
         }
     }
 
@@ -98,7 +100,7 @@ where
 
     fn update_interactive(
         &mut self,
-        prev_command: Option<f64>,
+        _: Option<f64>,
         period: Option<f64>,
         is_interactive: bool,
     ) -> Option<f64> {
@@ -106,11 +108,14 @@ where
             self.mode = Mode::Background;
         }
         let period = period?;
-        let prev_command = prev_command.expect("ERROR: period data was set, but there is no matching command!");
-        let raw_command = self
+        // Note:  here we use the previous *interactive* command, rather than the
+        // general previous command across all modes. This is intentional -- it means
+        // that the GUI is responsive when we resume from a period of non-interaction.
+       let raw_command = self
             .interactive_policy
-            .evaluate(prev_command, period);
-        Some(F::clamp_command(raw_command))
+            .evaluate(self.previous_interactive_render_command, period);
+        self.previous_interactive_render_command = F::clamp_command(raw_command);
+        Some(self.previous_interactive_render_command)
     }
 
     fn update_background(
