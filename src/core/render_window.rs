@@ -121,9 +121,11 @@ where
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
-            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(     initial_render_command,
-         target_update_period,
-         max_command_delta),
+            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
+                initial_render_command,
+                target_update_period,
+                max_command_delta,
+            ),
         };
         pixel_grid
             .view_control
@@ -186,18 +188,17 @@ where
                     .lock()
                     .unwrap()
                     .set_speed_optimization_level(level, &self.speed_optimizer_cache);
+                println!("Rendering now at level = {}...", level);
                 self.render();
-                // Also recompute the "render level" when the render completes...
-                // Problem: this is an "inactive update". The view port has not changed and the user is
-                // not waiting on a responsive UI.  Now we should switch the focus and instead just
-                // gradually work on increasing the quality of the image in-place.
-                self.render_required = self
-                    .adaptive_quality_regulator
-                    .update(time, user_interaction);
             }
         }
-
-        self.redraw_required.load(Ordering::Acquire)
+        let redraw_required = self.redraw_required.load(Ordering::Acquire);
+        if user_interaction || redraw_required {
+            self.render_required = self
+                .adaptive_quality_regulator
+                .update(time, user_interaction);
+        }
+        redraw_required
     }
 
     fn draw(&self, screen: &mut [u8]) {

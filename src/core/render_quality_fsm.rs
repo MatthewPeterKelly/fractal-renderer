@@ -23,7 +23,7 @@ pub trait RenderQualityPolicy {
     }
 }
 
-use more_asserts::{assert_ge,  assert_le};
+use more_asserts::{assert_ge, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     BeginRendering,
@@ -66,7 +66,8 @@ where
         }
     }
 
-     fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
+    fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
+        println!("FSM:   begin rendering");
         if is_interactive {
             self.mode = Mode::Interactive;
         } else {
@@ -76,7 +77,8 @@ where
         Some(self.prev_render_command)
     }
 
-     fn update_interactive(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+    fn update_interactive(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+        println!("FSM:   interactive");
         if !is_interactive {
             self.mode = Mode::Background;
         }
@@ -88,7 +90,8 @@ where
         Some(self.prev_render_command)
     }
 
-     fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+    fn update_background(&mut self, period: f64, is_interactive: bool) -> Option<f64> {
+        println!("FSM:   background");
         if is_interactive {
             self.mode = Mode::Interactive;
         }
@@ -102,7 +105,8 @@ where
         Some(self.prev_render_command)
     }
 
-     fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
+    fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
+        println!("FSM:   idle");
         if is_interactive {
             self.mode = Mode::BeginRendering;
         }
@@ -119,6 +123,5 @@ where
         }
     }
 }
-
 
 // TODO:  testing

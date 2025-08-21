@@ -174,16 +174,21 @@ impl RenderQualityPolicy for InteractiveFrameRatePolicy {
         // (3) Clamp the output of the policy to a valid domain. This is done in two stages.
         // The first clamps it to the valid command range, and the second enforces the trust
         // region where the model is valid around the previous command.
-        raw_command
+        let command = raw_command
             .clamp(Self::MIN_COMMAND, Self::MAX_COMMAND)
             .clamp(
                 previous_command - self.max_command_delta,
                 previous_command + self.max_command_delta,
-            )
+            );
+
+        println!(
+            "Running interactive policy.  prev cmd:{}, period: {}, next cmd:{}",
+            previous_command, measured_period, command
+        );
+
+        command
     }
 }
-
-
 
 #[derive(Clone, Debug)]
 pub struct BackgroundFrameRatePolicy {
@@ -197,31 +202,45 @@ impl RenderQualityPolicy for BackgroundFrameRatePolicy {
 
     fn evaluate(&mut self, previous_command: f64, _: f64) -> f64 {
         let raw_command = previous_command - self.command_decrement;
-                raw_command
-            .clamp(Self::MIN_COMMAND, Self::MAX_COMMAND)
+        let command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
+
+        println!(
+            "Running background policy.  prev cmd:{}, next cmd:{}",
+            previous_command, command
+        );
+
+        command
     }
 }
-
 
 ///////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Debug)]
 pub struct AdaptiveOptimizationRegulator {
-    render_policy_fsm: render_quality_fsm::FiniteStateMachine<InteractiveFrameRatePolicy,BackgroundFrameRatePolicy>,
+    render_policy_fsm: render_quality_fsm::FiniteStateMachine<
+        InteractiveFrameRatePolicy,
+        BackgroundFrameRatePolicy,
+    >,
 }
 
 impl AdaptiveOptimizationRegulator {
-    pub fn new(  initial_command: f64,  target_update_period: f64,
-    max_command_delta: f64,) -> Self {
+    pub fn new(initial_command: f64, target_update_period: f64, max_command_delta: f64) -> Self {
         Self {
-            render_policy_fsm: FiniteStateMachine::new(initial_command,
-                 InteractiveFrameRatePolicy { target_update_period, max_command_delta },
-                BackgroundFrameRatePolicy { command_decrement: max_command_delta }),
+            render_policy_fsm: FiniteStateMachine::new(
+                initial_command,
+                InteractiveFrameRatePolicy {
+                    target_update_period,
+                    max_command_delta,
+                },
+                BackgroundFrameRatePolicy {
+                    command_decrement: max_command_delta,
+                },
+            ),
         }
     }
 
-    pub fn update(&mut self,time: f64, is_interactive: bool) -> Option<f64> {
-       self.render_policy_fsm.update(time, is_interactive)
+    pub fn update(&mut self, time: f64, is_interactive: bool) -> Option<f64> {
+        self.render_policy_fsm.update(time, is_interactive)
     }
 }
 
@@ -272,8 +291,10 @@ mod tests {
         let target_update_period = 0.025;
         let max_command_delta = 0.1;
         let nominal_period = target_update_period;
-        let mut policy: InteractiveFrameRatePolicy =
-            InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+        let mut policy: InteractiveFrameRatePolicy = InteractiveFrameRatePolicy {
+            target_update_period,
+            max_command_delta,
+        };
         let initial_command = 0.5; // Set an initial non-trivial command for this test.
         for _ in 0..10 {
             let command = policy.evaluate(initial_command, nominal_period);
@@ -288,7 +309,10 @@ mod tests {
         let render_period_too_slow = 4.0 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+        let mut policy = InteractiveFrameRatePolicy {
+            target_update_period,
+            max_command_delta,
+        };
         let mut prev_command = 0.0;
         for _ in 0..25 {
             let next_command = policy.evaluate(prev_command, render_period_too_slow);
@@ -310,7 +334,10 @@ mod tests {
         let render_period_too_fast = 0.2 * target_update_period;
 
         // Given a slow period, the command should increase, eventually saturating at 1.0.
-        let mut policy = InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+        let mut policy = InteractiveFrameRatePolicy {
+            target_update_period,
+            max_command_delta,
+        };
         let mut prev_command = 0.05;
         for _ in 0..25 {
             let next_command = policy.evaluate(prev_command, render_period_too_fast);
@@ -333,7 +360,10 @@ mod tests {
         let periods_to_test = [0.01, 0.4, 1.1, 0.9, 0.99, 1.01, 1.1, 10.0, 100.0];
         let mut rng = StdRng::seed_from_u64(82326745);
 
-        let mut policy = InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+        let mut policy = InteractiveFrameRatePolicy {
+            target_update_period,
+            max_command_delta,
+        };
         let mut command = 0.0;
         for _ in 0..500 {
             let index = rng.gen_range(0..periods_to_test.len());
@@ -486,8 +516,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
-            let mut policy =
-                InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+            let mut policy = InteractiveFrameRatePolicy {
+                target_update_period,
+                max_command_delta,
+            };
             let converged = simulate_controller(
                 &mut policy,
                 initial_command,
@@ -516,8 +548,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 10;
         for initial_command in initial_commands {
-            let mut policy =
-                InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+            let mut policy = InteractiveFrameRatePolicy {
+                target_update_period,
+                max_command_delta,
+            };
             let converged = simulate_controller(
                 &mut policy,
                 initial_command,
@@ -547,8 +581,10 @@ mod tests {
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
         let max_iterations = 15;
         for initial_command in initial_commands {
-            let mut policy =
-                InteractiveFrameRatePolicy{target_update_period, max_command_delta};
+            let mut policy = InteractiveFrameRatePolicy {
+                target_update_period,
+                max_command_delta,
+            };
             let converged = simulate_controller(
                 &mut policy,
                 initial_command,
