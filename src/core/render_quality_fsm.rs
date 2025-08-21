@@ -88,7 +88,6 @@ where
     }
 
     fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
-        println!("FSM:   begin rendering");
         if is_interactive {
             self.mode = Mode::Interactive;
         } else {
@@ -103,7 +102,6 @@ where
         period: Option<f64>,
         is_interactive: bool,
     ) -> Option<f64> {
-        println!("FSM:   interactive");
         if !is_interactive {
             self.mode = Mode::Background;
         }
@@ -121,7 +119,6 @@ where
         period: Option<f64>,
         is_interactive: bool,
     ) -> Option<f64> {
-        println!("FSM:   background");
         if is_interactive {
             self.mode = Mode::Interactive;
         }
@@ -137,7 +134,6 @@ where
     }
 
     fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
-        println!("FSM:   idle");
         if is_interactive {
             self.mode = Mode::BeginRendering;
         }

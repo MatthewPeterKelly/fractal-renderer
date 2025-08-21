@@ -262,6 +262,7 @@ impl AdaptiveOptimizationRegulator {
 
     // Called by the render pipeline whenever a new render begins.
     pub fn begin_rendering(&mut self, time: f64, command: f64) {
+        println!("Begin rendering...   time: {}", time);
         self.render_start_time = Some(time);
         self.render_period = None;
         self.render_command = Some(command);
@@ -270,11 +271,11 @@ impl AdaptiveOptimizationRegulator {
     // Called by the render pipeline whenever the render is completed
     pub fn finish_rendering(&mut self, time: f64) {
         if let Some(start_time) = self.render_start_time {
+            println!("Finish rendering...   time: {}", time);
             self.render_period = Some(time - start_time);
             self.render_start_time = None;
         } else {
-            println!("ERROR: 'finish_rendering' called before 'begin_rendering'!");
-            panic!();
+            println!("Finish rendering called again because redrawing takes a looong time...   time: {}", time);
         }
     }
 }
