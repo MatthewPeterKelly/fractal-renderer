@@ -26,6 +26,7 @@ pub trait RenderQualityPolicy {
 use more_asserts::{assert_ge, assert_le};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
+    BeginRendering,
     Interactive,
     Background,
     Idle,
@@ -78,6 +79,7 @@ where
         is_interactive: bool,
     ) -> Option<f64> {
         match self.mode {
+            Mode::BeginRendering => self.update_begin_rendering(is_interactive),
             Mode::Interactive => {
                 self.update_interactive(previous_render_command, render_period, is_interactive)
             }
@@ -86,6 +88,15 @@ where
             }
             Mode::Idle => self.update_idle(is_interactive),
         }
+    }
+
+    fn update_begin_rendering(&mut self, is_interactive: bool) -> Option<f64> {
+        if is_interactive {
+            self.mode = Mode::Interactive;
+        } else {
+            self.mode = Mode::Background;
+        }
+        Some(self.previous_interactive_render_command)
     }
 
     fn update_interactive(
