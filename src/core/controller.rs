@@ -8,7 +8,6 @@ pub enum Target {
     Velocity { vel_ref: f64 },
 }
 
-// MPK: TODO:  docs
 #[derive(Clone, Debug)]
 pub struct PointTracker {
     position: f64,
@@ -77,56 +76,12 @@ impl PointTracker {
     }
 }
 
-// TODO:  just split this following out into a new file... maybe "render_control" or something.
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// The frame rate policy is a mapping from the measured period to the
-// command that should be used on the next render, conditioned on the
-// command that was used to generate the current measured period.
-//
-// This can be thought of as a root-finding exercise, where the the
-// objective is to find the command that will yield the desired period.
-// In this case, the "function" that we're iterating over is the entire
-// render pipeline.
-//
-// One way to do this root-solve is with quassi-Newton method, which requires
-// that we be able to locally approximate the function with a linear model.
-// Directly computing the derivative of the function is not possible, because
-// the render pipeline is not consistent across frames -- the CPU load might
-//
-// change, and also the fractal being rendered might change, so we've got to
-// work with a single evaluation.
-//
-// There is another tricky detail -- we need to ensure that the command is bounded
-// to the domain of [0,1], which is not typically part of a quassi newton method.
-//
-// This problem has some nice features that we can exploit. The first is that we
-// know the render pipeline is monotonic -- increasing the command will always
-// reduce the period, until it saturates (given a fixed CPU and render task).
-// Additionally, the command is
-// bounded to [0,1], and the period is bounded to [0, max_expected_period].
-//
-// We can use this information to construct a piecewise linear model of the function
-// that is always invertible, and which is guaranteed to have a single unique solution
-// for any period in the range [0, max_expected_period]. The model is constructed
-// by interpolation between three keyframes, where the first and last keyframes are
-// specified by the problem itself, and the middle keyframe is updated each time based
-// on the measured period and the command that produced it. As a result, this model is
-// most accurate near the current measurement, and the two boundary keyframes primarily
-// serve to provide a reasonable guess at the local deriviatives.
-
-// This model approximates the mapping from command to period as:
-// period(command) = scale * exp(-command)
-/// where scale is a positive constants.
-///
-//================================================================================
-/// MPK:  I'm not actually convinced this is a good idea. The model is not very good,
-/// unless we fit a 2-3 parameter exponential... and even then it bounces around with the
-/// CPU usage and specific fractal and render view.
-///
-/// I'm beginning to thing we should just make this a PD controller and be done with it.
-//================================================================================
+/// This model approximates the mapping from command to period as:
+/// period(command) = scale * exp(-command)
+/// where scale is a positive constants. This is a pretty rough model, but
+/// it at least provides the correct direction to adjust the render pipeline.
 struct ExponentialRenderPeriodModel {
     scale: f64,
 }

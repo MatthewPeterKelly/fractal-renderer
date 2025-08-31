@@ -39,7 +39,7 @@ where
     G: RenderQualityPolicy,
 {
     mode: Mode,                   // which mode are we in right now?
-    begin_rendering_command: f64, // what is the command to send when we first start rendering?
+    initial_render_command: f64, // what is the command to send when we first start rendering?
     interactive_policy: F,
     background_policy: G,
     previous_interactive_render_command: f64,
@@ -57,7 +57,7 @@ where
         let initial_command = initial_command.clamp(0.0, 1.0);
         Self {
             mode: Mode::BeginRendering,
-            begin_rendering_command: initial_command,
+            initial_render_command: initial_command,
             interactive_policy,
             background_policy,
             previous_interactive_render_command: initial_command,
@@ -66,6 +66,7 @@ where
 
     pub fn reset(&mut self) {
         self.mode = Mode::BeginRendering;
+        self.previous_interactive_render_command = self.initial_render_command;
     }
 
     /// @param previous_render_command: previous render command, if one has been set
@@ -95,7 +96,7 @@ where
         } else {
             self.mode = Mode::Background;
         }
-        Some(self.begin_rendering_command)
+        Some(self.previous_interactive_render_command)
     }
 
     fn update_interactive(
@@ -141,9 +142,11 @@ where
     fn update_idle(&mut self, is_interactive: bool) -> Option<f64> {
         if is_interactive {
             self.mode = Mode::BeginRendering;
+            println!("Idle --> Begin!")
         }
         None
     }
 }
 
 // TODO:  testing
+// ON transition from IDLE to Begin, we run with the last interactive command
