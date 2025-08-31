@@ -38,7 +38,7 @@ where
     F: RenderQualityPolicy,
     G: RenderQualityPolicy,
 {
-    mode: Mode,                   // which mode are we in right now?
+    mode: Mode,                  // which mode are we in right now?
     initial_render_command: f64, // what is the command to send when we first start rendering?
     interactive_policy: F,
     background_policy: G,
@@ -112,7 +112,7 @@ where
         // Note:  here we use the previous *interactive* command, rather than the
         // general previous command across all modes. This is intentional -- it means
         // that the GUI is responsive when we resume from a period of non-interaction.
-       let raw_command = self
+        let raw_command = self
             .interactive_policy
             .evaluate(self.previous_interactive_render_command, period);
         self.previous_interactive_render_command = F::clamp_command(raw_command);
@@ -129,10 +129,9 @@ where
             self.mode = Mode::Interactive;
         }
         let period = period?;
-        let prev_command = prev_command.expect("ERROR: period data was set, but there is no matching command!");
-        let raw_render_command = self
-            .background_policy
-            .evaluate(prev_command, period);
+        let prev_command =
+            prev_command.expect("ERROR: period data was set, but there is no matching command!");
+        let raw_render_command = self.background_policy.evaluate(prev_command, period);
         if raw_render_command <= 0.0 {
             self.mode = Mode::Idle;
         }

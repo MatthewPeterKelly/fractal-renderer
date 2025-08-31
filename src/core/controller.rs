@@ -95,6 +95,7 @@ impl ExponentialRenderPeriodModel {
         Self { scale }
     }
 
+    #[cfg(test)]
     pub fn compute_period_from_command(&self, command: f64) -> f64 {
         self.scale * (-command).exp()
     }
@@ -239,7 +240,10 @@ impl AdaptiveOptimizationRegulator {
             self.render_period = Some(time - start_time);
             self.render_start_time = None;
         } else {
-            println!("Finish rendering called again because redrawing takes a looong time...   time: {}", time);
+            println!(
+                "Finish rendering called again because redrawing takes a looong time...   time: {}",
+                time
+            );
         }
     }
 }

@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator, LinearInterpolator};
+use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
 
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
@@ -202,20 +202,25 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-
         // Downsample stride has effective, but hugely reduces image quality and produces large jumps in the
         // render pipeline duration. It is better to rely on other things like reducing the iteration counts
         // before falling back to this. To do that, let's modify the level so that is doesn't "turn on"
         // until it hits some non-zero value.
         let delayed_activation_level = (level * 2.0) - 1.0;
-        self.downsample_stride =
-            ClampedLinearInterpolator.interpolate(delayed_activation_level,MIN_DOWNSAMPLE_STRIDE, MAX_DOWNSAMPLE_STRIDE) as usize;
+        self.downsample_stride = ClampedLinearInterpolator.interpolate(
+            delayed_activation_level,
+            MIN_DOWNSAMPLE_STRIDE,
+            MAX_DOWNSAMPLE_STRIDE,
+        ) as usize;
 
         // Antialiasing is super expensive, and not too visible while panning around. We should turn it off
         // really quickly once we need to render faster.
         let fast_drop_off_level = 5.0 * level;
-        self.subpixel_antialiasing =
-            ClampedLinearInterpolator.interpolate(fast_drop_off_level, cache.subpixel_antialiasing as f64, 0.0) as u32;
+        self.subpixel_antialiasing = ClampedLinearInterpolator.interpolate(
+            fast_drop_off_level,
+            cache.subpixel_antialiasing as f64,
+            0.0,
+        ) as u32;
     }
 }
 

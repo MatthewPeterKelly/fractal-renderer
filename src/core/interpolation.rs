@@ -58,14 +58,17 @@ where
         }
     }
 
+    #[cfg(test)]
     pub fn queries(&self) -> &[T] {
         &self.queries
     }
 
+    #[cfg(test)]
     pub fn values(&self) -> &[V] {
         &self.values
     }
 
+    #[cfg(test)]
     pub fn set_keyframe_query(&mut self, index: usize, query: T) {
         assert!(
             index < self.queries.len(),
@@ -86,6 +89,7 @@ where
         self.queries[index] = query;
     }
 
+    #[cfg(test)]
     pub fn set_keyframe_value(&mut self, index: usize, value: V) {
         assert!(
             index < self.queries.len(),
@@ -171,8 +175,12 @@ where
     ///
     /// Note:  this method will *extrapolate* if `alpha` is not in [0,1]
     fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
-        if alpha <= T::zero() {return low;}
-        if alpha >= T::one() {return upp;}
+        if alpha <= T::zero() {
+            return low;
+        }
+        if alpha >= T::one() {
+            return upp;
+        }
         let interpolator = LinearInterpolator;
         interpolator.interpolate(alpha, low, upp)
     }
@@ -216,7 +224,7 @@ mod tests {
         assert_relative_eq!(interp.interpolate(1.5, low, upp), 25.0, epsilon = 1e-6);
     }
 
-   #[test]
+    #[test]
     fn test_clamped_linear_interpolator_scalar() {
         let interp = ClampedLinearInterpolator;
         let low: f32 = 10.0;
