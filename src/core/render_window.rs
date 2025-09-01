@@ -5,8 +5,9 @@ use std::sync::{
 
 use image::Rgb;
 
+use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
+
 use super::{
-    controller::AdaptiveOptimizationRegulator,
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
     image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
@@ -174,18 +175,26 @@ where
             .adaptive_quality_regulator
             .render_required(user_interaction);
         if let Some(command) = render_required {
+            // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                // If we reach here, then the background thread is ready to render an image.
                 self.renderer
                     .lock()
                     .unwrap()
                     .set_speed_optimization_level(command, &self.speed_optimizer_cache);
+                // Mark the start of the render operation so that we can collect accurate timing.
                 self.adaptive_quality_regulator
                     .begin_rendering(time, command);
-                println!("Rendering now at level = {}...", command);
                 self.render();
             }
         }
+        // Redraw will be required once the background render thread has finished working.
         let redraw_required = self.redraw_required.load(Ordering::Acquire);
+        // If redraw is required, it tells us that the rendering operation has completed,
+        // so we mark it as finished, giving us timing information to use in the next
+        // render quality update. Note that this `finish_rendering()` might be called
+        // twice if we call `update()` multiple times before hitting the `draw()` method
+        // below, which happens depending on render rates and user inputs.
         if redraw_required {
             self.adaptive_quality_regulator.finish_rendering(time);
         }
