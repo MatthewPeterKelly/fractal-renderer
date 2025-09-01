@@ -74,8 +74,11 @@ impl PointTracker {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
 
+/// The `AdaptiveOptimizationRegulator` is a simple class wrapping a finite state machine
+/// that is used to compute the "render quality" (0 = high quality but slow, 1 = low quality
+/// but fast), while exploring a fractal interactively with the user.
 #[derive(Clone, Debug)]
 pub struct AdaptiveOptimizationRegulator {
     render_policy_fsm:
@@ -85,6 +88,9 @@ pub struct AdaptiveOptimizationRegulator {
     render_command: Option<f64>,
 }
 
+/// For now, keep the regulator simple with some hard-coded policies.
+/// Eventually these will be replaced with policies that depend on the
+/// measured frame rate data.
 impl Default for AdaptiveOptimizationRegulator {
     fn default() -> Self {
         Self {
@@ -112,6 +118,12 @@ impl AdaptiveOptimizationRegulator {
         self.render_command = None;
     }
 
+    /// This method is called each time that the `explore` pipeline would like
+    /// to render the fractal. It returns an optional value, which, if set,
+    /// indicates that the fractal should be rendered, and the floating point
+    /// value specifies the render quality value. If unset, in indicates that the
+    /// fractal already has been rendered to the screen, and does not need to be
+    /// recomputed, allowing the system to save resources.
     pub fn render_required(&mut self, is_interactive: bool) -> Option<f64> {
         self.render_policy_fsm.render_required(
             self.render_command,
@@ -120,25 +132,31 @@ impl AdaptiveOptimizationRegulator {
         )
     }
 
-    // Called by the render pipeline whenever a new render begins.
+    /// Called by the render pipeline whenever a new render begins.
+    /// This is a separate method from `render_required` because we cannot
+    /// run two renders at once, and the rendering happens in a separate
+    /// background process. This method will be called immediately at the
+    /// start of each enw render, and is used to collect accurate timing
+    /// data for the finite state machine logic. It caches that data for
+    /// use in the `render_required` method.
     pub fn begin_rendering(&mut self, time: f64, command: f64) {
-        println!("Begin rendering...   time: {}", time);
         self.render_start_time = Some(time);
         self.render_period = None;
         self.render_command = Some(command);
     }
 
-    // Called by the render pipeline whenever the render is completed
+    /// Called by the render pipeline whenever the render is completed.
+    /// This is the matched method to the `begin_rendering` method, and
+    /// is used for accurate data collection on the frame rate. This method
+    /// should be called whenever the background thread finishes a render.
     pub fn finish_rendering(&mut self, time: f64) {
+        // Note: this method will sometimes be called twice for a single
+        // `begin_rendering` call because the redrawing can take a long time.
+        // For this reason, we guard the update here, only updating the data
+        // on the first time that finish is called after begin.
         if let Some(start_time) = self.render_start_time {
-            println!("Finish rendering...   time: {}", time);
             self.render_period = Some(time - start_time);
             self.render_start_time = None;
-        } else {
-            println!(
-                "Finish rendering called again because redrawing takes a looong time...   time: {}",
-                time
-            );
         }
     }
 }
