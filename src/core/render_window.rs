@@ -5,15 +5,13 @@ use std::sync::{
 
 use image::Rgb;
 
+use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
+
 use super::{
     file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
     image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
-
-// For now, jump to an intermediate render quality while interacting to make for a
-// responsive UI. Eventually we'll replace this with an adaptive controller.
-const SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING: f64 = 0.5;
 
 /// A trait for managing and rendering a graphical view with controls for recentering,
 /// panning, zooming, updating, and saving the rendered output. This is the core interface
@@ -71,6 +69,12 @@ pub struct PixelGrid<F: Renderable> {
     // images to disk while exploring the fractal.
     file_prefix: FilePrefix,
 
+    // Measures the render speed on each redraw, and then uses that to adaptively change
+    // the trade-off between render quality and speed. Once the user stops interacting,
+    // the quality will gradually increase, resulting in a progressively better render.
+    // While interacting, this ensures that we have a fast response from the graphics.
+    adaptive_quality_regulator: AdaptiveOptimizationRegulator,
+
     // Encapsulates all details required to render the image.
     // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
     renderer: Arc<Mutex<F>>,
@@ -80,10 +84,6 @@ pub struct PixelGrid<F: Renderable> {
 
     // Lock, used to ensure that we only run a single render background task.
     render_task_is_busy: Arc<AtomicBool>,
-
-    // This flag is set high when we need to trigger another render pass.
-    // If set, then it contains the desired speed optimization level for the render.
-    render_required: Option<f64>,
 
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
@@ -103,7 +103,6 @@ where
         });
 
         let renderer = Arc::new(Mutex::new(renderer));
-
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
@@ -111,13 +110,12 @@ where
             renderer: renderer.clone(),
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
-            render_required: Some(0.0),
             redraw_required: Arc::new(AtomicBool::new(false)),
+            adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(),
         };
         pixel_grid
             .view_control
             .update(time, center_command, ZoomVelocityCommand::zero());
-        pixel_grid.render();
         pixel_grid
     }
 
@@ -150,7 +148,7 @@ where
 
     fn reset(&mut self) {
         self.view_control.reset();
-        self.render_required = Some(0.0);
+        self.adaptive_quality_regulator.reset();
     }
 
     fn update(
@@ -168,27 +166,39 @@ where
         // be copied to the screen using the `draw` method. The `render_task_is_busy` flag
         // is a lock that is used to ensure that we only attempt one render at a time, as
         // this task will use all available CPU resources.
-        if self.view_control.update(time, center_command, zoom_command) {
-            self.render_required = Some(SPEED_OPTIMIZATION_LEVEL_WHILE_INTERACTING);
-        }
-        if let Some(level) = self.render_required {
+
+        // There are two reasons that we might want to render the fractal:
+        // (1) the view control reports that user-interaction has changed the view port onto the fractal
+        // (2) the adaptive quality regulator reports that the render quality needs to be modified
+        let user_interaction = self.view_control.update(time, center_command, zoom_command);
+        let render_required = self
+            .adaptive_quality_regulator
+            .render_required(user_interaction);
+        if let Some(command) = render_required {
+            // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                // If we reach here, then the background thread is ready to render an image.
                 self.renderer
                     .lock()
                     .unwrap()
-                    .set_speed_optimization_level(level, &self.speed_optimizer_cache);
+                    .set_speed_optimization_level(command, &self.speed_optimizer_cache);
+                // Mark the start of the render operation so that we can collect accurate timing.
+                self.adaptive_quality_regulator
+                    .begin_rendering(time, command);
                 self.render();
-                if level > 0.0 {
-                    // HACK:  asymtotiallcy approach zero  (maximum quality)
-                    // We'll fix this properly in a follow-up project.
-                    self.render_required = Some(0.5 * level);
-                } else {
-                    self.render_required = None;
-                }
             }
         }
-
-        self.redraw_required.load(Ordering::Acquire)
+        // Redraw will be required once the background render thread has finished working.
+        let redraw_required = self.redraw_required.load(Ordering::Acquire);
+        // If redraw is required, it tells us that the rendering operation has completed,
+        // so we mark it as finished, giving us timing information to use in the next
+        // render quality update. Note that this `finish_rendering()` might be called
+        // twice if we call `update()` multiple times before hitting the `draw()` method
+        // below, which happens depending on render rates and user inputs.
+        if redraw_required {
+            self.adaptive_quality_regulator.finish_rendering(time);
+        }
+        redraw_required
     }
 
     fn draw(&self, screen: &mut [u8]) {
