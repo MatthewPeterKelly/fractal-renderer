@@ -68,7 +68,7 @@ where
     F: RenderQualityPolicy,
     G: RenderQualityPolicy,
 {
-    /// Create a new FSM for regularing the render quality.
+    /// Create a new FSM for regulating the render quality.
     pub fn new(initial_command: f64, interactive_policy: F, background_policy: G) -> Self {
         assert_ge!(initial_command, 0.0);
         assert_le!(initial_command, 1.0);
@@ -251,6 +251,3 @@ impl AdaptiveOptimizationRegulator {
         }
     }
 }
-
-// TODO:  testing
-// ON transition from IDLE to Begin, we run with the last interactive command

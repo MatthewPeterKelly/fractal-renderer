@@ -149,7 +149,6 @@ where
 }
 
 /// Clamped Linear interpolation: low * (1 - alpha.clamp(0,1)) + upp * alpha)
-///
 #[derive(Default, Clone, Copy, Debug)]
 pub struct ClampedLinearInterpolator;
 
@@ -163,7 +162,7 @@ where
     /// - `low`: lower bound on interpolation; returned if `alpha == 0.0`
     /// - `upp`: upper bound on interpolation; returned if `alpha == 1.0`
     ///
-    /// Note:  this method will *extrapolate* if `alpha` is not in [0,1]
+    /// Note:  this method will clamp `alpha` to [0,1] --> [low, upp].
     fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
         if alpha <= T::zero() {
             return low;
