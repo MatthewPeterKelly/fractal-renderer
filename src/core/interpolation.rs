@@ -19,7 +19,10 @@ pub struct InterpolationKeyframe<T, V> {
 }
 
 /// Generic container for performing interpolation between keyframes
-
+/// The generic arguments are:
+/// `T` = query type  (scalar)
+/// `V` = value type  (scalar or vector)
+/// `F` = interpolation type (linear, step, ...)
 #[derive(Clone, Debug)]
 pub struct KeyframeInterpolator<T, V, F>
 where

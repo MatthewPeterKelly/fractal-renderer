@@ -120,7 +120,6 @@ where
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 initial_render_command,
                 target_update_period,
-                max_command_delta,
             ),
         };
         pixel_grid
