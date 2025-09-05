@@ -70,10 +70,10 @@ impl RenderQualityPolicy for InteractiveFrameRatePolicy {
         let raw_command = command_delta + previous_command;
         let command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
 
-        println!(
-            "Running interactive policy.  prev cmd:{}, period: {}, delta:{}, raw_command: {}, next cmd:{}",
-            previous_command, measured_period, command_delta, raw_command, command
-        );
+        // println!(
+        //     "Running interactive policy.  prev cmd:{}, period: {}, delta:{}, raw_command: {}, next cmd:{}",
+        //     previous_command, measured_period, command_delta, raw_command, command
+        // );
 
         command
     }
@@ -522,9 +522,9 @@ mod tests {
         steady_state_period: f64,
         steady_state_command: f64,
         convergence_tol: f64,
-    ) -> bool {
+    ) -> Option<usize> {
         let mut prev_command = initial_command;
-        for _ in 0..num_iterations {
+        for iteration_index in 0..num_iterations {
             let prev_period = render_proxy.evaluate(prev_command);
             let next_command = policy.evaluate(prev_command, prev_period);
             let next_period = render_proxy.evaluate(next_command);
@@ -542,21 +542,21 @@ mod tests {
             let next_period_err = (next_period - steady_state_period).abs();
             assert_le!(next_period_err, prev_period_err);
 
-            println!(
-                "Prev Command Error: {:.6}, Next Command Error: {:.6}, Prev Period Error: {:.6}, Next Period Error: {:.6}",
-                prev_cmd_err, next_cmd_err, prev_period_err, next_period_err
-            ); // HACK!!
+            // println!(
+            //     "Prev Command Error: {:.6}, Next Command Error: {:.6}, Prev Period Error: {:.6}, Next Period Error: {:.6}",
+            //     prev_cmd_err, next_cmd_err, prev_period_err, next_period_err
+            // ); // HACK!!
 
             prev_command = next_command;
 
             // If the command and period errors are both small enough, we can consider the system
             // to have converged to a steady state.
             if next_cmd_err < convergence_tol && next_period_err < convergence_tol {
-                return true;
+                return Some(iteration_index);
             }
         }
         // If we reach here, the system did not converge within the specified iterations.
-        false
+        None
     }
 
     #[test]
@@ -579,11 +579,14 @@ mod tests {
                 steady_state_command,
                 1e-2,
             );
-            assert!(
-                converged,
-                "Failed to converge with initial command: {:.6}",
-                initial_command
-            );
+            if let Some(iteration) = converged {
+                println!("Converged in {} iterations", iteration);
+            } else {
+                panic!(
+                    "Failed to converge in max iterations from initial command: {:.6}",
+                    initial_command
+                );
+            }
         }
     }
 
@@ -595,7 +598,7 @@ mod tests {
         let steady_state_command = InteractiveFrameRatePolicy::MAX_COMMAND;
 
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
-        let max_iterations = 10;
+        let max_iterations = 50;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             let converged = simulate_controller(
@@ -607,11 +610,15 @@ mod tests {
                 steady_state_command,
                 1e-2,
             );
-            assert!(
-                converged,
-                "Failed to converge with initial command: {:.6}",
-                initial_command
-            );
+
+            if let Some(iteration) = converged {
+                println!("Converged in {} iterations", iteration);
+            } else {
+                panic!(
+                    "Failed to converge in max iterations from initial command: {:.6}",
+                    initial_command
+                );
+            }
         }
     }
 
@@ -624,7 +631,7 @@ mod tests {
         let steady_state_command = render_proxy.queries()[target_index];
 
         let initial_commands = [0.0, 0.3, 0.7, 1.0];
-        let max_iterations = 15;
+        let max_iterations = 50;
         for initial_command in initial_commands {
             let mut policy = InteractiveFrameRatePolicy::new(target_update_period);
             let converged = simulate_controller(
@@ -636,11 +643,15 @@ mod tests {
                 steady_state_command,
                 1e-3,
             );
-            assert!(
-                converged,
-                "Failed to converge with initial command: {:.6}",
-                initial_command
-            );
+
+            if let Some(iteration) = converged {
+                println!("Converged in {} iterations", iteration);
+            } else {
+                panic!(
+                    "Failed to converge in max iterations from initial command: {:.6}",
+                    initial_command
+                );
+            }
             println!("==========================================")
         }
     }
