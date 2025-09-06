@@ -68,8 +68,7 @@ impl RenderQualityPolicy for InteractiveFrameRatePolicy {
     fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64 {
         let command_delta = self.policy.evaluate(measured_period);
         let raw_command = command_delta + previous_command;
-        let command = raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND);
-        command
+        raw_command.clamp(Self::MIN_COMMAND, Self::MAX_COMMAND)
     }
 }
 
@@ -83,22 +82,10 @@ impl RenderQualityPolicy for BackgroundFrameRatePolicy {
         // If we were running with a large command (very slow render), then gradually
         // approach a lower command.
         if previous_command > 0.2 {
-            println!(
-                "Running background policy A.  prev cmd:{}, measured period: {}, next cmd:{}",
-                previous_command,
-                measured_period,
-                0.5 * previous_command
-            );
             return 0.5 * previous_command;
         }
         // If we're still slow, then take a few steps to get back to full render quality
         if measured_period > 2.0 * self.target_update_period {
-            println!(
-                "Running background policy B.  prev cmd:{}, measured period: {}, next cmd:{}",
-                previous_command,
-                measured_period,
-                (previous_command - 0.08).max(Self::MIN_COMMAND)
-            );
             return (previous_command - 0.08).max(Self::MIN_COMMAND);
         }
         Self::MIN_COMMAND
@@ -258,10 +245,10 @@ pub struct AdaptiveOptimizationRegulator {
 /// Eventually these will be replaced with policies that depend on the
 /// measured frame rate data.
 impl AdaptiveOptimizationRegulator {
-    pub fn new(initial_render_command: f64, target_update_period: f64) -> Self {
+    pub fn new(target_update_period: f64) -> Self {
         Self {
             render_policy_fsm: FiniteStateMachine::new(
-                initial_render_command,
+                InteractiveFrameRatePolicy::MIN_COMMAND,
                 InteractiveFrameRatePolicy::new(target_update_period),
                 BackgroundFrameRatePolicy {
                     target_update_period,
@@ -515,11 +502,6 @@ mod tests {
             let prev_period = render_proxy.evaluate(prev_command);
             let next_command = policy.evaluate(prev_command, prev_period);
             let next_period = render_proxy.evaluate(next_command);
-
-            // println!(
-            //     "Prev Command: {:.6}, Prev Period: {:.6}, Next Command: {:.6}, Next Period: {:.6}",
-            //     prev_command, prev_period, next_command, next_period
-            // );  // HACK!!!
 
             let prev_cmd_err = (prev_command - steady_state_command).abs();
             let next_cmd_err = (next_command - steady_state_command).abs();

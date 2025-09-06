@@ -90,6 +90,8 @@ pub struct PixelGrid<F: Renderable> {
     redraw_required: Arc<AtomicBool>,
 }
 
+const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
+
 impl<F> PixelGrid<F>
 where
     F: Renderable + Send + Sync + 'static,
@@ -104,10 +106,6 @@ where
 
         let renderer = Arc::new(Mutex::new(renderer));
 
-        // HACK -- render pipeline parameters
-        let initial_render_command = 0.0;
-        let target_update_period = 1.0 / 24.0;
-
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
@@ -117,8 +115,7 @@ where
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
-                initial_render_command,
-                target_update_period,
+                1.0 / TARGET_RENDER_FRAMES_PER_SECOND,
             ),
         };
         pixel_grid
