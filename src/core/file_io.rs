@@ -3,11 +3,23 @@ use std::path::PathBuf;
 use serde::Serialize;
 use std::fmt::Debug;
 
+use crate::cli::args::ParameterFilePath;
+
 pub fn extract_base_name(path: &str) -> &str {
     std::path::Path::new(path)
         .file_stem() // Get the base name component of the path
         .and_then(|name| name.to_str())
         .expect("Unable to extract base name")
+}
+
+pub fn build_file_prefix(params: &ParameterFilePath, command_name: &str) -> FilePrefix {
+    FilePrefix {
+        directory_path: build_output_path_with_date_time(
+            command_name,
+            &maybe_date_time_string(params.date_time_out),
+        ),
+        file_base: extract_base_name(&params.params_path).to_owned(),
+    }
 }
 
 pub fn build_output_path_with_date_time(
