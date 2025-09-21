@@ -10,17 +10,22 @@ use fractal_renderer::{
 /// cargo run --example render-mandelbrot
 /// ```
 pub fn main() {
+    let example_name = "render-mandelbrot";
+
+    ////////////////
+
+    let params_name = String::from("examples/") + example_name + &String::from("/params.json");
+
     let fractal_params = serde_json::from_str(
-        &std::fs::read_to_string(String::from("examples/render-mandelbrot/params.json"))
-            .expect("Unable to read param file"),
+        &std::fs::read_to_string(params_name).expect("Unable to read param file"),
     )
     .unwrap();
 
     render_fractal(
         &fractal_params,
         FilePrefix {
-            directory_path: build_output_path("examples"),
-            file_base: String::from("mandelbrot"),
+            directory_path: build_output_path(example_name),
+            file_base: String::from("result"),
         },
     )
     .unwrap();
