@@ -1,7 +1,7 @@
 use cli::args::ParameterFilePath;
 use fractal_renderer::{
     cli::{self, render::render_fractal},
-    core::file_io::build_file_prefix,
+    core::file_io::{build_output_path, FilePrefix},
     fractals::common::FractalParams,
 };
 
@@ -22,7 +22,10 @@ pub fn main() {
 
     render_fractal(
         &fractal_params(&params.params_path),
-        build_file_prefix(&params, "render"),
+        FilePrefix {
+            directory_path: build_output_path("examples"),
+            file_base: String::from("mandelbrot"),
+        },
     )
     .unwrap();
 }
