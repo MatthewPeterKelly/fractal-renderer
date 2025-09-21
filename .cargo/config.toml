@@ -1,0 +1,3 @@
+[alias]
+# Run a single example in release mode:
+rex = "run --release --example"

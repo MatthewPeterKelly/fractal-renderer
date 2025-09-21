@@ -66,13 +66,15 @@ I'm actively experimenting with algorithms to dynamically adjust the render para
 
 ## Examples
 
-Both the `explore` and `render` modes of operation accept the same JSON file format as input, which describes the fractal to be rendered. This JSON file is loaded by `serde` into the `common::FractalParams` enum, which tells the program what fractal to render, along with what parameters to use.
+This project includes a large collection of example files, under the `examples/` directory, covering both `render-*` and `explore-*` modes of operation, across all of the various types of fractals (`*-mandelbrot-*`, `*-julia-*`, `*-driven-damped-pendulum-*`, ...). To see all available examples, run `cargo run --example`.
 
-The examples listed below are designed to run relatively quickly. Within each `examples/*` subdirectory you'll find several other parameter files that generate some interesting renders.
+Many of the examples, especially the Driven Damped Penulum, are computationally intensive, so it is usually good idea to run them with the `--release` flag. There is a cargo alias defined in this project to easily do this, _e.g._ `cargo run --example`.
+
+The examples are all implemented as lightweight wrappers that load a set of parameters from a `.json` file and the call into library functions to do the heavy lifting.
 
 **Render Mode**
 
-Run in release mode, pass the `render` argument, followed by a JSON file path:
+Run in release mode and pass the `render` argument, followed by a JSON file path:
 
 ```
 cargo run --release -- render ./examples/mandelbrot/default.json

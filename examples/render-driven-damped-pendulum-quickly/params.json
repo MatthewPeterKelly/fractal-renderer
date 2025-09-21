@@ -1,0 +1,17 @@
+{
+  "DrivenDampedPendulum": {
+    "image_specification": {
+      "resolution": [400, 200],
+      "center": [0, 0],
+      "width": 14
+    },
+    "time_phase": 0,
+    "n_max_period": 50,
+    "n_steps_per_period": 12,
+    "periodic_state_error_tolerance": 0.05,
+    "render_options": {
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 1
+    }
+  }
+}
