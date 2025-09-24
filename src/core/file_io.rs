@@ -35,12 +35,6 @@ pub fn build_output_path_with_date_time(
     directory_path
 }
 
-pub fn build_output_path(project: &str) -> std::path::PathBuf {
-    let directory_path: PathBuf = ["out", project].iter().collect();
-    std::fs::create_dir_all(&directory_path).unwrap();
-    directory_path
-}
-
 pub fn date_time_string() -> String {
     use chrono::{Datelike, Local, Timelike};
     let local_time = Local::now();
