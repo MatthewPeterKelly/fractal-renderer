@@ -1,4 +1,4 @@
-#[path = "../common.rs"]
+#[path = "../common/mod.rs"]
 mod common;
 
 /// Run the default example for rendering the mandelbrot set.
