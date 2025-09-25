@@ -3,8 +3,8 @@ mod common;
 
 /// Run the default example for rendering the Julia set.
 /// ```sh
-/// cargo run --example render-julia
+/// cargo run --example render-julia-spiral
 /// ```
 pub fn main() {
-    common::render_example_from_string("render-julia")
+    common::render_example_from_string("render-julia-spiral")
 }
