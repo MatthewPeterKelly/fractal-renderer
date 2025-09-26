@@ -6,9 +6,9 @@ import sys
 MAIN_RS_TEMPLATE = """#[path = "../common/mod.rs"]
 mod common;
 
-fn main() {
+fn main() {{
     common::render_example_from_string("render-mandelbrot-{name}")
-}
+}}
 """
 
 def generate_for_json(src_json: Path, out_root: Path, force: bool) -> None:
@@ -16,7 +16,7 @@ def generate_for_json(src_json: Path, out_root: Path, force: bool) -> None:
     target_dir = out_root / f"render-mandelbrot-{example_name}"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    params_rs = target_dir / "params.rs"
+    params_rs = target_dir / "params.json"
     main_rs = target_dir / "main.rs"
 
     # Write params.rs exactly matching the JSON contents
