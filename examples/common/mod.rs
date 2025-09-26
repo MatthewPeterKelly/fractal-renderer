@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use fractal_renderer::{cli::render::render_fractal, core::file_io::FilePrefix};
+use fractal_renderer::{
+    cli::{color_swatch::generate_color_swatch, render::render_fractal},
+    core::file_io::FilePrefix,
+};
 
 pub fn build_output_path(project: &str) -> std::path::PathBuf {
     let directory_path: PathBuf = ["out", project].iter().collect();
@@ -24,4 +27,16 @@ pub fn render_example_from_string(example_name: &str) {
         },
     )
     .unwrap();
+}
+
+pub fn color_swatch_example_from_string(example_name: &str) {
+    let params_name = String::from("examples/") + example_name + &String::from("/params.json");
+
+    generate_color_swatch(
+        &params_name,
+        FilePrefix {
+            directory_path: build_output_path(example_name),
+            file_base: String::from("result"),
+        },
+    );
 }
