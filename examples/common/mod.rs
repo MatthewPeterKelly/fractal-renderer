@@ -1,16 +1,19 @@
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 use fractal_renderer::{
     cli::{color_swatch::generate_color_swatch, explore::explore_fractal, render::render_fractal},
     core::file_io::FilePrefix,
 };
 
+#[allow(dead_code)]
 pub fn build_output_path(project: &str) -> std::path::PathBuf {
     let directory_path: PathBuf = ["out", project].iter().collect();
     std::fs::create_dir_all(&directory_path).unwrap();
     directory_path
 }
 
+#[allow(dead_code)]
 pub fn explore_example_from_string(example_name: &str) {
     let params_name = String::from("examples/") + example_name + &String::from("/params.json");
 
