@@ -8,6 +8,6 @@ mod common;
 ///
 /// Note that this example will take a bit of time to run -- this fractal is computationally
 /// intensive, especially with the anti-aliasing enabled. This takes 1-2 minutes on my machine.
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-driven-damped-pendulum")
 }

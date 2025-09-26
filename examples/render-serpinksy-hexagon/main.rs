@@ -4,6 +4,6 @@ mod common;
 /// ```sh
 /// cargo run --example render-serpinksy-hexagon
 /// ```
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-serpinksy-hexagon")
 }

@@ -9,6 +9,6 @@ mod common;
 /// Note that this version of the DDP dropx the anti-aliasing level, and also the simulation
 /// convergence criteria so that it runs quickly. This results in a grainier image... but it
 /// runs in something like 10 seconds instead of minutes.
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-driven-damped-pendulum-quickly")
 }

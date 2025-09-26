@@ -5,6 +5,6 @@ mod common;
 /// ```sh
 /// cargo run --example render-mandelbrot
 /// ```
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-mandelbrot")
 }

@@ -7,6 +7,6 @@ mod common;
 /// ```sh
 /// cargo run --example render-barnsley-shadow-fern-QHD
 /// ```
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-barnsley-shadow-fern-QHD")
 }

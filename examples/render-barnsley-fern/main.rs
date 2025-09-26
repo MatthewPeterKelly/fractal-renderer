@@ -5,6 +5,6 @@ mod common;
 /// ```sh
 /// cargo run --example render-barnsley-fern
 /// ```
-pub fn main() {
+fn main() {
     common::render_example_from_string("render-barnsley-fern")
 }
