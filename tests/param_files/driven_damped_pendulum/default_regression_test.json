@@ -9,6 +9,9 @@
     "n_max_period": 100,
     "n_steps_per_period": 200,
     "periodic_state_error_tolerance": 0.0001,
-    "subpixel_antialiasing": 5
+    "render_options": {
+      "downsample_stride": 1,
+      "subpixel_antialiasing": 2
+    }
   }
 }
