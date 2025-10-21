@@ -4,4 +4,5 @@ pub mod driven_damped_pendulum;
 pub mod julia;
 pub mod mandelbrot;
 pub mod quadratic_map;
+pub mod roots_of_unity;
 pub mod serpinsky;
