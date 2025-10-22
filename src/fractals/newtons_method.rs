@@ -1,7 +1,9 @@
 // Common library funcions for fractals that are backed by Newton's method,
 // such as the roots of unity fractal.
 
-use num_complex::Complex64;
+#[cfg(test)]
+use nalgebra::Matrix2;
+use num::complex::Complex64;
 
 /// A complex-valued function with its derivative (slope).
 pub trait ComplexFunctionWithSlope {
@@ -23,108 +25,91 @@ where
     z - q.scale(alpha)
 }
 
+/// Real (left-regular) representation of a complex scalar as a 2×2 real matrix.
+///
+/// Maps s = a + i b to the real-linear map x ↦ s·x on C ≅ R^2:
+///     [ a  -b ]
+///     [ b   a ]
+#[inline]
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use num_complex::Complex64;
+fn left_multiply_matrix(s: Complex64) -> Matrix2<f64> {
+    Matrix2::new(s.re, -s.im, s.im, s.re)
+}
 
-    /// TODO:  docs
-    fn assert_consistent_value_and_slope<F: ComplexFunctionWithSlope>(
-        function: &F,
-        z0: Complex64,
-        abs_tol: f64,
-        rel_tol: f64,
-    ) {
-        // TODO:  look into this....
-        // Small step for central differences. Scale with |z0| to keep it relative.
-        let scale = (z0.norm() + 1.0).sqrt(); // mild scaling for stability
-        let h = 1e-7 / scale;
+#[cfg(test)]
+pub fn assert_consistent_value_and_slope<F: ComplexFunctionWithSlope>(
+    function: &F,
+    z0: Complex64,
+    abs_tol: f64,
+    rel_tol: f64,
+) {
+    // Scaled step size for the finite difference operation
+    let scale = (z0.norm() + 1.0).sqrt();
+    let h = 1e-7 / scale;
 
-        // Central difference along real axis: df/dx ≈ (f(z0+h) - f(z0-h)) / (2h)
-        let f_x_plus = function.value(z0 + Complex64::new(h, 0.0));
-        let f_x_minus = function.value(z0 - Complex64::new(h, 0.0));
-        let dfdx = (f_x_plus - f_x_minus) * (0.5 / h);
+    // central finite differences in x and y
+    let dfdx = {
+        let f_xp = function.value(z0 + Complex64::new(h, 0.0));
+        let f_xm = function.value(z0 - Complex64::new(h, 0.0));
+        (f_xp - f_xm) * (0.5 / h)
+    };
+    let dfdy = {
+        let f_yp = function.value(z0 + Complex64::new(0.0, h));
+        let f_ym = function.value(z0 - Complex64::new(0.0, h));
+        (f_yp - f_ym) * (0.5 / h)
+    };
 
-        // Central difference along imaginary axis: df/dy where we perturb y via i*h
-        let f_y_plus = function.value(z0 + Complex64::new(0.0, h));
-        let f_y_minus = function.value(z0 - Complex64::new(0.0, h));
-        let dfdy = (f_y_plus - f_y_minus) * (0.5 / h);
+    // J_num = [[∂u/∂x, ∂u/∂y],
+    //          [∂v/∂x, ∂v/∂y]]
+    let finite_difference_slope = Matrix2::new(dfdx.re, dfdy.re, dfdx.im, dfdy.im);
 
-        // Build numerical Jacobian J_num = [[∂u/∂x, ∂u/∂y], [∂v/∂x, ∂v/∂y]]
-        // with f = u + i v and dfdx = ∂u/∂x + i ∂v/∂x, dfdy = ∂u/∂y + i ∂v/∂y
-        let j_num = [[dfdx.re, dfdy.re], [dfdx.im, dfdy.im]];
+    // J_ana = φ(f'(z0))
+    let analytic_slope = left_multiply_matrix(function.slope(z0));
 
-        // Analytic derivative from the slope method
-        let s = function.slope(z0);
-        let j_ana = [[s.re, -s.im], [s.im, s.re]];
+    // nalgebra's `.norm()` on matrices is the Frobenius norm (Euclidean of all entries)
+    let error_norm = (finite_difference_slope - analytic_slope).norm();
+    let reference_scale = analytic_slope.norm().max(1.0);
 
-        // TODO:  better comparison?
-        // Use nalagebra?
+    assert!(
+        error_norm <= abs_tol + rel_tol * reference_scale,
+        "Derivative check failed at z0={z0:?}\n\
+         numerical J = {finite_difference_slope}\n\
+         analytic  J = {analytic_slope}\n\
+         err_frob   = {error_norm:e},  bound = {}",
+        abs_tol + rel_tol * reference_scale
+    );
+}
 
-        // Frobenius norms
-        let frob = |m: [[f64; 2]; 2]| -> f64 {
-            (m[0][0] * m[0][0] + m[0][1] * m[0][1] + m[1][0] * m[1][0] + m[1][1] * m[1][1]).sqrt()
-        };
-        let sub = |a: [[f64; 2]; 2], b: [[f64; 2]; 2]| -> [[f64; 2]; 2] {
-            [
-                [a[0][0] - b[0][0], a[0][1] - b[0][1]],
-                [a[1][0] - b[1][0], a[1][1] - b[1][1]],
-            ]
-        };
+/// Example function: f(z)=z^2 - c, f'(z)=2z
+#[cfg(test)]
+pub struct QuadraticTestFunction {
+    c: Complex64,
+}
 
-        let diff = sub(j_num, j_ana);
-        let err = frob(diff);
-        let refn = frob(j_ana).max(1.0);
-
-        assert!(
-            err <= abs_tol + rel_tol * refn,
-            "Derivative check failed at z0={z0:?}\n\
-             numerical J = {j_num:?}\n\
-             analytic  J = {j_ana:?}\n\
-             err_frob   = {err:e},  bound = {}",
-            abs_tol + rel_tol * refn
-        );
+#[cfg(test)]
+impl ComplexFunctionWithSlope for QuadraticTestFunction {
+    #[inline]
+    fn value(&self, z: Complex64) -> Complex64 {
+        z * z - self.c
     }
-
-    /// Example function: f(z)=z^2 - c, f'(z)=2z
-    struct Quadratic {
-        c: Complex64,
+    #[inline]
+    fn slope(&self, z: Complex64) -> Complex64 {
+        2.0 * z
     }
-    impl ComplexFunctionWithSlope for Quadratic {
-        #[inline]
-        fn value(&self, z: Complex64) -> Complex64 {
-            z * z - self.c
-        }
-        #[inline]
-        fn slope(&self, z: Complex64) -> Complex64 {
-            2.0 * z
-        }
-    }
+}
 
-    #[test]
-    fn derivative_matches_jacobian_quadratic() {
-        let c = Complex64::new(1.0, -0.5);
-        let f = Quadratic { c };
+#[test]
+fn derivative_matches_jacobian_quadratic() {
+    let f = QuadraticTestFunction {
+        c: Complex64::new(1.0, -0.5),
+    };
 
-        // Try a few points (can add more if you like)
-        for &z0 in &[
-            Complex64::new(0.2, 0.8),
-            Complex64::new(-1.3, 0.4),
-            Complex64::new(2.0, -1.0),
-        ] {
-            assert_holomorphic_derivative_ok(
-                &f, z0, /*abs_tol=*/ 1e-9, /*rel_tol=*/ 1e-7,
-            );
-        }
-    }
-
-    /// Example using the tuple-of-closures convenience impl (still generic/no `dyn`)
-    #[test]
-    fn derivative_matches_jacobian_closures() {
-        let c = Complex64::new(-0.3, 0.7);
-        let funcs = (move |z: Complex64| z * z - c, |z: Complex64| 2.0 * z);
-        for &z0 in &[Complex64::new(0.1, -0.2), Complex64::new(0.9, 0.3)] {
-            assert_holomorphic_derivative_ok(&funcs, z0, 1e-9, 1e-7);
-        }
+    // TODO: use image utils to search over a rectangular grid.
+    for &z0 in &[
+        Complex64::new(0.2, 0.8),
+        Complex64::new(-1.3, 0.4),
+        Complex64::new(2.0, -1.0),
+    ] {
+        assert_consistent_value_and_slope(&f, z0, /*abs_tol=*/ 1e-9, /*rel_tol=*/ 1e-7);
     }
 }

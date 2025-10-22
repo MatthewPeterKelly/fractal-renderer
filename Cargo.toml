@@ -17,7 +17,6 @@ iter_num_tools = "0.7.1"
 more-asserts = "0.2"
 nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
 num = "0.4.3"
-num-complex = "0.4.6"
 num-traits =  "0.2"
 ordered-float = "3.0"
 pixels = "0.13"
