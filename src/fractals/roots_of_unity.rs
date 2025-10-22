@@ -14,6 +14,7 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RootsOfUnityParams {
     pub image_specification: ImageSpecification,
     pub iteration_limits: [u32; 2], // [min, max]
