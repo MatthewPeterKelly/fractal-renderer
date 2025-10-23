@@ -14,8 +14,13 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
+pub enum ComplexFunctionType {
+    RootsOfUnity,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RootsOfUnityParams {
+    pub function_type: ComplexFunctionType,
     pub image_specification: ImageSpecification,
     pub iteration_limits: [u32; 2], // [min, max]
     pub convergence_tolerance: f64,
