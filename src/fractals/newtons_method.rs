@@ -5,7 +5,7 @@
 use nalgebra::Matrix2;
 use num::complex::Complex64;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::value, Deserialize, Serialize};
 
 use crate::core::image_utils::{ImageSpecification, RenderOptions};
 
@@ -39,13 +39,14 @@ pub struct RootsOfUnityParams {
     pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
 }
 
+pub struct ComplexValueAndSlope {
+    value: Complex64,
+    slope: Complex64,
+}
+
 /// A complex-valued function with its derivative (slope).
 pub trait ComplexFunctionWithSlope {
-    /// f(z)
-    fn value(&self, z: Complex64) -> Complex64;
-
-    /// f'(z)
-    fn slope(&self, z: Complex64) -> Complex64;
+    fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
 }
 
 /// Perform one modified Newton–Raphson step:
@@ -55,7 +56,11 @@ pub fn modified_newton_raphson_step<F>(z: Complex64, alpha: f64, function: &F) -
 where
     F: ComplexFunctionWithSlope,
 {
-    let q = function.value(z) / function.slope(z);
+    let [value, slope] = {
+        let vs = function.eval(z);
+        [vs.value, vs.slope]
+    };
+    let q = value / slope;
     z - q.scale(alpha)
 }
 
