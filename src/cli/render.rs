@@ -1,7 +1,8 @@
 use crate::core::image_utils;
 use crate::fractals::quadratic_map::QuadraticMap;
 use crate::fractals::{
-    barnsley_fern::render_barnsley_fern, common::FractalParams, serpinsky::render_serpinsky,
+    barnsley_fern::render_barnsley_fern, common::FractalParams,
+    newtons_method::render_newtons_method, serpinsky::render_serpinsky,
 };
 
 use crate::core::file_io::FilePrefix;
@@ -30,6 +31,10 @@ pub fn render_fractal(
         FractalParams::Serpinsky(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("serpinsky");
             render_serpinsky(inner_params, file_prefix)
+        }
+        FractalParams::NewtonsMethod(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("newwtons_method");
+            render_newtons_method(inner_params, file_prefix)
         }
     }
 }

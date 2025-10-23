@@ -12,4 +12,5 @@ pub enum FractalParams {
     DrivenDampedPendulum(Box<DrivenDampedPendulumParams>),
     BarnsleyFern(Box<BarnsleyFernParams>),
     Serpinsky(Box<SerpinskyParams>),
+    NewtonsMethod(Box<super::newtons_method::NewtonsMethodFractalParams>),
 }

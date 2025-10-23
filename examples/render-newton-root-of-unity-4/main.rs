@@ -6,5 +6,5 @@ mod common;
 /// cargo run --example render-julia-flower
 /// ```
 fn main() {
-    common::render_example_from_string("render-newton-roots-of-unity-4")
+    common::render_example_from_string("render-newton-root-of-unity-4")
 }

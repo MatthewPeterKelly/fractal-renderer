@@ -5,9 +5,12 @@
 use nalgebra::Matrix2;
 use num::complex::Complex64;
 
-use serde::{de::value, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
-use crate::core::image_utils::{ImageSpecification, RenderOptions};
+use crate::core::{
+    file_io::{serialize_to_json_or_panic, FilePrefix},
+    image_utils::{ImageSpecification, RenderOptions},
+};
 
 /// Used to interpolate between two color values based on the iterations
 /// required for the Newton-Raphson method to converge to a root.
@@ -27,7 +30,7 @@ pub enum ComplexFunctionType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RootsOfUnityParams {
+pub struct NewtonsMethodFractalParams {
     pub function_type: ComplexFunctionType,
     pub image_specification: ImageSpecification,
     pub iteration_limits: [u32; 2], // [min, max]
@@ -49,6 +52,14 @@ pub trait ComplexFunctionWithSlope {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
 }
 
+/// Renders a Newton's method fractal based on the provided parameters.
+pub fn render_newtons_method(
+    params: &NewtonsMethodFractalParams,
+    file_prefix: FilePrefix,
+) -> Result<(), Box<dyn std::error::Error>> {
+    serialize_to_json_or_panic(file_prefix.full_path_with_suffix(".json"), &params);
+    Ok(())
+}
 /// Perform one modified Newton–Raphson step:
 /// y = z - alpha * f(z) / f'(z)
 #[inline]
@@ -88,13 +99,13 @@ pub fn assert_consistent_value_and_slope<F: ComplexFunctionWithSlope>(
 
     // central finite differences in x and y
     let dfdx = {
-        let f_xp = function.value(z0 + Complex64::new(h, 0.0));
-        let f_xm = function.value(z0 - Complex64::new(h, 0.0));
+        let f_xp = function.eval(z0 + Complex64::new(h, 0.0)).value;
+        let f_xm = function.eval(z0 - Complex64::new(h, 0.0)).value;
         (f_xp - f_xm) * (0.5 / h)
     };
     let dfdy = {
-        let f_yp = function.value(z0 + Complex64::new(0.0, h));
-        let f_ym = function.value(z0 - Complex64::new(0.0, h));
+        let f_yp = function.eval(z0 + Complex64::new(0.0, h)).value;
+        let f_ym = function.eval(z0 - Complex64::new(0.0, h)).value;
         (f_yp - f_ym) * (0.5 / h)
     };
 
@@ -103,7 +114,7 @@ pub fn assert_consistent_value_and_slope<F: ComplexFunctionWithSlope>(
     let finite_difference_slope = Matrix2::new(dfdx.re, dfdy.re, dfdx.im, dfdy.im);
 
     // J_ana = φ(f'(z0))
-    let analytic_slope = left_multiply_matrix(function.slope(z0));
+    let analytic_slope = left_multiply_matrix(function.eval(z0).slope);
 
     // nalgebra's `.norm()` on matrices is the Frobenius norm (Euclidean of all entries)
     let error_norm = (finite_difference_slope - analytic_slope).norm();
@@ -128,12 +139,11 @@ pub struct QuadraticTestFunction {
 #[cfg(test)]
 impl ComplexFunctionWithSlope for QuadraticTestFunction {
     #[inline]
-    fn value(&self, z: Complex64) -> Complex64 {
-        z * z - self.c
-    }
-    #[inline]
-    fn slope(&self, z: Complex64) -> Complex64 {
-        2.0 * z
+    fn eval(&self, z: Complex64) -> super::newtons_method::ComplexValueAndSlope {
+        super::newtons_method::ComplexValueAndSlope {
+            value: z * z - self.c,
+            slope: 2.0 * z,
+        }
     }
 }
 
