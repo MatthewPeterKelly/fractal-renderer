@@ -41,6 +41,29 @@ pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     }
 }
 
+// Function that runs a complete "Newton's method" iteration seuqence until
+// convergence or max iterations.
+pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
+    system: &F,
+    z0: Complex64,
+    convergence_tolerance: f64,
+    iteration_limits: [u32; 2],
+    alpha: f64,
+) -> (Complex64, u32) {
+    let mut z = z0;
+    for _ in 0..iteration_limits[0] {
+        z = system.newton_rhapson_step(z, alpha);
+    }
+    for iteration in iteration_limits[0]..iteration_limits[1] {
+        let z_next = system.newton_rhapson_step(z, alpha);
+        if (z_next - z).norm_sqr() < convergence_tolerance {
+            return (z_next, iteration + 1);
+        }
+        z = z_next;
+    }
+    (z, iteration_limits[1])
+}
+
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
 // specify a Newton's method fractal from a JSON file. It uses an enum with
 // `Box<dyn>` to allow for different types of systems to be specified.
