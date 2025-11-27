@@ -91,7 +91,7 @@ where
 {
     type ReferenceCache = CommonParams;
     fn reference_cache(&self) -> CommonParams {
-        &self.params
+        self.params.clone()
     }
 
     fn set_speed_optimization_level(&mut self, _level: f64, _cache: &Self::ReferenceCache) {
@@ -142,7 +142,7 @@ pub fn render_newtons_method(
         SystemType::RootsOfUnity(system_params) => image_utils::render(
             NewtonsMethodRenderable {
                 params: params.params.clone(),
-                system: (*system_params).clone(),
+                system: system_params.as_ref().clone(),
             },
             file_prefix,
         ),
