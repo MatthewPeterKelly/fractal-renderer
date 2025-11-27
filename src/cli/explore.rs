@@ -4,7 +4,7 @@ use pixels::Error;
 
 use crate::{
     core::{file_io::FilePrefix, user_interface},
-    fractals::{common::FractalParams, quadratic_map::QuadraticMap},
+    fractals::{common::FractalParams, newtons_method, quadratic_map::QuadraticMap},
 };
 
 /**
@@ -42,6 +42,11 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
                 inner_params.image_specification,
                 (**inner_params).clone(),
             )
+        }
+
+        FractalParams::NewtonsMethod(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("newtons_method");
+            newtons_method::explore_fractal(inner_params, file_prefix)
         }
 
         _ => {
