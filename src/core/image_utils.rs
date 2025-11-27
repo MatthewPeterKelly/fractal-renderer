@@ -707,23 +707,19 @@ pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
         let outer_count = raw_data.len();
 
         // PASS ONE:
-        for inner_index in 0..inner_count {
-            if inner_index % render_options.downsample_stride == 0 {
-                let interpolator = KeyframeLinearPixelInerpolation::new(
-                    outer_count,
-                    render_options.downsample_stride,
-                );
-                for outer_index in 0..outer_count {
-                    if outer_index % render_options.downsample_stride != 0 {
-                        raw_data[outer_index][inner_index] = {
-                            interpolator.interpolate(
-                                |outer_index: usize| -> &Rgb<u8> {
-                                    &raw_data[outer_index][inner_index]
-                                },
-                                outer_index,
-                            )
-                        };
-                    }
+        for inner_index in (0..inner_count).step_by(render_options.downsample_stride) {
+            let interpolator =
+                KeyframeLinearPixelInerpolation::new(outer_count, render_options.downsample_stride);
+            for outer_index in 0..outer_count {
+                if outer_index % render_options.downsample_stride != 0 {
+                    raw_data[outer_index][inner_index] = {
+                        interpolator.interpolate(
+                            |outer_index: usize| -> &Rgb<u8> {
+                                &raw_data[outer_index][inner_index]
+                            },
+                            outer_index,
+                        )
+                    };
                 }
             }
         }
