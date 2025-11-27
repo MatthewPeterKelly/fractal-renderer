@@ -109,25 +109,33 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
-        // Build the inner color maps for each root
+        // TODO: consider alternate forumulation here...
         let mut inner_color_map = Vec::new();
-
         for root_color in &params.root_colors_rgb {
-            // ToDo: eventually allow the user to specify arbitrary color maps per root.
-            let keyframes = vec![
-                ColorMapKeyFrame {
-                    query: 0.0,
-                    rgb_raw: params.background_color_rgb,
-                },
-                ColorMapKeyFrame {
-                    query: 1.0,
-                    rgb_raw: *root_color,
-                },
-            ];
+            let keyframes: Vec<ColorMapKeyFrame> = params
+                .grayscale_keyframes
+                .iter()
+                .map(|gkf| {
+                    let t = gkf.value.clamp(0.0, 1.0);
+
+                    let mut rgb = [0u8; 3];
+                    for i in 0..3 {
+                        let bg = params.background_color_rgb[i] as f32;
+                        let root = root_color[i] as f32;
+                        let v = bg + (root - bg) * t;
+                        rgb[i] = v.clamp(0.0, 255.0).round() as u8;
+                    }
+
+                    ColorMapKeyFrame {
+                        query: gkf.query,
+                        rgb_raw: rgb,
+                    }
+                })
+                .collect();
+
             let color_map = ColorMap::new(&keyframes, LinearInterpolator);
             inner_color_map.push(color_map);
         }
-
         Self {
             params,
             system,
@@ -147,23 +155,6 @@ struct RootsOfUnityParams {
     pub n_roots: i32,
     pub newton_step_size: f64,
 }
-
-// impl RootsOfUnityParams {
-//     pub fn new(n_roots: i32, newton_step_size: f64) -> Result<Self, &'static str> {
-//         if n_roots <= 0 {
-//             return Err("`n_roots` must be positive");
-//         }
-//         // Using `> 0.0` also rejects NaN, since (NaN > 0.0) is false.
-//         if newton_step_size <= 0.0 {
-//             return Err("`newton_step_size` must be positive");
-//         }
-
-//         Ok(Self {
-//             n_roots,
-//             newton_step_size,
-//         })
-//     }
-// }
 
 impl ComplexFunctionWithSlope for RootsOfUnityParams {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope {

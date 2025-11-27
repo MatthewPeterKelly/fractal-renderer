@@ -4,7 +4,7 @@
       "image_specification": {
         "resolution": [1920, 1080],
         "center": [0, 0],
-        "width": 2.0
+        "width": 5.0
       },
       "iteration_limits": [5, 200],
       "convergence_tolerance": 1e-4,
@@ -21,9 +21,8 @@
         [0, 0, 255]
       ],
       "grayscale_keyframes": [
-        { "query": 0.0, "value": 0.0 },
-        { "query": 0.8, "value": 0.5 },
-        { "query": 1.0, "value": 1.0 }
+        { "query": 0.0, "value": 1.0 },
+        { "query": 1.0, "value": 0.0 }
       ]
     },
     "system": {
