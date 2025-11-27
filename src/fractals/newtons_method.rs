@@ -5,6 +5,7 @@ use std::{fmt::Debug, sync::Arc};
 use crate::core::{
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
+    interpolation::{Interpolator, LinearInterpolator},
 };
 
 // Used to interpolate between two color values based on the iterations
@@ -19,6 +20,19 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
+// MPK:  analogous to QuadraticMap
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CommonParams {
+    pub image_specification: ImageSpecification,
+    pub iteration_limits: [u32; 2], // [min, max]
+    pub convergence_tolerance: f64,
+    pub render_options: RenderOptions,
+    pub background_color_rgb: [u8; 3],
+    pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
+    pub root_colors_rgb: Vec<[u8; 3]>,
+    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+}
+
 // Its often more efficient to compute both the value of a complex function
 // and its derivative (slope) at the same time.
 pub struct ComplexValueAndSlope {
@@ -28,6 +42,7 @@ pub struct ComplexValueAndSlope {
 
 // A complex-valued function with its derivative (slope).
 // MPK: analgous to `QuadraticMapParams`
+// TODO: consider renaming this!
 pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
 
@@ -43,15 +58,20 @@ pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
             .value_divided_by_slope(z)
             .scale(self.newton_step_size())
     }
+
+    /// Returns the index of the root that is closest to `z`.
+    fn root_index(&self, z: Complex64) -> usize;
 }
 
 // Function that runs a complete "Newton's method" iteration seuqence until
-// convergence or max iterations.
+// convergence or max iterations. Note that iteration limits are inclusive,
+// and that an "reached iteration limit" will return an index larger than the
+// upper iteration limit
 pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
     system: &F,
     z0: Complex64,
     convergence_tolerance: f64,
-    iteration_limits: [u32; 2],
+    iteration_limits: [u32; 2], // inclusive
 ) -> (Complex64, u32) {
     let mut z = z0;
     for _ in 0..iteration_limits[0] {
@@ -64,7 +84,7 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
         }
         z = z_next;
     }
-    (z, iteration_limits[1])
+    (z, iteration_limits[1] + 1)
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
@@ -97,6 +117,23 @@ struct RootsOfUnityParams {
     pub newton_step_size: f64,
 }
 
+// impl RootsOfUnityParams {
+//     pub fn new(n_roots: i32, newton_step_size: f64) -> Result<Self, &'static str> {
+//         if n_roots <= 0 {
+//             return Err("`n_roots` must be positive");
+//         }
+//         // Using `> 0.0` also rejects NaN, since (NaN > 0.0) is false.
+//         if newton_step_size <= 0.0 {
+//             return Err("`newton_step_size` must be positive");
+//         }
+
+//         Ok(Self {
+//             n_roots,
+//             newton_step_size,
+//         })
+//     }
+// }
+
 impl ComplexFunctionWithSlope for RootsOfUnityParams {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope {
         // f(z) = z^n - 1, f'(z) = n*z^(n-1)
@@ -110,19 +147,19 @@ impl ComplexFunctionWithSlope for RootsOfUnityParams {
     fn newton_step_size(&self) -> f64 {
         self.newton_step_size
     }
-}
 
-// MPK:  analogous to QuadraticMap
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CommonParams {
-    pub image_specification: ImageSpecification,
-    pub iteration_limits: [u32; 2], // [min, max]
-    pub convergence_tolerance: f64,
-    pub render_options: RenderOptions,
-    pub background_color_rgb: [u8; 3],
-    pub cyclic_attractor_color_rgb: [u8; 3],
-    pub root_colors_rgb: Vec<[u8; 3]>,
-    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+    fn root_index(&self, z: Complex64) -> usize {
+        let theta = z.im.atan2(z.re); // Angle in [-π, π]
+
+        // Map angle -> continuous index in [-n/2, n/2], then round.
+        // factor = n / (2π) = n * (1 / (2π))
+        const INV_TWO_PI: f64 = 0.5 / std::f64::consts::PI;
+        let factor = (self.n_roots as f64) * INV_TWO_PI;
+        let k = (theta * factor).round() as i32;
+
+        // Wrap to [0, n)
+        k.rem_euclid(self.n_roots) as usize
+    }
 }
 
 impl<F> SpeedOptimizer for NewtonsMethodRenderable<F>
@@ -160,7 +197,12 @@ where
             self.params.iteration_limits,
         );
 
-        todo!()
+        if iter > self.params.iteration_limits[1] {
+            return image::Rgb(self.params.cyclic_attractor_color_rgb);
+        }
+
+        let scaled_iteration_count = (iter - self.params.iteration_limits[0]) as f64
+            / (self.params.iteration_limits[1] - self.params.iteration_limits[0]) as f64;
     }
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
