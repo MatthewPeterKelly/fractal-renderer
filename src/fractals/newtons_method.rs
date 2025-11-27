@@ -31,13 +31,17 @@ pub struct ComplexValueAndSlope {
 pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
 
+    fn newton_step_size(&self) -> f64;
+
     fn value_divided_by_slope(&self, z: Complex64) -> Complex64 {
         let vs = self.eval(z);
         vs.value / vs.slope
     }
 
-    fn newton_rhapson_step(&self, z: Complex64, alpha: f64) -> Complex64 {
-        z - self.value_divided_by_slope(z).scale(alpha)
+    fn newton_rhapson_step(&self, z: Complex64) -> Complex64 {
+        z - self
+            .value_divided_by_slope(z)
+            .scale(self.newton_step_size())
     }
 }
 
@@ -48,14 +52,13 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
     z0: Complex64,
     convergence_tolerance: f64,
     iteration_limits: [u32; 2],
-    alpha: f64,
 ) -> (Complex64, u32) {
     let mut z = z0;
     for _ in 0..iteration_limits[0] {
-        z = system.newton_rhapson_step(z, alpha);
+        z = system.newton_rhapson_step(z);
     }
     for iteration in iteration_limits[0]..iteration_limits[1] {
-        let z_next = system.newton_rhapson_step(z, alpha);
+        let z_next = system.newton_rhapson_step(z);
         if (z_next - z).norm_sqr() < convergence_tolerance {
             return (z_next, iteration + 1);
         }
@@ -91,6 +94,7 @@ pub enum SystemType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct RootsOfUnityParams {
     pub n_roots: i32,
+    pub newton_step_size: f64,
 }
 
 impl ComplexFunctionWithSlope for RootsOfUnityParams {
@@ -101,6 +105,10 @@ impl ComplexFunctionWithSlope for RootsOfUnityParams {
             value: z * z_pow_n_minus_1 - Complex64::new(1.0, 0.0),
             slope: Complex64::new(self.n_roots as f64, 0.0) * z_pow_n_minus_1,
         }
+    }
+
+    fn newton_step_size(&self) -> f64 {
+        self.newton_step_size
     }
 }
 
@@ -145,6 +153,13 @@ where
     }
 
     fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
+        let (soln, iter) = newton_rhapson_iteration_sequence(
+            &self.system,
+            Complex64::new(point[0], point[1]),
+            self.params.convergence_tolerance,
+            self.params.iteration_limits,
+        );
+
         todo!()
     }
 
