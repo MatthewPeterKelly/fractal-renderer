@@ -134,10 +134,10 @@ impl ViewControl {
     ///   Specify the initial view and resolution. The resolution will remain constant, but
     ///   view commands will alter the center and width of the view, based on user input.
     ///
-    pub fn new(time: f64, image_specification: &ImageSpecification) -> Self {
+    pub fn new(time: f64, image_specification: ImageSpecification) -> Self {
         Self {
-            image_specification: *image_specification,
-            initial_image_specification: *image_specification,
+            image_specification,
+            initial_image_specification: image_specification,
             pan_control: [
                 PointTracker::new(time, image_specification.center[0]),
                 PointTracker::new(time, image_specification.center[1]),

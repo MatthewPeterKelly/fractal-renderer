@@ -11,4 +11,5 @@ pub mod ode_solvers;
 pub mod render_quality_fsm;
 pub mod render_window;
 pub mod stopwatch;
+pub mod user_interface;
 pub mod view_control;

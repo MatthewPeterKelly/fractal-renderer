@@ -5,3 +5,4 @@ pub mod julia;
 pub mod mandelbrot;
 pub mod quadratic_map;
 pub mod serpinsky;
+pub mod utilities;

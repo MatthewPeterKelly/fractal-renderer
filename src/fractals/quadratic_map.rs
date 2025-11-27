@@ -1,17 +1,19 @@
 use image::Rgb;
 use num_traits::Pow;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
-use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
-    histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::{
-        scale_down_parameter_for_speed, ImageSpecification, PixelMapper, RenderOptions, Renderable,
-        SpeedOptimizer,
+use crate::{
+    core::{
+        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        histogram::{CumulativeDistributionFunction, Histogram},
+        image_utils::{
+            scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
+            SpeedOptimizer,
+        },
+        interpolation::LinearInterpolator,
     },
-    interpolation::LinearInterpolator,
+    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -177,26 +179,6 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
-    let hist_image_spec = fractal_params
-        .image_specification()
-        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as u32);
-
-    let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-    (0..hist_image_spec.resolution[0])
-        .into_par_iter()
-        .for_each(|i| {
-            let x = pixel_mapper.width.map(i);
-            for j in 0..hist_image_spec.resolution[1] {
-                let y = pixel_mapper.height.map(j);
-                if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
-                    histogram.insert(value);
-                }
-            }
-        });
-}
-
 pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
     Histogram::new(
         params.color_map().histogram_bin_count,
@@ -224,38 +206,37 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     pub fn new(fractal_params: T) -> QuadraticMap<T> {
         let inner_color_map =
             ColorMap::new(&fractal_params.color_map().keyframes, LinearInterpolator {});
+        let histogram = create_empty_histogram(&fractal_params);
         let mut quadratic_map = QuadraticMap {
-            fractal_params: fractal_params.clone(),
-            histogram: Histogram::default().into(),
-            cdf: CumulativeDistributionFunction::default(),
+            cdf: CumulativeDistributionFunction::new(&histogram),
+            histogram,
             color_map: ColorMapLookUpTable::from_color_map(
                 &inner_color_map,
                 fractal_params.color_map().lookup_table_count,
             ),
             inner_color_map,
             background_color: Rgb(fractal_params.color_map().background_color_rgb),
+            fractal_params: fractal_params.clone(),
         };
-        quadratic_map.histogram = create_empty_histogram(&quadratic_map.fractal_params);
-        quadratic_map.cdf = CumulativeDistributionFunction::new(&quadratic_map.histogram);
         quadratic_map.update_color_map();
         quadratic_map
     }
 
+    // MPK:  this too. We should be able to share this logic with newtons method.
     fn update_color_map(&mut self) {
-        self.histogram.reset();
-        populate_histogram(&self.fractal_params, self.histogram.clone());
-
+        populate_histogram(
+            &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
+            self.fractal_params.image_specification(),
+            self.fractal_params.color_map().histogram_sample_count as u32,
+            self.histogram.clone(),
+        );
         self.cdf.reset(&self.histogram);
 
-        // Aliases to let the borrow checker verify that we're all good here.
-        let cdf_ref = &self.cdf;
-        let inner_map_ref = &self.inner_color_map;
-
-        self.color_map
-            .reset([cdf_ref.min_data, cdf_ref.max_data], &|query: f32| {
-                let mapped_query = cdf_ref.percentile(query);
-                inner_map_ref.compute_pixel(mapped_query)
-            });
+        reset_color_map_lookup_table_from_cdf(
+            &mut self.color_map,
+            &self.cdf,
+            &self.inner_color_map,
+        );
     }
 }
 
