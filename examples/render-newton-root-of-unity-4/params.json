@@ -1,30 +1,36 @@
 {
   "NewtonsMethod": {
-    "image_specification": {
-      "resolution": [1200, 1200],
-      "center": [0, 0],
-      "width": 1.0
+    "params": {
+      "image_specification": {
+        "resolution": [1920, 1080],
+        "center": [0, 0],
+        "width": 2.0
+      },
+      "iteration_limits": [5, 200],
+      "convergence_tolerance": 1e-4,
+      "render_options": {
+        "downsample_stride": 1,
+        "subpixel_antialiasing": 0
+      },
+      "background_color_rgb": [0, 0, 0],
+      "cyclic_attractor_color_rgb": [255, 0, 0],
+      "root_colors_rgb": [
+        [255, 255, 255],
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255]
+      ],
+      "grayscale_keyframes": [
+        { "query": 0.0, "value": 0.0 },
+        { "query": 0.8, "value": 0.5 },
+        { "query": 1.0, "value": 1.0 }
+      ]
     },
-    "function_type": "RootsOfUnity",
-    "iteration_limits": [4, 64],
-    "convergence_tolerance": 1e-8,
-    "background_color_rgb": [0, 0, 0],
-    "cyclic_attractor_color_rgb": [255, 255, 255],
-    "root_colors_rgb": [
-      [255, 64, 64],
-      [64, 255, 64],
-      [64, 128, 255]
-    ],
-    "grayscale_keyframes": [
-      { "query": 0.0, "value": 0.0 },
-      { "query": 0.25, "value": 0.15 },
-      { "query": 0.5, "value": 0.5 },
-      { "query": 0.75, "value": 0.85 },
-      { "query": 1.0, "value": 1.0 }
-    ],
-    "render_options": {
-      "downsample_stride": 1,
-      "subpixel_antialiasing": 2
+    "system": {
+      "RootsOfUnity": {
+        "n_roots": 4,
+        "newton_step_size": 1.0
+      }
     }
   }
 }
