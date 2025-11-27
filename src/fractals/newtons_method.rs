@@ -30,6 +30,15 @@ pub struct ComplexValueAndSlope {
 // MPK: analgous to `QuadraticMapParams`
 pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
+
+    fn value_divided_by_slope(&self, z: Complex64) -> Complex64 {
+        let vs = self.eval(z);
+        vs.value / vs.slope
+    }
+
+    fn newton_rhapson_step(&self, z: Complex64, alpha: f64) -> Complex64 {
+        z - self.value_divided_by_slope(z).scale(alpha)
+    }
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
