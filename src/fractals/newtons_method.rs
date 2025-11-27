@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
 use crate::core::{
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapper},
     file_io::{serialize_to_json_or_panic, FilePrefix},
     image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
-    interpolation::{Interpolator, LinearInterpolator},
+    interpolation::{Interpolator, KeyframeInterpolator, LinearInterpolator},
 };
 
 // Used to interpolate between two color values based on the iterations
@@ -103,6 +104,36 @@ pub struct NewtonsMethodParams {
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
     pub params: CommonParams,
     pub system: F,
+    pub color_maps: Vec<ColorMap<LinearInterpolator>>,
+}
+
+impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
+    pub fn new(params: CommonParams, system: F) -> Self {
+        // Build the inner color maps for each root
+        let mut inner_color_map = Vec::new();
+
+        for root_color in &params.root_colors_rgb {
+            // ToDo: eventually allow the user to specify arbitrary color maps per root.
+            let keyframes = vec![
+                ColorMapKeyFrame {
+                    query: 0.0,
+                    rgb_raw: params.background_color_rgb,
+                },
+                ColorMapKeyFrame {
+                    query: 1.0,
+                    rgb_raw: *root_color,
+                },
+            ];
+            let color_map = ColorMap::new(&keyframes, LinearInterpolator);
+            inner_color_map.push(color_map);
+        }
+
+        Self {
+            params,
+            system,
+            color_maps: inner_color_map,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -200,9 +231,12 @@ where
         if iter > self.params.iteration_limits[1] {
             return image::Rgb(self.params.cyclic_attractor_color_rgb);
         }
-
+        // ToDo:  eventually wew could be fancy and do quadratic interpolation here
         let scaled_iteration_count = (iter - self.params.iteration_limits[0]) as f64
             / (self.params.iteration_limits[1] - self.params.iteration_limits[0]) as f64;
+
+        let color_map_index = self.system.root_index(soln) % self.color_maps.len();
+        self.color_maps[color_map_index].compute_pixel(scaled_iteration_count as f32)
     }
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
@@ -229,10 +263,7 @@ pub fn render_newtons_method(
 
     match &params.system {
         SystemType::RootsOfUnity(system_params) => image_utils::render(
-            NewtonsMethodRenderable {
-                params: params.params.clone(),
-                system: system_params.as_ref().clone(),
-            },
+            NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
         ),
     }
