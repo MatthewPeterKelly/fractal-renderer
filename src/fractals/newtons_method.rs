@@ -1,7 +1,7 @@
 use num::complex::Complex64;
 use pixels::Error;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
@@ -292,7 +292,10 @@ where
             .render_options
             .set_speed_optimization_level(level, &cache.render_options);
 
-        // TODO:  finish implementing this method to improve responsive performance in explore.
+        let scale = 1.0 / 2.0.pow(level);
+
+        // convergence_tolerance
+        // TODO
     }
 }
 
