@@ -178,12 +178,14 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 }
 
 // MPK: let's generalize this for the newtons method fractal.
-pub fn populate_histogram<T: QuadraticMapParams>(
-    fractal_params: &T,
+pub fn populate_histogram<F>(
+    query: &F,
     image_specification: &ImageSpecification,
     sample_count: u32,
     histogram: Arc<Histogram>,
-) {
+) where
+    F: Fn(&[f64; 2]) -> Option<f32> + Sync,
+{
     let hist_image_spec = image_specification.scale_to_total_pixel_count(sample_count);
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
@@ -194,7 +196,7 @@ pub fn populate_histogram<T: QuadraticMapParams>(
             let x = pixel_mapper.width.map(i);
             for j in 0..hist_image_spec.resolution[1] {
                 let y = pixel_mapper.height.map(j);
-                if let Some(value) = fractal_params.normalized_log_escape_count(&[x, y]) {
+                if let Some(value) = query(&[x, y]) {
                     histogram.insert(value);
                 }
             }
@@ -249,7 +251,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     fn update_color_map(&mut self) {
         self.histogram.reset();
         populate_histogram(
-            &self.fractal_params,
+            &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
             self.fractal_params.image_specification(),
             self.fractal_params.color_map().histogram_sample_count as u32,
             self.histogram.clone(),
