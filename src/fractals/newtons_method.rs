@@ -4,9 +4,9 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::core::{
     color_map::{ColorMap, ColorMapKeyFrame, ColorMapper},
-    file_io::{serialize_to_json_or_panic, FilePrefix},
+    file_io::FilePrefix,
     image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
-    interpolation::{Interpolator, KeyframeInterpolator, LinearInterpolator},
+    interpolation::LinearInterpolator,
 };
 
 // Used to interpolate between two color values based on the iterations

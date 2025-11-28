@@ -178,10 +178,13 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 }
 
 // MPK: let's generalize this for the newtons method fractal.
-pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
-    let hist_image_spec = fractal_params
-        .image_specification()
-        .scale_to_total_pixel_count(fractal_params.color_map().histogram_sample_count as u32);
+pub fn populate_histogram<T: QuadraticMapParams>(
+    fractal_params: &T,
+    image_specification: &ImageSpecification,
+    sample_count: u32,
+    histogram: Arc<Histogram>,
+) {
+    let hist_image_spec = image_specification.scale_to_total_pixel_count(sample_count);
 
     let pixel_mapper = PixelMapper::new(&hist_image_spec);
 
@@ -245,7 +248,12 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     // MPK:  this too. We should be able to share this logic with newtons method.
     fn update_color_map(&mut self) {
         self.histogram.reset();
-        populate_histogram(&self.fractal_params, self.histogram.clone());
+        populate_histogram(
+            &self.fractal_params,
+            self.fractal_params.image_specification(),
+            self.fractal_params.color_map().histogram_sample_count as u32,
+            self.histogram.clone(),
+        );
 
         self.cdf.reset(&self.histogram);
 
