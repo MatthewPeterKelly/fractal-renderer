@@ -15,15 +15,18 @@
       "background_color_rgb": [0, 0, 0],
       "cyclic_attractor_color_rgb": [255, 0, 0],
       "root_colors_rgb": [
-        [255, 255, 255],
-        [255, 0, 0],
-        [0, 255, 0],
-        [0, 0, 255]
+        [10, 55, 35],
+        [140, 20, 60],
+        [20, 70, 140],
+        [210, 150, 40]
       ],
       "grayscale_keyframes": [
         { "query": 0.0, "value": 1.0 },
         { "query": 1.0, "value": 0.0 }
-      ]
+      ],
+      "lookup_table_count": 2048,
+      "histogram_bin_count": 32,
+      "histogram_sample_count": 20000
     },
     "system": {
       "RootsOfUnity": {

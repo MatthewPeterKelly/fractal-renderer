@@ -32,6 +32,9 @@ pub struct CommonParams {
     pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
     pub root_colors_rgb: Vec<[u8; 3]>,
     pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+    pub lookup_table_count: usize,
+    pub histogram_bin_count: usize,
+    pub histogram_sample_count: usize,
 }
 
 // Its often more efficient to compute both the value of a complex function
