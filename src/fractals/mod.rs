@@ -6,3 +6,4 @@ pub mod mandelbrot;
 pub mod newtons_method;
 pub mod quadratic_map;
 pub mod serpinsky;
+pub mod utilities;

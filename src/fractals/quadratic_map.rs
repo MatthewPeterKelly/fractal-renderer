@@ -1,17 +1,19 @@
 use image::Rgb;
 use num_traits::Pow;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
-use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
-    histogram::{CumulativeDistributionFunction, Histogram},
-    image_utils::{
-        scale_down_parameter_for_speed, ImageSpecification, PixelMapper, RenderOptions, Renderable,
-        SpeedOptimizer,
+use crate::{
+    core::{
+        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        histogram::{CumulativeDistributionFunction, Histogram},
+        image_utils::{
+            scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
+            SpeedOptimizer,
+        },
+        interpolation::LinearInterpolator,
     },
-    interpolation::LinearInterpolator,
+    fractals::utilities::populate_histogram,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -175,32 +177,6 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 
     // Actually evaluate the fractal.
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
-}
-
-// MPK: let's generalize this for the newtons method fractal.
-pub fn populate_histogram<F>(
-    query: &F,
-    image_specification: &ImageSpecification,
-    sample_count: u32,
-    histogram: Arc<Histogram>,
-) where
-    F: Fn(&[f64; 2]) -> Option<f32> + Sync,
-{
-    let hist_image_spec = image_specification.scale_to_total_pixel_count(sample_count);
-
-    let pixel_mapper = PixelMapper::new(&hist_image_spec);
-
-    (0..hist_image_spec.resolution[0])
-        .into_par_iter()
-        .for_each(|i| {
-            let x = pixel_mapper.width.map(i);
-            for j in 0..hist_image_spec.resolution[1] {
-                let y = pixel_mapper.height.map(j);
-                if let Some(value) = query(&[x, y]) {
-                    histogram.insert(value);
-                }
-            }
-        });
 }
 
 pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
