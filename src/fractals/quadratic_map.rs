@@ -13,7 +13,7 @@ use crate::{
         },
         interpolation::LinearInterpolator,
     },
-    fractals::utilities::populate_histogram,
+    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -225,25 +225,19 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
 
     // MPK:  this too. We should be able to share this logic with newtons method.
     fn update_color_map(&mut self) {
-        self.histogram.reset();
         populate_histogram(
             &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
             self.fractal_params.image_specification(),
             self.fractal_params.color_map().histogram_sample_count as u32,
             self.histogram.clone(),
         );
-
         self.cdf.reset(&self.histogram);
 
-        // Aliases to let the borrow checker verify that we're all good here.
-        let cdf_ref = &self.cdf;
-        let inner_map_ref = &self.inner_color_map;
-
-        self.color_map
-            .reset([cdf_ref.min_data, cdf_ref.max_data], &|query: f32| {
-                let mapped_query = cdf_ref.percentile(query);
-                inner_map_ref.compute_pixel(mapped_query)
-            });
+        reset_color_map_lookup_table_from_cdf(
+            &mut self.color_map,
+            &self.cdf,
+            &self.inner_color_map,
+        );
     }
 }
 
