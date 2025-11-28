@@ -145,6 +145,10 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             color_maps: inner_color_map,
         }
     }
+
+    fn update_color_map(&mut self) {
+        // TODO:  eventually.
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -154,7 +158,7 @@ pub enum SystemType {
 
 // MPK:  architecture: analgous to `QuadraticMapParams`
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct RootsOfUnityParams {
+pub struct RootsOfUnityParams {
     pub n_roots: i32,
     pub newton_step_size: f64,
 }
@@ -198,6 +202,7 @@ where
 
     fn set_speed_optimization_level(&mut self, _level: f64, _cache: &Self::ReferenceCache) {
         // Skip this for now -- easy enough to drop in later.
+        // TODO:  implement this so that explore mode works nicely.
     }
 }
 
@@ -212,6 +217,11 @@ where
 
     fn render_options(&self) -> &RenderOptions {
         &self.params.render_options
+    }
+
+    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+        self.params.image_specification = image_specification;
+        self.update_color_map();
     }
 
     fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
@@ -231,10 +241,6 @@ where
 
         let color_map_index = self.system.root_index(soln) % self.color_maps.len();
         self.color_maps[color_map_index].compute_pixel(scaled_iteration_count as f32)
-    }
-
-    fn set_image_specification(&mut self, image_specification: ImageSpecification) {
-        self.params.image_specification = image_specification;
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {

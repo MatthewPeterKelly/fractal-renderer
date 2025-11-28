@@ -177,6 +177,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
+// MPK: let's generalize this for the newtons method fractal.
 pub fn populate_histogram<T: QuadraticMapParams>(fractal_params: &T, histogram: Arc<Histogram>) {
     let hist_image_spec = fractal_params
         .image_specification()
@@ -241,6 +242,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
         quadratic_map
     }
 
+    // MPK:  this too. We should be able to share this logic with newtons method.
     fn update_color_map(&mut self) {
         self.histogram.reset();
         populate_histogram(&self.fractal_params, self.histogram.clone());
