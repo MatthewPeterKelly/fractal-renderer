@@ -77,6 +77,10 @@ pub struct NewtonRhapsonResult {
 
     /// Number of iterations taken to converge. In range `[0, max_iteration_count]` inclusive.
     pub iteration_count: u32,
+
+    /// A smooth iteration count, used for rendering. It is computed based on the quadratic
+    /// convergence behavior of the Newton-Rhapson method near a fixed point.
+    pub smooth_iteration_count: f32,
 }
 
 /// Returns Some(NewtonRhapsonResult) if the iteration converges within
@@ -87,17 +91,48 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
     convergence_tolerance: f64,
     max_iteration_count: u32,
 ) -> Option<NewtonRhapsonResult> {
-    let mut z = z0;
-    for iteration in 0..(max_iteration_count + 1) {
-        let z_next = system.newton_rhapson_step(z);
-        if (z_next - z).norm_sqr() < convergence_tolerance {
+    let mut z_prev = z0;
+    let mut prev_err: Option<f64> = None;
+
+    for iteration in 0..=max_iteration_count {
+        let z_next = system.newton_rhapson_step(z_prev);
+        let error = (z_next - z_prev).norm_sqr();
+
+        if error < convergence_tolerance {
+            let iteration_count = iteration;
+
+            let smooth_iteration_count = if let Some(e_prev) = prev_err {
+                // model error as geometric between e_prev and err
+                let error_ratio = error / e_prev;
+
+                // Guard against the case where error actually hits zero, which would cause ln(0).
+                if error > 0.0 {
+                    // Model the error as geometric between the last two steps:
+                    //   e_n ≈ e_prev * error_ratio^(n - (k - 1))
+                    // Solve e_ν = tol for the fractional iteration index ν:
+                    //   ν = (k - 1) + ln(tol / e_prev) / ln(error_ratio)
+                    let frac = (convergence_tolerance / e_prev).ln() / error_ratio.ln();
+                    ((iteration as f64 - 1.0) + frac) as f32
+                } else {
+                    iteration as f32
+                }
+            } else {
+                // We converged on the first iteration, so we have no data for interpolation.
+                iteration as f32
+            };
+
             return Some(NewtonRhapsonResult {
                 soln: z_next,
-                iteration_count: iteration,
+                iteration_count,
+                smooth_iteration_count,
             });
         }
-        z = z_next;
+
+        prev_err = Some(error);
+        z_prev = z_next;
     }
+
+    // Only reach here if we fail to converge.
     None
 }
 
@@ -127,7 +162,6 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
-        // TODO: consider alternate forumulation here...
         let mut inner_color_maps = Vec::new();
         let mut color_maps = Vec::new();
         for root_color in &params.root_colors_rgb {
@@ -135,6 +169,8 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
                 .grayscale_keyframes
                 .iter()
                 .map(|gkf| {
+                    // TODO:  make this code easier to read
+
                     let t = gkf.value.clamp(0.0, 1.0);
 
                     let mut rgb = [0u8; 3];
@@ -287,11 +323,12 @@ where
 
         // Use the solution to select the correct color map for this point:
         let color_map_index = self.system.root_index(result.soln) % self.color_maps.len();
-        self.color_maps[color_map_index].compute_pixel(result.iteration_count as f32)
+        self.color_maps[color_map_index].compute_pixel(result.smooth_iteration_count)
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        // Eventually we could add more here...
+        self.histogram.display(writer)?;
+        self.cdf.display(writer)?;
         std::io::Result::Ok(())
     }
 
