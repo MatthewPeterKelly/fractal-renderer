@@ -6,41 +6,12 @@ use crate::{
     core::{
         color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
         file_io::FilePrefix,
-        histogram::{self, CumulativeDistributionFunction, Histogram},
+        histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
         interpolation::{Interpolator, LinearInterpolator},
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
-
-// Used to interpolate between two color values based on the iterations
-// required for the Newton-Raphson method to converge to a root.
-// Query values of 0 map to `iteration_limits[0]` and values of 1 map to
-// `max_iteration_count`. The `value` of zero corresponds to the common
-// background color, while a `value` of one corresponds to the foreground
-// color associated with the root that the iteration converges to.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct GrayscaleMapKeyFrame {
-    pub query: f32,
-    pub value: f32,
-}
-
-/// These parameters are common to all Newton's method fractals, and are not
-/// generic over the specific system being solved.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CommonParams {
-    pub image_specification: ImageSpecification,
-    pub max_iteration_count: u32,
-    pub convergence_tolerance: f64,
-    pub render_options: RenderOptions,
-    pub boundary_set_color_rgb: [u8; 3],
-    pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
-    pub root_colors_rgb: Vec<[u8; 3]>,
-    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
-    pub lookup_table_count: usize,
-    pub histogram_bin_count: usize,
-    pub histogram_sample_count: usize,
-}
 
 // Its often more efficient to compute both the value of a complex function
 // and its derivative (slope) at the same time.
@@ -68,6 +39,40 @@ pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
 
     /// Returns the index of the root that is closest to `z`.
     fn root_index(&self, z: Complex64) -> usize;
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RootsOfUnityParams {
+    pub n_roots: i32,
+    pub newton_step_size: f64,
+}
+
+impl ComplexFunctionWithSlope for RootsOfUnityParams {
+    fn eval(&self, z: Complex64) -> ComplexValueAndSlope {
+        // f(z) = z^n - 1, f'(z) = n*z^(n-1)
+        let z_pow_n_minus_1 = z.powi(self.n_roots - 1);
+        ComplexValueAndSlope {
+            value: z * z_pow_n_minus_1 - Complex64::new(1.0, 0.0),
+            slope: Complex64::new(self.n_roots as f64, 0.0) * z_pow_n_minus_1,
+        }
+    }
+
+    fn newton_step_size(&self) -> f64 {
+        self.newton_step_size
+    }
+
+    fn root_index(&self, z: Complex64) -> usize {
+        let theta = z.im.atan2(z.re); // Angle in [-π, π]
+
+        // Map angle -> continuous index in [-n/2, n/2], then round.
+        // factor = n / (2π) = n * (1 / (2π))
+        const INV_TWO_PI: f64 = 0.5 / std::f64::consts::PI;
+        let factor = (self.n_roots as f64) * INV_TWO_PI;
+        let k = (theta * factor).round() as i32;
+
+        // Wrap to [0, n)
+        k.rem_euclid(self.n_roots) as usize
+    }
 }
 
 pub struct NewtonRhapsonResult {
@@ -133,6 +138,35 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
 
     // Only reach here if we fail to converge.
     None
+}
+
+// Used to interpolate between two color values based on the iterations
+// required for the Newton-Raphson method to converge to a root.
+// Query values of 0 map to `iteration_limits[0]` and values of 1 map to
+// `max_iteration_count`. The `value` of zero corresponds to the common
+// background color, while a `value` of one corresponds to the foreground
+// color associated with the root that the iteration converges to.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct GrayscaleMapKeyFrame {
+    pub query: f32,
+    pub value: f32,
+}
+
+/// These parameters are common to all Newton's method fractals, and are not
+/// generic over the specific system being solved.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CommonParams {
+    pub image_specification: ImageSpecification,
+    pub max_iteration_count: u32,
+    pub convergence_tolerance: f64,
+    pub render_options: RenderOptions,
+    pub boundary_set_color_rgb: [u8; 3],
+    pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
+    pub root_colors_rgb: Vec<[u8; 3]>,
+    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+    pub lookup_table_count: usize,
+    pub histogram_bin_count: usize,
+    pub histogram_sample_count: usize,
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
@@ -240,40 +274,6 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SystemType {
     RootsOfUnity(Box<RootsOfUnityParams>), // number of roots == root_colors_rgb.len()
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RootsOfUnityParams {
-    pub n_roots: i32,
-    pub newton_step_size: f64,
-}
-
-impl ComplexFunctionWithSlope for RootsOfUnityParams {
-    fn eval(&self, z: Complex64) -> ComplexValueAndSlope {
-        // f(z) = z^n - 1, f'(z) = n*z^(n-1)
-        let z_pow_n_minus_1 = z.powi(self.n_roots - 1);
-        ComplexValueAndSlope {
-            value: z * z_pow_n_minus_1 - Complex64::new(1.0, 0.0),
-            slope: Complex64::new(self.n_roots as f64, 0.0) * z_pow_n_minus_1,
-        }
-    }
-
-    fn newton_step_size(&self) -> f64 {
-        self.newton_step_size
-    }
-
-    fn root_index(&self, z: Complex64) -> usize {
-        let theta = z.im.atan2(z.re); // Angle in [-π, π]
-
-        // Map angle -> continuous index in [-n/2, n/2], then round.
-        // factor = n / (2π) = n * (1 / (2π))
-        const INV_TWO_PI: f64 = 0.5 / std::f64::consts::PI;
-        let factor = (self.n_roots as f64) * INV_TWO_PI;
-        let k = (theta * factor).round() as i32;
-
-        // Wrap to [0, n)
-        k.rem_euclid(self.n_roots) as usize
-    }
 }
 
 impl<F> SpeedOptimizer for NewtonsMethodRenderable<F>
