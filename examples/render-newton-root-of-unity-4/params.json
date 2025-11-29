@@ -6,8 +6,8 @@
         "center": [0, 0],
         "width": 5.0
       },
-      "iteration_limits": [5, 200],
-      "convergence_tolerance": 1e-4,
+      "max_iteration_count": 200,
+      "convergence_tolerance": 1e-6,
       "render_options": {
         "downsample_stride": 1,
         "subpixel_antialiasing": 0
