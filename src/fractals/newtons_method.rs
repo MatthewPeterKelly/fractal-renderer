@@ -16,7 +16,7 @@ use crate::{
 // Used to interpolate between two color values based on the iterations
 // required for the Newton-Raphson method to converge to a root.
 // Query values of 0 map to `iteration_limits[0]` and values of 1 map to
-// `iteration_limits[1]`. The `value` of zero corresponds to the common
+// `max_iteration_count`. The `value` of zero corresponds to the common
 // background color, while a `value` of one corresponds to the foreground
 // color associated with the root that the iteration converges to.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -29,7 +29,7 @@ pub struct GrayscaleMapKeyFrame {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommonParams {
     pub image_specification: ImageSpecification,
-    pub iteration_limits: [u32; 2], // [min, max]
+    pub max_iteration_count: u32,
     pub convergence_tolerance: f64,
     pub render_options: RenderOptions,
     pub background_color_rgb: [u8; 3],
@@ -71,28 +71,34 @@ pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     fn root_index(&self, z: Complex64) -> usize;
 }
 
-// Function that runs a complete "Newton's method" iteration seuqence until
-// convergence or max iterations. Note that iteration limits are inclusive,
-// and that an "reached iteration limit" will return an index larger than the
-// upper iteration limit
+pub struct NewtonRhapsonResult {
+    /// The point to which the Newton-Rhapson iteration sequence converge.
+    pub soln: Complex64,
+
+    /// Number of iterations taken to converge. In range `[0, max_iteration_count]` inclusive.
+    pub iteration_count: u32,
+}
+
+/// Returns Some(NewtonRhapsonResult) if the iteration converges within
+/// `max_iteration_count` iterations to within `convergence_tolerance`. Otherwise returns None.
 pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
     system: &F,
     z0: Complex64,
     convergence_tolerance: f64,
-    iteration_limits: [u32; 2], // inclusive
-) -> (Complex64, u32) {
+    max_iteration_count: u32,
+) -> Option<NewtonRhapsonResult> {
     let mut z = z0;
-    for _ in 0..iteration_limits[0] {
-        z = system.newton_rhapson_step(z);
-    }
-    for iteration in iteration_limits[0]..iteration_limits[1] {
+    for iteration in 0..(max_iteration_count + 1) {
         let z_next = system.newton_rhapson_step(z);
         if (z_next - z).norm_sqr() < convergence_tolerance {
-            return (z_next, iteration + 1);
+            return Some(NewtonRhapsonResult {
+                soln: z_next,
+                iteration_count: iteration,
+            });
         }
         z = z_next;
     }
-    (z, iteration_limits[1] + 1)
+    None
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
@@ -153,7 +159,7 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
         }
         let histogram = Histogram::new(
             params.histogram_bin_count,
-            params.iteration_limits[1] as f32,
+            params.max_iteration_count as f32,
         );
         let mut renderable = Self {
             system,
@@ -167,12 +173,12 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
         renderable
     }
 
-    fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> (Complex64, u32) {
+    fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> Option<NewtonRhapsonResult> {
         newton_rhapson_iteration_sequence(
             &self.system,
             z0,
             self.params.convergence_tolerance,
-            self.params.iteration_limits,
+            self.params.max_iteration_count,
         )
     }
 
@@ -181,14 +187,8 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
         // closure. Then we update all color maps based on the shared CDF, which is generated from the histogram.
         populate_histogram(
             &|point: &[f64; 2]| {
-                let (_soln, iter) =
-                    self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]));
-
-                if iter > self.params.iteration_limits[1] {
-                    None
-                } else {
-                    Some(iter as f32)
-                }
+                self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]))
+                    .map(|result| result.iteration_count as f32)
             },
             &self.params.image_specification,
             self.params.histogram_bin_count as u32,
@@ -277,18 +277,17 @@ where
     }
 
     fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let (soln, iter) =
-            self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]));
+        let result =
+            match self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1])) {
+                Some(res) => res,
+                None => {
+                    return image::Rgb(self.params.cyclic_attractor_color_rgb);
+                }
+            };
 
-        if iter > self.params.iteration_limits[1] {
-            return image::Rgb(self.params.cyclic_attractor_color_rgb);
-        }
-        // ToDo:  eventually wew could be fancy and do quadratic interpolation here
-        let scaled_iteration_count = (iter - self.params.iteration_limits[0]) as f64
-            / (self.params.iteration_limits[1] - self.params.iteration_limits[0]) as f64;
-
-        let color_map_index = self.system.root_index(soln) % self.color_maps.len();
-        self.color_maps[color_map_index].compute_pixel(scaled_iteration_count as f32)
+        // Use the solution to select the correct color map for this point:
+        let color_map_index = self.system.root_index(result.soln) % self.color_maps.len();
+        self.color_maps[color_map_index].compute_pixel(result.iteration_count as f32)
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
