@@ -6,7 +6,7 @@ use crate::{
     core::{
         color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
         file_io::FilePrefix,
-        histogram::{CumulativeDistributionFunction, Histogram},
+        histogram::{self, CumulativeDistributionFunction, Histogram},
         image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
         interpolation::LinearInterpolator,
     },
@@ -151,14 +151,20 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
                 params.lookup_table_count,
             ))
         }
-        Self {
-            params,
+        let histogram = Histogram::new(
+            params.histogram_bin_count,
+            params.iteration_limits[1] as f32,
+        );
+        let mut renderable = Self {
             system,
-            histogram: Histogram::default().into(),
-            cdf: CumulativeDistributionFunction::default(),
-            color_maps: todo!(),
+            cdf: CumulativeDistributionFunction::new(&histogram),
+            histogram: histogram.into(),
+            color_maps,
             inner_color_maps,
-        }
+            params,
+        };
+        renderable.update_color_map();
+        renderable
     }
 
     fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> (Complex64, u32) {
@@ -171,9 +177,11 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     }
 
     fn update_color_map(&mut self) {
+        // This histogram uses data shared from all roots, so we do not need the `_soln` value in the below
+        // closure. Then we update all color maps based on the shared CDF, which is generated from the histogram.
         populate_histogram(
             &|point: &[f64; 2]| {
-                let (soln, iter) =
+                let (_soln, iter) =
                     self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]));
 
                 if iter > self.params.iteration_limits[1] {

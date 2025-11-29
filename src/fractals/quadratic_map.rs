@@ -206,19 +206,18 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
     pub fn new(fractal_params: T) -> QuadraticMap<T> {
         let inner_color_map =
             ColorMap::new(&fractal_params.color_map().keyframes, LinearInterpolator {});
+        let histogram = create_empty_histogram(&fractal_params);
         let mut quadratic_map = QuadraticMap {
-            fractal_params: fractal_params.clone(),
-            histogram: Histogram::default().into(),
-            cdf: CumulativeDistributionFunction::default(),
+            cdf: CumulativeDistributionFunction::new(&histogram),
+            histogram,
             color_map: ColorMapLookUpTable::from_color_map(
                 &inner_color_map,
                 fractal_params.color_map().lookup_table_count,
             ),
             inner_color_map,
             background_color: Rgb(fractal_params.color_map().background_color_rgb),
+            fractal_params: fractal_params.clone(),
         };
-        quadratic_map.histogram = create_empty_histogram(&quadratic_map.fractal_params);
-        quadratic_map.cdf = CumulativeDistributionFunction::new(&quadratic_map.histogram);
         quadratic_map.update_color_map();
         quadratic_map
     }
