@@ -8,7 +8,7 @@ use crate::{
         file_io::FilePrefix,
         histogram::{self, CumulativeDistributionFunction, Histogram},
         image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
-        interpolation::LinearInterpolator,
+        interpolation::{Interpolator, LinearInterpolator},
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
@@ -25,14 +25,15 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
-// MPK:  analogous to QuadraticMap
+/// These parameters are common to all Newton's method fractals, and are not
+/// generic over the specific system being solved.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommonParams {
     pub image_specification: ImageSpecification,
     pub max_iteration_count: u32,
     pub convergence_tolerance: f64,
     pub render_options: RenderOptions,
-    pub background_color_rgb: [u8; 3],
+    pub boundary_set_color_rgb: [u8; 3],
     pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
     pub root_colors_rgb: Vec<[u8; 3]>,
     pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
@@ -49,8 +50,6 @@ pub struct ComplexValueAndSlope {
 }
 
 // A complex-valued function with its derivative (slope).
-// MPK: analgous to `QuadraticMapParams`
-// TODO: consider renaming this!
 pub trait ComplexFunctionWithSlope: Serialize + Clone + Debug + Sync {
     fn eval(&self, z: Complex64) -> ComplexValueAndSlope;
 
@@ -152,10 +151,11 @@ pub struct NewtonsMethodParams {
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
     pub params: CommonParams,
     pub system: F,
-    // TODO:  docs
+    // Histogram and CDF are shared by all root color maps, and are used to normalize the image.
     pub histogram: Arc<Histogram>,
     pub cdf: CumulativeDistributionFunction,
-    // TODO: docs
+    // One color map and lookup table per root. The lookup table is generated from the color map
+    // and the shared CDF once per render, which speeds up the rendering a bit.
     pub inner_color_maps: Vec<ColorMap<LinearInterpolator>>,
     pub color_maps: Vec<ColorMapLookUpTable>,
 }
@@ -168,21 +168,19 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             let keyframes: Vec<ColorMapKeyFrame> = params
                 .grayscale_keyframes
                 .iter()
-                .map(|gkf| {
-                    // TODO:  make this code easier to read
-
-                    let t = gkf.value.clamp(0.0, 1.0);
-
+                .map(|keyframe| {
                     let mut rgb = [0u8; 3];
                     for i in 0..3 {
-                        let bg = params.background_color_rgb[i] as f32;
-                        let root = root_color[i] as f32;
-                        let v = bg + (root - bg) * t;
-                        rgb[i] = v.clamp(0.0, 255.0).round() as u8;
+                        let color = LinearInterpolator.interpolate(
+                            keyframe.value,
+                            root_color[i] as f32,
+                            params.boundary_set_color_rgb[i] as f32,
+                        );
+                        rgb[i] = color.clamp(0.0, 255.0).round() as u8;
                     }
 
                     ColorMapKeyFrame {
-                        query: gkf.query,
+                        query: keyframe.query,
                         rgb_raw: rgb,
                     }
                 })
@@ -244,7 +242,6 @@ pub enum SystemType {
     RootsOfUnity(Box<RootsOfUnityParams>), // number of roots == root_colors_rgb.len()
 }
 
-// MPK:  architecture: analgous to `QuadraticMapParams`
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RootsOfUnityParams {
     pub n_roots: i32,

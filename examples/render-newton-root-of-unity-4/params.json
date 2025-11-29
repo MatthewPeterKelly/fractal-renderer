@@ -12,8 +12,8 @@
         "downsample_stride": 1,
         "subpixel_antialiasing": 0
       },
-      "background_color_rgb": [0, 0, 0],
-      "cyclic_attractor_color_rgb": [255, 0, 0],
+      "boundary_set_color_rgb": [0, 0, 0],
+      "cyclic_attractor_color_rgb": [255, 255, 255],
       "root_colors_rgb": [
         [10, 55, 35],
         [140, 20, 60],
@@ -22,6 +22,7 @@
       ],
       "grayscale_keyframes": [
         { "query": 0.0, "value": 1.0 },
+        { "query": 0.92, "value": 0.5 },
         { "query": 1.0, "value": 0.0 }
       ],
       "lookup_table_count": 2048,
