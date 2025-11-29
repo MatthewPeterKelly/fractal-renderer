@@ -111,8 +111,10 @@ pub struct NewtonsMethodParams {
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
     pub params: CommonParams,
     pub system: F,
+    // TODO:  docs
     pub histogram: Arc<Histogram>,
     pub cdf: CumulativeDistributionFunction,
+    // TODO: docs
     pub inner_color_maps: Vec<ColorMap<LinearInterpolator>>,
     pub color_maps: Vec<ColorMapLookUpTable>,
 }
@@ -149,23 +151,27 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
         Self {
             params,
             system,
-            color_maps: inner_color_map,
             histogram: todo!(),
             cdf: todo!(),
+            color_maps: inner_color_map, // TODO - wrong.
             inner_color_maps: todo!(),
         }
+    }
+
+    fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> (Complex64, u32) {
+        newton_rhapson_iteration_sequence(
+            &self.system,
+            z0,
+            self.params.convergence_tolerance,
+            self.params.iteration_limits,
+        )
     }
 
     fn update_color_map(&mut self) {
         populate_histogram(
             &|point: &[f64; 2]| {
-                // TODO: make a simpler method with fewer args for this. it is called twice now...
-                let (soln, iter) = newton_rhapson_iteration_sequence(
-                    &self.system,
-                    Complex64::new(point[0], point[1]),
-                    self.params.convergence_tolerance,
-                    self.params.iteration_limits,
-                );
+                let (soln, iter) =
+                    self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]));
 
                 if iter > self.params.iteration_limits[1] {
                     None
@@ -260,12 +266,8 @@ where
     }
 
     fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let (soln, iter) = newton_rhapson_iteration_sequence(
-            &self.system,
-            Complex64::new(point[0], point[1]),
-            self.params.convergence_tolerance,
-            self.params.iteration_limits,
-        );
+        let (soln, iter) =
+            self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]));
 
         if iter > self.params.iteration_limits[1] {
             return image::Rgb(self.params.cyclic_attractor_color_rgb);
