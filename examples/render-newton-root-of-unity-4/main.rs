@@ -1,9 +1,9 @@
 #[path = "../common/mod.rs"]
 mod common;
 
-/// Slightly more-expensive rendering of the Julia set, producing a flower-like pattern.
+/// Render the fourth-order "roots of unity" fractal
 /// ```sh
-/// cargo run --example render-julia-flower
+/// cargo rex render-newton-root-of-unity-4
 /// ```
 fn main() {
     common::render_example_from_string("render-newton-root-of-unity-4")

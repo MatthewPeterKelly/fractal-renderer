@@ -1,6 +1,6 @@
 use num::complex::Complex64;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
@@ -72,6 +72,47 @@ impl ComplexFunctionWithSlope for RootsOfUnityParams {
 
         // Wrap to [0, n)
         k.rem_euclid(self.n_roots) as usize
+    }
+}
+
+/// Parameters / marker type for f(z) = cosh(z) - 1
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CoshMinusOneParams {
+    /// Scalar multiplier for the Newton step (usually 1.0).
+    pub newton_step_size: f64,
+}
+
+impl ComplexFunctionWithSlope for CoshMinusOneParams {
+    fn eval(&self, z: Complex64) -> ComplexValueAndSlope {
+        // f(z)  = cosh(z) - 1
+        // f'(z) = sinh(z)
+        let value = z.cosh() - Complex64::new(1.0, 0.0);
+        let slope = z.sinh();
+
+        ComplexValueAndSlope { value, slope }
+    }
+
+    fn newton_step_size(&self) -> f64 {
+        self.newton_step_size
+    }
+
+    /// Roots of cosh(z) - 1 are at z_k = 2π i k, k ∈ ℤ.
+    ///
+    /// We:
+    ///   1. Project z onto the imaginary axis.
+    ///   2. Find the nearest k by rounding Im(z) / (2π).
+    ///   3. Map k ∈ ℤ to a usize using a standard bijection:
+    ///      k >= 0  →  index = 2k
+    ///      k <  0  →  index = -2k - 1
+    fn root_index(&self, z: Complex64) -> usize {
+        let two_pi = 2.0 * PI;
+        let k = (z.im / two_pi).round() as isize;
+
+        if k >= 0 {
+            (2 * k) as usize
+        } else {
+            (-2 * k - 1) as usize
+        }
     }
 }
 
@@ -274,6 +315,7 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SystemType {
     RootsOfUnity(Box<RootsOfUnityParams>), // number of roots == root_colors_rgb.len()
+    CoshMinusOne(Box<CoshMinusOneParams>), // cosh(z) - 1
 }
 
 impl<F> SpeedOptimizer for NewtonsMethodRenderable<F>
@@ -344,6 +386,10 @@ pub fn render_newtons_method(
 
     match &params.system {
         SystemType::RootsOfUnity(system_params) => image_utils::render(
+            NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+            file_prefix,
+        ),
+        SystemType::CoshMinusOne(system_params) => image_utils::render(
             NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
         ),
