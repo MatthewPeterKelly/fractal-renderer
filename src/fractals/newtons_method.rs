@@ -122,7 +122,8 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
         // TODO: consider alternate forumulation here...
-        let mut inner_color_map = Vec::new();
+        let mut inner_color_maps = Vec::new();
+        let mut color_maps = Vec::new();
         for root_color in &params.root_colors_rgb {
             let keyframes: Vec<ColorMapKeyFrame> = params
                 .grayscale_keyframes
@@ -144,17 +145,19 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
                     }
                 })
                 .collect();
-
-            let color_map = ColorMap::new(&keyframes, LinearInterpolator);
-            inner_color_map.push(color_map);
+            inner_color_maps.push(ColorMap::new(&keyframes, LinearInterpolator));
+            color_maps.push(ColorMapLookUpTable::from_color_map(
+                inner_color_maps.last().unwrap(),
+                params.lookup_table_count,
+            ))
         }
         Self {
             params,
             system,
-            histogram: todo!(),
-            cdf: todo!(),
-            color_maps: inner_color_map, // TODO - wrong.
-            inner_color_maps: todo!(),
+            histogram: Histogram::default().into(),
+            cdf: CumulativeDistributionFunction::default(),
+            color_maps: todo!(),
+            inner_color_maps,
         }
     }
 
