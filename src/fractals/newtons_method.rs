@@ -2,11 +2,15 @@ use num::complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
-use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame, ColorMapper},
-    file_io::FilePrefix,
-    image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
-    interpolation::LinearInterpolator,
+use crate::{
+    core::{
+        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        file_io::FilePrefix,
+        histogram::{CumulativeDistributionFunction, Histogram},
+        image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
+        interpolation::LinearInterpolator,
+    },
+    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
 
 // Used to interpolate between two color values based on the iterations
@@ -107,7 +111,10 @@ pub struct NewtonsMethodParams {
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
     pub params: CommonParams,
     pub system: F,
-    pub color_maps: Vec<ColorMap<LinearInterpolator>>,
+    pub histogram: Arc<Histogram>,
+    pub cdf: CumulativeDistributionFunction,
+    pub inner_color_maps: Vec<ColorMap<LinearInterpolator>>,
+    pub color_maps: Vec<ColorMapLookUpTable>,
 }
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
@@ -143,11 +150,39 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             params,
             system,
             color_maps: inner_color_map,
+            histogram: todo!(),
+            cdf: todo!(),
+            inner_color_maps: todo!(),
         }
     }
 
     fn update_color_map(&mut self) {
-        // TODO:  eventually.
+        populate_histogram(
+            &|point: &[f64; 2]| {
+                // TODO: make a simpler method with fewer args for this. it is called twice now...
+                let (soln, iter) = newton_rhapson_iteration_sequence(
+                    &self.system,
+                    Complex64::new(point[0], point[1]),
+                    self.params.convergence_tolerance,
+                    self.params.iteration_limits,
+                );
+
+                if iter > self.params.iteration_limits[1] {
+                    None
+                } else {
+                    Some(iter as f32)
+                }
+            },
+            &self.params.image_specification,
+            self.params.histogram_bin_count as u32,
+            self.histogram.clone(),
+        );
+        self.cdf.reset(&self.histogram);
+
+        for (color_table, inner_map) in self.color_maps.iter_mut().zip(self.inner_color_maps.iter())
+        {
+            reset_color_map_lookup_table_from_cdf(color_table, &self.cdf, inner_map);
+        }
     }
 }
 
