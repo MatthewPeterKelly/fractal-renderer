@@ -171,6 +171,18 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             ))
         }
 
+        FractalParams::NewtonsMethod(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("newtons_method");
+            Box::new(PixelGrid::new(
+                stopwatch.total_elapsed_seconds(),
+                file_prefix,
+                ViewControl::new(time, &inner_params.image_specification),
+                // MPK:  this constructor does not yet exist... But it shuold!
+                // There is some tricky business to deal with around types. But solvable.
+                NewtonsMethodRenderable::new((**inner_params).clone()),
+            ))
+        }
+
         _ => {
             println!(
                 "ERROR: Parameter type `{}` does not yet implement the `RenderWindow` trait!  Aborting.",
