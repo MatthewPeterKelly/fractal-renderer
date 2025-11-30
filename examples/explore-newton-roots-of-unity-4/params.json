@@ -10,7 +10,7 @@
       "convergence_tolerance": 1e-6,
       "render_options": {
         "downsample_stride": 1,
-        "subpixel_antialiasing": 0
+        "subpixel_antialiasing": 2
       },
       "boundary_set_color_rgb": [0, 0, 0],
       "cyclic_attractor_color_rgb": [255, 255, 255],

@@ -3,14 +3,14 @@
     "params": {
       "image_specification": {
         "resolution": [1920, 1080],
-        "center": [-0.8938137875539373, -3.153962001853567],
-        "width": 2.2650106786372066
+        "center": [0, 0],
+        "width": 20.0
       },
       "max_iteration_count": 100,
       "convergence_tolerance": 1e-6,
       "render_options": {
         "downsample_stride": 1,
-        "subpixel_antialiasing": 2
+        "subpixel_antialiasing": 1
       },
       "boundary_set_color_rgb": [0, 0, 0],
       "cyclic_attractor_color_rgb": [255, 255, 255],
