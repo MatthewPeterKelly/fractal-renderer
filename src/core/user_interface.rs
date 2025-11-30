@@ -1,5 +1,3 @@
-use std::any::type_name;
-
 use pixels::{Error, Pixels, SurfaceTexture};
 use winit::{
     dpi::LogicalSize,
@@ -9,18 +7,15 @@ use winit::{
 };
 use winit_input_helper::WinitInputHelper;
 
-use crate::{
-    core::{
-        file_io::FilePrefix,
-        image_utils::{ImageSpecification, PixelMapper, Renderable},
-        render_window::{PixelGrid, RenderWindow},
-        stopwatch::Stopwatch,
-        view_control::{
-            CenterCommand, CenterTargetCommand, CenterVelocityCommand, ScalarDirection,
-            ViewControl, ZoomVelocityCommand,
-        },
+use crate::core::{
+    file_io::FilePrefix,
+    image_utils::{ImageSpecification, PixelMapper, Renderable},
+    render_window::{PixelGrid, RenderWindow},
+    stopwatch::Stopwatch,
+    view_control::{
+        CenterCommand, CenterTargetCommand, CenterVelocityCommand, ScalarDirection, ViewControl,
+        ZoomVelocityCommand,
     },
-    fractals::{common::FractalParams, quadratic_map::QuadraticMap},
 };
 
 const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
@@ -133,9 +128,9 @@ fn reset_command_from_key_press(input: &WinitInputHelper) -> bool {
  * -- mouse left click to recenter the image
  * -- A/D keys to adjust pan/zoom sensitivity
  */
-pub fn explore<F: Renderable>(
+pub fn explore<F: Renderable + 'static>(
     file_prefix: FilePrefix,
-    image_specification: &ImageSpecification,
+    image_specification: ImageSpecification,
     renderer: F,
 ) -> Result<(), Error> {
     let event_loop = EventLoop::new();
@@ -144,12 +139,12 @@ pub fn explore<F: Renderable>(
 
     // Read the parameters file here and convert it into a `RenderWindow`.
     let time = stopwatch.total_elapsed_seconds();
-    let mut render_window: Box<dyn RenderWindow> = Box::new(PixelGrid::new(
+    let mut render_window = PixelGrid::new(
         stopwatch.total_elapsed_seconds(),
         file_prefix,
         ViewControl::new(time, image_specification),
         renderer,
-    ));
+    );
 
     let window = {
         let logical_size = LogicalSize::new(

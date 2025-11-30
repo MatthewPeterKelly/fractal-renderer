@@ -21,7 +21,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
             user_interface::explore(
                 file_prefix,
-                &inner_params.image_specification,
+                inner_params.image_specification,
                 QuadraticMap::new(*inner_params.clone()),
             )
         }
@@ -30,7 +30,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             file_prefix.create_and_step_into_sub_directory("julia");
             user_interface::explore(
                 file_prefix,
-                &inner_params.image_specification,
+                inner_params.image_specification,
                 QuadraticMap::new(*inner_params.clone()),
             )
         }
@@ -39,7 +39,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> R
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
             user_interface::explore(
                 file_prefix,
-                &inner_params.image_specification,
+                inner_params.image_specification,
                 (**inner_params).clone(),
             )
         }
