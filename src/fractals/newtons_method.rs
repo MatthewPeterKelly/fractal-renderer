@@ -1,4 +1,5 @@
 use num::complex::Complex64;
+use pixels::Error;
 use serde::{Deserialize, Serialize};
 use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
@@ -9,6 +10,7 @@ use crate::{
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
         interpolation::{Interpolator, LinearInterpolator},
+        user_interface,
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
@@ -393,5 +395,29 @@ pub fn render_newtons_method(
             NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
         ),
+    }
+}
+
+pub fn explore_fractal(
+    params: &NewtonsMethodParams,
+    mut file_prefix: FilePrefix,
+) -> Result<(), Error> {
+    match &params.system {
+        SystemType::RootsOfUnity(system_params) => {
+            file_prefix.create_and_step_into_sub_directory("roots_of_unity");
+            user_interface::explore(
+                file_prefix,
+                params.params.image_specification,
+                NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+            )
+        }
+        SystemType::CoshMinusOne(system_params) => {
+            file_prefix.create_and_step_into_sub_directory("cosh_minus_one");
+            user_interface::explore(
+                file_prefix,
+                params.params.image_specification,
+                NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+            )
+        }
     }
 }
