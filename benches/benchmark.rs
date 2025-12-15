@@ -5,7 +5,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fractal_renderer::fractals::{
     mandelbrot::MandelbrotParams,
-    quadratic_map::{create_empty_histogram, populate_histogram},
+    quadratic_map::{create_empty_histogram, QuadraticMapParams},
+    utilities::populate_histogram,
 };
 
 pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
@@ -17,7 +18,12 @@ pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
     c.bench_function(path, |b| {
         b.iter(|| {
             histogram.reset();
-            populate_histogram(&mandelbrot_params, histogram.clone());
+            populate_histogram(
+                &|point: &[f64; 2]| mandelbrot_params.normalized_log_escape_count(point),
+                mandelbrot_params.image_specification(),
+                mandelbrot_params.color_map().histogram_sample_count as u32,
+                histogram.clone(),
+            );
             black_box(&histogram);
         });
     });

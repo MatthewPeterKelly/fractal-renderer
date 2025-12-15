@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use fractal_renderer::{cli::color_swatch::ColorSwatchParams, fractals::common::FractalParams};
+    use fractal_renderer::{
+        cli::color_swatch::ColorSwatchParams,
+        fractals::{common::FractalParams, mandelbrot::MandelbrotParams},
+    };
     use glob::glob;
     use serde::de::DeserializeOwned;
     use std::{any::type_name, fs, path::PathBuf};
@@ -53,5 +56,8 @@ mod tests {
             "tests/param_files",
             &["tests/param_files/color_swatch"],
         );
+
+        // ... and the Benchmarks too...
+        parse_all_parameter_files_or_panic::<MandelbrotParams>("benches", &[]);
     }
 }
