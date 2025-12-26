@@ -3,8 +3,8 @@ mod common;
 
 /// Render the fourth-order "roots of unity" fractal
 /// ```sh
-/// cargo rex render-newton-root-of-unity-4
+/// cargo rex render-newton-roots-of-unity-4
 /// ```
 fn main() {
-    common::render_example_from_string("render-newton-root-of-unity-4")
+    common::render_example_from_string("render-newton-roots-of-unity-4")
 }
