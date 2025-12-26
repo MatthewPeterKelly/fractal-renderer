@@ -17,12 +17,11 @@ pub fn build_output_path(project: &str) -> std::path::PathBuf {
 
 #[allow(dead_code)]
 pub fn explore_example_from_string(example_name: &str) {
-    let params_name = String::from("examples/") + example_name + &String::from("/params.json");
+    let params_path = example_params_path(example_name);
 
-    let fractal_params = serde_json::from_str(
-        &std::fs::read_to_string(params_name).expect("Unable to read param file"),
-    )
-    .unwrap();
+    let json_text = read_params_file_or_panic(example_name, &params_path);
+
+    let fractal_params = parse_params_json_or_panic(example_name, &params_path, &json_text);
 
     explore_fractal(
         &fractal_params,
@@ -40,8 +39,6 @@ pub fn render_example_from_string(example_name: &str) {
 
     let json_text = read_params_file_or_panic(example_name, &params_path);
 
-    // If the type can't be inferred here, just annotate:
-    // let fractal_params: FractalParams = parse_params_json_or_panic(example_name, &params_path, &json_text);
     let fractal_params = parse_params_json_or_panic(example_name, &params_path, &json_text);
 
     render_fractal(
@@ -51,7 +48,12 @@ pub fn render_example_from_string(example_name: &str) {
             file_base: String::from("result"),
         },
     )
-    .unwrap_or_else(|e| panic!("render_fractal failed for example '{example_name}': {e}"));
+    .unwrap_or_else(|e| {
+        panic!(
+            "render_fractal failed for example '{}': {}",
+            example_name, e
+        )
+    });
 }
 
 fn example_params_path(example_name: &str) -> PathBuf {
@@ -65,7 +67,7 @@ fn read_params_file_or_panic(example_name: &str, params_path: &Path) -> String {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|e| format!("<unavailable: {e}>"));
 
-    // Works even if the file doesn't exist; great for diagnostics.
+    // Works even if the file doesn't exists, enabling diagnostics.
     let abs_attempt = std::path::absolute(params_path)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|e| format!("<unable to absolutize: {e}>"));
