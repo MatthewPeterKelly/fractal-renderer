@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
+use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator, LinearInterpolator};
 
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
@@ -147,24 +147,49 @@ pub trait SpeedOptimizer {
     fn reference_cache(&self) -> Self::ReferenceCache;
 
     /// Modifies the parameters of the image in-place.
-    /// An optimization level of zero corresponds to the "default paramers" and one corresponds
-    /// to "as fast as possible, with dramatic loss of image quality".  It is up to each fractal
-    /// implementation to anchor the upper bound to a meaningful value.
+    /// An optimization level of...
+    /// -- 0.0 --> render with user-specified parameters (stored in `cache`).
+    /// -- 1.0 --> render as fast as possible (with dramatic loss of image quality).
+    ///
+    /// It is up to each fractal implementation to anchor the upper bound to a meaningful value.
     ///
     /// Note: parameters modified by this call should strictly reduce the render time, and
     /// should not change the size of the image or underlying data structures.
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache);
 }
 
-/// Scales down an integer parameter based on a scale factor.
-/// Implements clamping to ensure that scaling the value does not drop it below some
-/// lower bound, but also that it does not increase the returned value.
-pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, scale: f64) -> f64 {
+/// Scales down a parameter based on a the speed optimization level factor.
+/// The logic is slightly complicated to handle the case where the user-defined
+///  `cached_value` is already below the `lower_bound`.
+///
+/// Assumes that `level` is in [0,1] (from the `SpeedOptimizer`), using the convention:
+///   0 --> cached_value (high quality)
+///   1 --> "as fast as possible".
+///
+/// This should be used for parametersd where smaller values correspond to higher speed.
+pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, level: f64) -> f64 {
+    let scale = 1.0 - level; // invert the mapping so that scaling works properly
     if cached_value < lower_bound {
         return cached_value;
     }
     let scaled_value = cached_value * scale;
     scaled_value.max(lower_bound)
+}
+
+/// Scales up a parameter based on a the speed optimization level factor.
+/// The logic is slightly complicated to handle the case where the user-defined
+///  `cached_value` is already above the `upper_bound`.
+///
+/// Assumes that `level` is in [0,1] (from the `SpeedOptimizer`), using the convention:
+///   0 --> cached_value (high quality)
+///   1 --> "as fast as possible".
+///
+/// This should be used for parametersd where smaller values correspond to higher speed.
+pub fn scale_up_parameter_for_speed(upper_bound: f64, cached_value: f64, level: f64) -> f64 {
+    if cached_value > upper_bound {
+        return cached_value;
+    }
+    LinearInterpolator.interpolate(level, cached_value, upper_bound)
 }
 
 /// Parameters shared by multiple fractal types that control how the fractal is rendered

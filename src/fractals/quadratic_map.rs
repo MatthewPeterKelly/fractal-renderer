@@ -255,15 +255,12 @@ where
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        let scale = 1.0 / 2.0.pow(level);
-
         self.fractal_params.color_map_mut().histogram_sample_count =
-            scale_down_parameter_for_speed(2048.0, cache.histogram_sample_count as f64, scale)
+            scale_down_parameter_for_speed(1024.0, cache.histogram_sample_count as f64, level)
                 as usize;
 
         self.fractal_params.convergence_params_mut().max_iter_count =
-            scale_down_parameter_for_speed(128.0, cache.max_iter_count as f64, scale) as u32;
-
+            scale_down_parameter_for_speed(64.0, cache.max_iter_count as f64, level) as u32;
         self.fractal_params
             .render_options_mut()
             .set_speed_optimization_level(level, &cache.render_options);

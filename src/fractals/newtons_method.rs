@@ -292,8 +292,6 @@ where
             .render_options
             .set_speed_optimization_level(level, &cache.render_options);
 
-        let scale = 1.0 / 2.0.pow(level);
-
         // convergence_tolerance
         // TODO
     }

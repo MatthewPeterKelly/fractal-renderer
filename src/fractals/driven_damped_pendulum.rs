@@ -1,7 +1,7 @@
 use crate::core::{
     image_utils::{
-        scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
-        SpeedOptimizer,
+        scale_down_parameter_for_speed, scale_up_parameter_for_speed, ImageSpecification,
+        RenderOptions, Renderable, SpeedOptimizer,
     },
     ode_solvers::rk4_simulate,
 };
@@ -93,20 +93,14 @@ impl SpeedOptimizer for DrivenDampedPendulumParams {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        // at full quality (level = zero), scale is 1.0, then decrease to 0.0 at level is one.
-        // Rely on clamping in the scale_down_parameter_for_speed function.
-        let flipped_level = 1.0 - level;
-
         self.n_max_period =
-            scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, flipped_level) as u32;
+            scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, level) as u32;
 
         self.n_steps_per_period =
-            scale_down_parameter_for_speed(128.0, cache.n_steps_per_period as f64, flipped_level)
-                as u32;
+            scale_down_parameter_for_speed(128.0, cache.n_steps_per_period as f64, level) as u32;
 
-        // MPK:  this is wrong... I think.  Need to write some better helpers for this.
-        // Something like:  scale convergence tolerance and scale iteration limit... that sort of thing.
-        self.periodic_state_error_tolerance = cache.periodic_state_error_tolerance * level;
+        self.periodic_state_error_tolerance =
+            scale_up_parameter_for_speed(1e-2, cache.periodic_state_error_tolerance, level);
 
         self.render_options
             .set_speed_optimization_level(level, &cache.render_options);
