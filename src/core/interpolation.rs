@@ -1,4 +1,5 @@
 use num_traits::Float;
+use std::fmt::Debug;
 use std::ops::{Add, Mul, Sub};
 
 /// Trait for interpolation between two values
@@ -183,8 +184,43 @@ where
         if alpha >= T::one() {
             return upp;
         }
-        let interpolator = LinearInterpolator;
-        interpolator.interpolate(alpha, low, upp)
+        LinearInterpolator.interpolate(alpha, low, upp)
+    }
+}
+
+/// Clamped log-space interpolation (geometric interpolation):
+/// returns `exp( ln(low) * (1 - alpha) + ln(upp) * alpha )`
+///
+/// - `alpha <= 0` => `low`
+/// - `alpha >= 1` => `upp`
+///
+/// # Panics (debug)
+/// `debug_assert!` requires `low > 0` and `upp > 0` (log defined).
+#[derive(Default, Clone, Copy, Debug)]
+pub struct ClampedLogInterpolator;
+
+impl<T> Interpolator<T, T> for ClampedLogInterpolator
+where
+    T: Float + Copy + Debug,
+{
+    fn interpolate(&self, alpha: T, low: T, upp: T) -> T {
+        if alpha <= T::zero() {
+            return low;
+        }
+        if alpha >= T::one() {
+            return upp;
+        }
+
+        debug_assert!(
+            low > T::zero() && upp > T::zero(),
+            "ClampedLogInterpolator requires low > 0 and upp > 0 (got low={:?}, upp={:?})",
+            low,
+            upp
+        );
+
+        let ln_low = low.ln();
+        let ln_upp = upp.ln();
+        LinearInterpolator.interpolate(alpha, ln_low, ln_upp).exp()
     }
 }
 
@@ -239,6 +275,30 @@ mod tests {
         // extrapolation
         assert_relative_eq!(interp.interpolate(-0.6, low, upp), 10.0, epsilon = 1e-6);
         assert_relative_eq!(interp.interpolate(1.5, low, upp), 20.0, epsilon = 1e-6);
+    }
+
+    #[test]
+    fn test_clamped_log_interpolator_scalar() {
+        let interp = ClampedLogInterpolator;
+        let low: f32 = 1e-6;
+        let upp: f32 = 1e-2;
+
+        // Keyframes
+        assert_relative_eq!(interp.interpolate(0.0, low, upp), low, epsilon = 1e-12);
+        assert_relative_eq!(interp.interpolate(1.0, low, upp), upp, epsilon = 1e-12);
+
+        // interpolation (geometric midpoint)
+        // sqrt(1e-6 * 1e-2) = 1e-4
+        assert_relative_eq!(interp.interpolate(0.5, low, upp), 1e-4, epsilon = 1e-12);
+
+        // additional check: quarter/three-quarter points
+        // level=0.25 => 1e-5, level=0.75 => 1e-3
+        assert_relative_eq!(interp.interpolate(0.25, low, upp), 1e-5, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.75, low, upp), 1e-3, epsilon = 1e-6);
+
+        // extrapolation clamps
+        assert_relative_eq!(interp.interpolate(-0.6, low, upp), low, epsilon = 1e-12);
+        assert_relative_eq!(interp.interpolate(1.5, low, upp), upp, epsilon = 1e-12);
     }
 
     #[test]
