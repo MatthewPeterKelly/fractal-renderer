@@ -184,8 +184,7 @@ where
         if alpha >= T::one() {
             return upp;
         }
-        let interpolator = LinearInterpolator;
-        interpolator.interpolate(alpha, low, upp)
+        LinearInterpolator.interpolate(alpha, low, upp)
     }
 }
 
@@ -221,8 +220,7 @@ where
 
         let ln_low = low.ln();
         let ln_upp = upp.ln();
-        let interpolator = LinearInterpolator;
-        interpolator.interpolate(alpha, ln_low, ln_upp).exp()
+        LinearInterpolator.interpolate(alpha, ln_low, ln_upp).exp()
     }
 }
 

@@ -11,7 +11,7 @@ use crate::{
             scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
             SpeedOptimizer,
         },
-        interpolation::LinearInterpolator,
+        interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator, LinearInterpolator},
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
@@ -255,12 +255,19 @@ where
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.fractal_params.color_map_mut().histogram_sample_count =
-            scale_down_parameter_for_speed(1024.0, cache.histogram_sample_count as f64, level)
-                as usize;
+        self.fractal_params.color_map_mut().histogram_sample_count = scale_down_parameter_for_speed(
+            1024.0,
+            cache.histogram_sample_count as f64,
+            level,
+            ClampedLogInterpolator,
+        ) as usize;
 
-        self.fractal_params.convergence_params_mut().max_iter_count =
-            scale_down_parameter_for_speed(64.0, cache.max_iter_count as f64, level) as u32;
+        self.fractal_params.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
+            64.0,
+            cache.max_iter_count as f64,
+            level,
+            ClampedLinearInterpolator,
+        ) as u32;
         self.fractal_params
             .render_options_mut()
             .set_speed_optimization_level(level, &cache.render_options);

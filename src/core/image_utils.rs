@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator, LinearInterpolator};
+use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
 
 use super::file_io::{serialize_to_json_or_panic, FilePrefix};
 use super::stopwatch::Stopwatch;
@@ -166,12 +166,23 @@ pub trait SpeedOptimizer {
 ///   0 --> cached_value (high quality)
 ///   1 --> "as fast as possible".   (hit lower bound)
 ///
-/// This should be used for parametersd where smaller values correspond to higher speed.
-pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, level: f64) -> f64 {
+/// This should be used for parameters where smaller values correspond to higher speed.
+///
+/// The `interpolator` parameter is used to specify how the scaling should be performed,
+/// typically either linearly (ClampedLinearInterpolator) or logarithmically (ClampedLogInterpolator).
+pub fn scale_down_parameter_for_speed<I>(
+    lower_bound: f64,
+    cached_value: f64,
+    level: f64,
+    interpolator: I,
+) -> f64
+where
+    I: Interpolator<f64, f64>,
+{
     if cached_value < lower_bound {
         return cached_value;
     }
-    ClampedLinearInterpolator.interpolate(level, cached_value, lower_bound)
+    interpolator.interpolate(level, cached_value, lower_bound)
 }
 
 /// Scales up a parameter based on a the speed optimization level factor.
@@ -182,12 +193,23 @@ pub fn scale_down_parameter_for_speed(lower_bound: f64, cached_value: f64, level
 ///   0 --> cached_value (high quality)
 ///   1 --> "as fast as possible".  (hit upper bound)
 ///
-/// This should be used for parametersd where smaller values correspond to higher speed.
-pub fn scale_up_parameter_for_speed(upper_bound: f64, cached_value: f64, level: f64) -> f64 {
+/// This should be used for parameters where smaller values correspond to higher speed.
+///
+/// The `interpolator` parameter is used to specify how the scaling should be performed,
+/// typically either linearly (ClampedLinearInterpolator) or logarithmically (ClampedLogInterpolator).
+pub fn scale_up_parameter_for_speed<I>(
+    upper_bound: f64,
+    cached_value: f64,
+    level: f64,
+    interpolator: I,
+) -> f64
+where
+    I: Interpolator<f64, f64>,
+{
     if cached_value > upper_bound {
         return cached_value;
     }
-    ClampedLinearInterpolator.interpolate(level, cached_value, upper_bound)
+    interpolator.interpolate(level, cached_value, upper_bound)
 }
 
 /// Parameters shared by multiple fractal types that control how the fractal is rendered

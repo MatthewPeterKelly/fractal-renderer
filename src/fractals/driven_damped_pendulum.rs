@@ -3,6 +3,7 @@ use crate::core::{
         scale_down_parameter_for_speed, scale_up_parameter_for_speed, ImageSpecification,
         RenderOptions, Renderable, SpeedOptimizer,
     },
+    interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
     ode_solvers::rk4_simulate,
 };
 use num_traits::Pow;
@@ -93,14 +94,26 @@ impl SpeedOptimizer for DrivenDampedPendulumParams {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.n_max_period =
-            scale_down_parameter_for_speed(16.0, cache.n_max_period as f64, level) as u32;
+        self.n_max_period = scale_down_parameter_for_speed(
+            16.0,
+            cache.n_max_period as f64,
+            level,
+            ClampedLinearInterpolator,
+        ) as u32;
 
-        self.n_steps_per_period =
-            scale_down_parameter_for_speed(128.0, cache.n_steps_per_period as f64, level) as u32;
+        self.n_steps_per_period = scale_down_parameter_for_speed(
+            128.0,
+            cache.n_steps_per_period as f64,
+            level,
+            ClampedLinearInterpolator,
+        ) as u32;
 
-        self.periodic_state_error_tolerance =
-            scale_up_parameter_for_speed(1e-2, cache.periodic_state_error_tolerance, level);
+        self.periodic_state_error_tolerance = scale_up_parameter_for_speed(
+            1e-2,
+            cache.periodic_state_error_tolerance,
+            level,
+            ClampedLogInterpolator,
+        );
 
         self.render_options
             .set_speed_optimization_level(level, &cache.render_options);
