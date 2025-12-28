@@ -104,7 +104,7 @@ impl SpeedOptimizer for DrivenDampedPendulumParams {
             128.0,
             cache.n_steps_per_period as f64,
             level,
-            ClampedLinearInterpolator,
+            ClampedLogInterpolator,
         ) as u32;
 
         self.periodic_state_error_tolerance = scale_up_parameter_for_speed(

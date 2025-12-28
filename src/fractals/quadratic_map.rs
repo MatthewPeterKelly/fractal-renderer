@@ -262,7 +262,7 @@ where
         ) as usize;
 
         self.fractal_params.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
-            64.0,
+            128.0,
             cache.max_iter_count as f64,
             level,
             ClampedLinearInterpolator,

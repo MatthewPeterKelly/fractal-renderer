@@ -292,8 +292,7 @@ where
             .render_options
             .set_speed_optimization_level(level, &cache.render_options);
 
-        // convergence_tolerance
-        // TODO
+        // TODO:  finish implementing this method to improve responsive performance in explore.
     }
 }
 
