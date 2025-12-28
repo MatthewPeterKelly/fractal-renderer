@@ -844,10 +844,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, iter::FromIterator};
-
     use super::*;
+    use crate::core::interpolation::ClampedLogInterpolator;
+    use approx::assert_relative_eq;
     use ordered_float::OrderedFloat;
+    use std::{collections::BTreeSet, iter::FromIterator};
 
     #[test]
     fn test_view_port_from_vertices() {
@@ -961,8 +962,6 @@ mod tests {
         let mut grid_mask = super::SubpixelGridMask::new();
         grid_mask.insert(4, [5, 5]);
     }
-
-    use approx::assert_relative_eq;
 
     #[test]
     fn test_linear_pixel_map_domain_bounds_pos() {
@@ -1088,5 +1087,86 @@ mod tests {
         assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 33]));
         assert_eq!(interpolator.interpolate(data_view, 3), Rgb([90, 60, 0]));
         assert_eq!(interpolator.interpolate(data_view, 6), Rgb([81, 140, 15]));
+    }
+
+    #[test]
+    fn test_scale_parameter_for_speed_interpolator_and_guard_logic() {
+        let lin = ClampedLinearInterpolator;
+        let log = ClampedLogInterpolator;
+
+        // Check the case when the user-defined cache value is outside of the bound,
+        // so we expect it to be returned directly.
+        let cached_value = 1e-8;
+        let lower_bound = 1e-6;
+        assert_relative_eq!(
+            scale_down_parameter_for_speed(lower_bound, cached_value, 0.0, lin),
+            cached_value,
+            epsilon = 0.0
+        );
+        assert_relative_eq!(
+            scale_down_parameter_for_speed(lower_bound, cached_value, 1.0, log),
+            cached_value,
+            epsilon = 0.0
+        );
+
+        // Same thing, but for scaling up:
+        let upper_bound = 1e-6;
+        let cached_value = 1e-1;
+        assert_relative_eq!(
+            scale_up_parameter_for_speed(upper_bound, cached_value, 0.0, lin),
+            cached_value,
+            epsilon = 0.0
+        );
+        assert_relative_eq!(
+            scale_up_parameter_for_speed(upper_bound, cached_value, 1.0, log),
+            cached_value,
+            epsilon = 0.0
+        );
+
+        // Check endpoints on all four variations:
+        let lower = 1e-6;
+        let upper = 1e-2;
+        let cached = 1e-2; // >= lower, so down-scaling uses interpolator
+        assert_relative_eq!(
+            scale_down_parameter_for_speed(lower, cached, 0.0, lin),
+            cached,
+            epsilon = 0.0
+        );
+        assert_relative_eq!(
+            scale_down_parameter_for_speed(lower, cached, 1.0, log),
+            lower,
+            epsilon = 0.0
+        );
+
+        let cached = 1e-6; // <= upper, so up-scaling uses interpolator
+        assert_relative_eq!(
+            scale_up_parameter_for_speed(upper, cached, 0.0, lin),
+            cached,
+            epsilon = 0.0
+        );
+        assert_relative_eq!(
+            scale_up_parameter_for_speed(upper, cached, 1.0, log),
+            upper,
+            epsilon = 0.0
+        );
+
+        // --- sanity: different interpolators produce different midpoints (ensures wiring) ---
+        // Down: cached=1e-2 to lower=1e-6 at level=0.5:
+        // linear midpoint ~ 0.0050005, log midpoint = 1e-4
+        let cached = 1e-2;
+        let down_lin = scale_down_parameter_for_speed(lower, cached, 0.5, lin);
+        let down_log = scale_down_parameter_for_speed(lower, cached, 0.5, log);
+        assert_relative_eq!(down_log, 1e-4, epsilon = 1e-15);
+        assert_relative_eq!(down_lin, 0.5 * (cached + lower), epsilon = 1e-15);
+        assert!(down_lin > down_log);
+
+        // Up: cached=1e-6 to upper=1e-2 at level=0.5:
+        // linear midpoint ~ 0.0050005, log midpoint = 1e-4
+        let cached = 1e-6;
+        let up_lin = scale_up_parameter_for_speed(upper, cached, 0.5, lin);
+        let up_log = scale_up_parameter_for_speed(upper, cached, 0.5, log);
+        assert_relative_eq!(up_log, 1e-4, epsilon = 1e-15);
+        assert_relative_eq!(up_lin, 0.5 * (cached + upper), epsilon = 1e-15);
+        assert!(up_lin > up_log);
     }
 }
