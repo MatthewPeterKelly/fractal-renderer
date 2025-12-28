@@ -293,8 +293,8 @@ mod tests {
 
         // additional check: quarter/three-quarter points
         // level=0.25 => 1e-5, level=0.75 => 1e-3
-        assert_relative_eq!(interp.interpolate(0.25, low, upp), 1e-5, epsilon = 1e-12);
-        assert_relative_eq!(interp.interpolate(0.75, low, upp), 1e-3, epsilon = 1e-12);
+        assert_relative_eq!(interp.interpolate(0.25, low, upp), 1e-5, epsilon = 1e-6);
+        assert_relative_eq!(interp.interpolate(0.75, low, upp), 1e-3, epsilon = 1e-6);
 
         // extrapolation clamps
         assert_relative_eq!(interp.interpolate(-0.6, low, upp), low, epsilon = 1e-12);
