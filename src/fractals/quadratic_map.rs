@@ -1,5 +1,4 @@
 use image::Rgb;
-use num_traits::Pow;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 

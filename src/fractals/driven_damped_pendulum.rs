@@ -6,7 +6,6 @@ use crate::core::{
     interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
     ode_solvers::rk4_simulate,
 };
-use num_traits::Pow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

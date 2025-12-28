@@ -1,7 +1,7 @@
 use num::complex::Complex64;
 use pixels::Error;
 use serde::{Deserialize, Serialize};
-use std::{f64::consts::PI, fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
