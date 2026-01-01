@@ -33,7 +33,7 @@ pub fn render_fractal(
             render_serpinsky(inner_params, file_prefix)
         }
         FractalParams::NewtonsMethod(inner_params) => {
-            file_prefix.create_and_step_into_sub_directory("newwtons_method");
+            file_prefix.create_and_step_into_sub_directory("newtons_method");
             render_newtons_method(inner_params, file_prefix)
         }
     }
