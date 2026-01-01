@@ -8,8 +8,11 @@ use crate::{
         color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
         file_io::FilePrefix,
         histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer},
-        interpolation::{Interpolator, LinearInterpolator},
+        image_utils::{
+            self, scale_down_parameter_for_speed, scale_up_parameter_for_speed, ImageSpecification,
+            RenderOptions, Renderable, SpeedOptimizer,
+        },
+        interpolation::{ClampedLogInterpolator, Interpolator, LinearInterpolator},
         user_interface,
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
@@ -292,7 +295,26 @@ where
             .render_options
             .set_speed_optimization_level(level, &cache.render_options);
 
-        // TODO:  finish implementing this method to improve responsive performance in explore.
+        self.params.max_iteration_count = scale_down_parameter_for_speed(
+            16.0,
+            cache.max_iteration_count as f64,
+            level,
+            ClampedLogInterpolator,
+        ) as u32;
+
+        self.params.convergence_tolerance = scale_up_parameter_for_speed(
+            0.01,
+            cache.convergence_tolerance,
+            level,
+            ClampedLogInterpolator,
+        );
+
+        self.params.histogram_sample_count = scale_down_parameter_for_speed(
+            400.0,
+            cache.histogram_sample_count as f64,
+            level,
+            ClampedLogInterpolator,
+        ) as usize;
     }
 }
 
