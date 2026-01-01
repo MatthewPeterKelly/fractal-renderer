@@ -296,21 +296,21 @@ where
             .set_speed_optimization_level(level, &cache.render_options);
 
         self.params.max_iteration_count = scale_down_parameter_for_speed(
-            16.0,
+            32.0,
             cache.max_iteration_count as f64,
             level,
             ClampedLogInterpolator,
         ) as u32;
 
         self.params.convergence_tolerance = scale_up_parameter_for_speed(
-            0.01,
+            0.005,
             cache.convergence_tolerance,
             level,
             ClampedLogInterpolator,
         );
 
         self.params.histogram_sample_count = scale_down_parameter_for_speed(
-            400.0,
+            600.0,
             cache.histogram_sample_count as f64,
             level,
             ClampedLogInterpolator,
