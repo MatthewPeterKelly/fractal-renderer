@@ -1,4 +1,5 @@
 use pixels::{Error, Pixels, SurfaceTexture};
+use std::{env, fs};
 use winit::{
     dpi::LogicalSize,
     event::{Event, VirtualKeyCode},
@@ -22,6 +23,28 @@ const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
 const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
+
+fn running_in_wsl() -> bool {
+    env::var_os("WSL_INTEROP").is_some()
+        || fs::read_to_string("/proc/sys/kernel/osrelease")
+            .map(|s| s.to_lowercase().contains("microsoft"))
+            .unwrap_or(false)
+}
+
+// WSLg usually sets WAYLAND_DISPLAY and DISPLAY; DISPLAY enables XWayland.
+fn running_in_wslg() -> bool {
+    running_in_wsl() && env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown panic payload".to_string()
+    }
+}
 
 fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     if neg_flag == pos_flag {
@@ -133,7 +156,33 @@ pub fn explore<F: Renderable + 'static>(
     image_specification: ImageSpecification,
     renderer: F,
 ) -> Result<(), Error> {
-    let event_loop = EventLoop::new();
+    // Respect an explicit user choice if they set it themselves.
+    let user_forced_backend = env::var_os("WINIT_UNIX_BACKEND").is_some();
+
+    if running_in_wslg() && !user_forced_backend {
+        // Safer than removing WAYLAND_DISPLAY: only winit cares.
+        env::set_var("WINIT_UNIX_BACKEND", "x11");
+        eprintln!("Note: WSLg detected; forcing winit backend to X11 (WINIT_UNIX_BACKEND=x11).");
+    }
+
+    // Create the event loop with a friendlier failure path.
+    let event_loop = std::panic::catch_unwind(EventLoop::new)
+        .unwrap_or_else(|p| {
+            let msg = panic_message(p);
+            eprintln!("\nERROR: Failed to initialize windowing backend.\n{msg}\n");
+
+            if running_in_wsl() {
+                eprintln!("WSL detected.");
+                eprintln!("If you're forcing X11, you may be missing X11 runtime libs.");
+                eprintln!("On Ubuntu, try: sudo apt install -y libxcursor1");
+                eprintln!("(and ensure DISPLAY is set; WSLg usually sets it automatically.)");
+            } else {
+                eprintln!("Tip: ensure your system has either a working Wayland compositor or X11 libraries installed.");
+            }
+
+            std::process::exit(1);
+        });
+
     let mut input = WinitInputHelper::new();
     let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
 
