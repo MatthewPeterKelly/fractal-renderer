@@ -318,8 +318,8 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SystemType {
-    RootsOfUnity(Box<RootsOfUnityParams>), // number of roots == root_colors_rgb.len()
-    CoshMinusOne(Box<CoshMinusOneParams>), // cosh(z) - 1
+    RootsOfUnity(Box<RootsOfUnityParams>), // f(z) = z^n - 1
+    CoshMinusOne(Box<CoshMinusOneParams>), // f(z) cosh(z) - 1
 }
 
 impl<F> SpeedOptimizer for NewtonsMethodRenderable<F>
