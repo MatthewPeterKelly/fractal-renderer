@@ -197,6 +197,17 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
+pub struct GrayscaleKeyframeSpec {
+    pub root_colors_rgb: Vec<[u8; 3]>,
+    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+}
+
+// TODO:  add some nice methods on this to turn it into a color map
+pub enum ColorMapSpec {
+    FullColorSpec(Vec<Vec<ColorMapKeyFrame>>),
+    GrayscaleSpec(GrayscaleKeyframeSpec),
+}
+
 /// These parameters are common to all Newton's method fractals, and are not
 /// generic over the specific system being solved.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -207,8 +218,7 @@ pub struct CommonParams {
     pub render_options: RenderOptions,
     pub boundary_set_color_rgb: [u8; 3],
     pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
-    pub root_colors_rgb: Vec<[u8; 3]>,
-    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+    pub color_map_spec: ColorMapSpec,        // defines color map for each root
     pub lookup_table_count: usize,
     pub histogram_bin_count: usize,
     pub histogram_sample_count: usize,
@@ -244,6 +254,7 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
         let mut inner_color_maps = Vec::new();
         let mut color_maps = Vec::new();
         for root_color in &params.root_colors_rgb {
+            // TODO:  call into a function that unpacks the keyframe spec into the color map keyframes
             let keyframes: Vec<ColorMapKeyFrame> = params
                 .grayscale_keyframes
                 .iter()
