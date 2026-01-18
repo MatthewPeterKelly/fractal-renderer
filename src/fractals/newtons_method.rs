@@ -203,7 +203,9 @@ pub struct GrayscaleKeyframeSpec {
     pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
 }
 
-// TODO:  add some nice methods on this to turn it into a color map
+// TODO:  add a function that converts a ColorMapSpec into a
+// Vec<ColorMap<LinearInterpolator>>, then use this new function
+// for the implementation of NewtonsMethodRenderable::new()
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ColorMapSpec {
     FullColorSpec(Vec<Vec<ColorMapKeyFrame>>),
