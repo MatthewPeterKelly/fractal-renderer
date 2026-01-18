@@ -2,7 +2,7 @@
   "NewtonsMethod": {
     "params": {
       "image_specification": {
-        "resolution": [1920, 1080],
+        "resolution": [2560, 1600],
         "center": [-0.9, -3.141592653589793],
         "width": 2.3
       },
@@ -18,13 +18,10 @@
         "FullColorSpec": [
           [
             { "query": 0.0, "rgb_raw": [0, 0, 0] },
-            { "query": 0.45, "rgb_raw": [0, 2, 0] },
-            { "query": 0.5, "rgb_raw": [0, 20, 0] },
-            { "query": 0.59, "rgb_raw": [0, 200, 0] },
-            { "query": 0.63, "rgb_raw": [0, 200, 0] },
-            { "query": 0.7, "rgb_raw": [0, 20, 30] },
+            { "query": 0.45, "rgb_raw": [0, 10, 15] },
+            { "query": 0.5, "rgb_raw": [0, 200, 0] },
+            { "query": 0.65, "rgb_raw": [0, 20, 30] },
             { "query": 0.94, "rgb_raw": [0, 50, 230] },
-            { "query": 0.97, "rgb_raw": [0, 50, 230] },
             { "query": 1.0, "rgb_raw": [0, 10, 20] }
           ]
         ]
