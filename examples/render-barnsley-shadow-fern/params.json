@@ -4,7 +4,7 @@
       "resolution": [600, 800],
       "padding_scale": 1.01
     },
-    "sample_count": 20000000,
+    "sample_count": 3000000,
     "rng_seed": 12345,
     "subpixel_antialiasing": 8,
     "background_color_rgb": [0, 0, 0],

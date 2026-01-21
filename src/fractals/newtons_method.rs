@@ -149,13 +149,12 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
 
         if error < convergence_tolerance {
             let iteration_count = iteration;
-
             let smooth_iteration_count = if let Some(e_prev) = prev_err {
-                // model error as geometric between e_prev and err
-                let error_ratio = error / e_prev;
-
                 // Guard against the case where error actually hits zero, which would cause ln(0).
                 if error > 0.0 {
+                    // model error as geometric between e_prev and err
+                    let error_ratio = error / e_prev;
+
                     // Model the error as geometric between the last two steps:
                     //   e_n ≈ e_prev * error_ratio^(n - (k - 1))
                     // Solve e_ν = tol for the fractional iteration index ν:
@@ -299,6 +298,10 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
                     ));
                 }
             }
+        }
+
+        if color_maps.is_empty() {
+            panic!("color_map_spec must define at least one color map");
         }
 
         let histogram = Histogram::new(
