@@ -202,13 +202,52 @@ pub struct GrayscaleKeyframeSpec {
     pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
 }
 
-// TODO:  add a function that converts a ColorMapSpec into a
-// Vec<ColorMap<LinearInterpolator>>, then use this new function
-// for the implementation of NewtonsMethodRenderable::new()
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ColorMapSpec {
     FullColorSpec(Vec<Vec<ColorMapKeyFrame>>),
     GrayscaleSpec(GrayscaleKeyframeSpec),
+}
+
+impl ColorMapSpec {
+    pub fn to_color_map_vec(
+        &self,
+        boundary_set_color_rgb: [u8; 3],
+    ) -> Vec<ColorMap<LinearInterpolator>> {
+        match self {
+            ColorMapSpec::GrayscaleSpec(spec) => spec
+                .root_colors_rgb
+                .iter()
+                .map(|root_color| {
+                    let keyframes: Vec<ColorMapKeyFrame> = spec
+                        .grayscale_keyframes
+                        .iter()
+                        .map(|keyframe| {
+                            let mut rgb = [0u8; 3];
+                            for i in 0..3 {
+                                let color = LinearInterpolator.interpolate(
+                                    keyframe.value,
+                                    root_color[i] as f32,
+                                    boundary_set_color_rgb[i] as f32,
+                                );
+                                rgb[i] = color.clamp(0.0, 255.0).round() as u8;
+                            }
+                            ColorMapKeyFrame {
+                                query: keyframe.query,
+                                rgb_raw: rgb,
+                            }
+                        })
+                        .collect();
+
+                    ColorMap::new(&keyframes, LinearInterpolator)
+                })
+                .collect(),
+
+            ColorMapSpec::FullColorSpec(spec) => spec
+                .iter()
+                .map(|keyframes| ColorMap::new(keyframes, LinearInterpolator))
+                .collect(),
+        }
+    }
 }
 
 /// These parameters are common to all Newton's method fractals, and are not
@@ -254,51 +293,14 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
-        let mut inner_color_maps: Vec<ColorMap<LinearInterpolator>> = Vec::new();
-        let mut color_maps: Vec<ColorMapLookUpTable> = Vec::new();
+        let inner_color_maps = params
+            .color_map_spec
+            .to_color_map_vec(params.boundary_set_color_rgb);
 
-        match &params.color_map_spec {
-            ColorMapSpec::GrayscaleSpec(spec) => {
-                for root_color in &spec.root_colors_rgb {
-                    let keyframes: Vec<ColorMapKeyFrame> = spec
-                        .grayscale_keyframes
-                        .iter()
-                        .map(|keyframe| {
-                            let mut rgb = [0u8; 3];
-                            for i in 0..3 {
-                                let color = LinearInterpolator.interpolate(
-                                    keyframe.value,
-                                    root_color[i] as f32,
-                                    params.boundary_set_color_rgb[i] as f32,
-                                );
-                                rgb[i] = color.clamp(0.0, 255.0).round() as u8;
-                            }
-
-                            ColorMapKeyFrame {
-                                query: keyframe.query,
-                                rgb_raw: rgb,
-                            }
-                        })
-                        .collect();
-
-                    inner_color_maps.push(ColorMap::new(&keyframes, LinearInterpolator));
-                    color_maps.push(ColorMapLookUpTable::from_color_map(
-                        inner_color_maps.last().unwrap(),
-                        params.lookup_table_count,
-                    ));
-                }
-            }
-
-            ColorMapSpec::FullColorSpec(spec) => {
-                for keyframes in spec {
-                    inner_color_maps.push(ColorMap::new(keyframes, LinearInterpolator));
-                    color_maps.push(ColorMapLookUpTable::from_color_map(
-                        inner_color_maps.last().unwrap(),
-                        params.lookup_table_count,
-                    ));
-                }
-            }
-        }
+        let color_maps: Vec<ColorMapLookUpTable> = inner_color_maps
+            .iter()
+            .map(|cm| ColorMapLookUpTable::from_color_map(cm, params.lookup_table_count))
+            .collect();
 
         if color_maps.is_empty() {
             panic!("color_map_spec must define at least one color map");
@@ -308,6 +310,7 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             params.histogram_bin_count,
             params.max_iteration_count as f32,
         );
+
         let mut renderable = Self {
             system,
             cdf: CumulativeDistributionFunction::new(&histogram),
