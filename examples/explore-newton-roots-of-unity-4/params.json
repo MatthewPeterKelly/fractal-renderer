@@ -14,17 +14,21 @@
       },
       "boundary_set_color_rgb": [0, 0, 0],
       "cyclic_attractor_color_rgb": [255, 255, 255],
-      "root_colors_rgb": [
-        [18, 83, 53],
-        [170, 30, 78],
-        [30, 95, 175],
-        [228, 173, 55]
-      ],
-      "grayscale_keyframes": [
-        { "query": 0.0, "value": 0.5 },
-        { "query": 0.92, "value": 0.75 },
-        { "query": 1.0, "value": 1.0 }
-      ],
+      "color_map_spec": {
+        "GrayscaleSpec": {
+          "root_colors_rgb": [
+            [18, 83, 53],
+            [170, 30, 78],
+            [30, 95, 175],
+            [228, 173, 55]
+          ],
+          "grayscale_keyframes": [
+            { "query": 0.0, "value": 0.5 },
+            { "query": 0.92, "value": 0.75 },
+            { "query": 1.0, "value": 1.0 }
+          ]
+        }
+      },
       "lookup_table_count": 512,
       "histogram_bin_count": 512,
       "histogram_sample_count": 30000

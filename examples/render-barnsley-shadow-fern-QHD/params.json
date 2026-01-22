@@ -1,13 +1,13 @@
 {
   "BarnsleyFern": {
     "fit_image": {
-      "resolution": [2560, 1600],
-      "padding_scale": 1.01
+      "resolution": [2560, 1440],
+      "padding_scale": 1.04
     },
-    "sample_count": 100000000,
+    "sample_count": 140000000,
     "rng_seed": 12345,
-    "subpixel_antialiasing": 8,
-    "background_color_rgb": [0, 0, 0],
+    "subpixel_antialiasing": 9,
+    "background_color_rgb": [24, 16, 8],
     "fern_color_rgb": [79, 121, 66],
     "coeffs": {
       "view_rectangle": {

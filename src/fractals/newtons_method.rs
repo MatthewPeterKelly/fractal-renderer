@@ -1,7 +1,7 @@
 use num::complex::Complex64;
 use pixels::Error;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
@@ -80,6 +80,46 @@ impl ComplexFunctionWithSlope for RootsOfUnityParams {
     }
 }
 
+/// Parameters / marker type for f(z) = cosh(z) - 1
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CoshMinusOneParams {
+    /// Scalar multiplier for the Newton step (usually 1.0).
+    pub newton_step_size: f64,
+}
+
+impl ComplexFunctionWithSlope for CoshMinusOneParams {
+    fn eval(&self, z: Complex64) -> ComplexValueAndSlope {
+        // f(z)  = cosh(z) - 1
+        // f'(z) = sinh(z)
+        let value = z.cosh() - Complex64::new(1.0, 0.0);
+        let slope = z.sinh();
+
+        ComplexValueAndSlope { value, slope }
+    }
+
+    fn newton_step_size(&self) -> f64 {
+        self.newton_step_size
+    }
+
+    /// Roots of cosh(z) - 1 are at z_k = 2π i k, k ∈ ℤ.
+    ///
+    ///   1. Project z onto the imaginary axis.
+    ///   2. Find the nearest k by rounding Im(z) / (2π).
+    ///   3. Map k ∈ ℤ to a usize using a standard bijection:
+    ///      k >= 0  →  index = 2k
+    ///      k <  0  →  index = -2k - 1
+    fn root_index(&self, z: Complex64) -> usize {
+        let two_pi = 2.0 * PI;
+        let k = (z.im / two_pi).round() as isize;
+
+        if k >= 0 {
+            (2 * k) as usize
+        } else {
+            (-2 * k - 1) as usize
+        }
+    }
+}
+
 pub struct NewtonRhapsonResult {
     /// The point to which the Newton-Rhapson iteration sequence converge.
     pub soln: Complex64,
@@ -109,13 +149,12 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
 
         if error < convergence_tolerance {
             let iteration_count = iteration;
-
             let smooth_iteration_count = if let Some(e_prev) = prev_err {
-                // model error as geometric between e_prev and err
-                let error_ratio = error / e_prev;
-
                 // Guard against the case where error actually hits zero, which would cause ln(0).
                 if error > 0.0 {
+                    // model error as geometric between e_prev and err
+                    let error_ratio = error / e_prev;
+
                     // Model the error as geometric between the last two steps:
                     //   e_n ≈ e_prev * error_ratio^(n - (k - 1))
                     // Solve e_ν = tol for the fractional iteration index ν:
@@ -157,6 +196,60 @@ pub struct GrayscaleMapKeyFrame {
     pub value: f32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GrayscaleKeyframeSpec {
+    pub root_colors_rgb: Vec<[u8; 3]>,
+    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ColorMapSpec {
+    FullColorSpec(Vec<Vec<ColorMapKeyFrame>>),
+    GrayscaleSpec(GrayscaleKeyframeSpec),
+}
+
+impl ColorMapSpec {
+    pub fn to_color_map_vec(
+        &self,
+        boundary_set_color_rgb: [u8; 3],
+    ) -> Vec<ColorMap<LinearInterpolator>> {
+        match self {
+            ColorMapSpec::GrayscaleSpec(spec) => spec
+                .root_colors_rgb
+                .iter()
+                .map(|root_color| {
+                    let keyframes: Vec<ColorMapKeyFrame> = spec
+                        .grayscale_keyframes
+                        .iter()
+                        .map(|keyframe| {
+                            let mut rgb = [0u8; 3];
+                            for i in 0..3 {
+                                let color = LinearInterpolator.interpolate(
+                                    keyframe.value,
+                                    root_color[i] as f32,
+                                    boundary_set_color_rgb[i] as f32,
+                                );
+                                rgb[i] = color.clamp(0.0, 255.0).round() as u8;
+                            }
+                            ColorMapKeyFrame {
+                                query: keyframe.query,
+                                rgb_raw: rgb,
+                            }
+                        })
+                        .collect();
+
+                    ColorMap::new(&keyframes, LinearInterpolator)
+                })
+                .collect(),
+
+            ColorMapSpec::FullColorSpec(spec) => spec
+                .iter()
+                .map(|keyframes| ColorMap::new(keyframes, LinearInterpolator))
+                .collect(),
+        }
+    }
+}
+
 /// These parameters are common to all Newton's method fractals, and are not
 /// generic over the specific system being solved.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -166,9 +259,8 @@ pub struct CommonParams {
     pub convergence_tolerance: f64,
     pub render_options: RenderOptions,
     pub boundary_set_color_rgb: [u8; 3],
-    pub cyclic_attractor_color_rgb: [u8; 3], // did not converge
-    pub root_colors_rgb: Vec<[u8; 3]>,
-    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
+    pub cyclic_attractor_color_rgb: [u8; 3], // color for "did not converge"
+    pub color_map_spec: ColorMapSpec,        // defines color map for each root
     pub lookup_table_count: usize,
     pub histogram_bin_count: usize,
     pub histogram_sample_count: usize,
@@ -201,39 +293,24 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
-        let mut inner_color_maps = Vec::new();
-        let mut color_maps = Vec::new();
-        for root_color in &params.root_colors_rgb {
-            let keyframes: Vec<ColorMapKeyFrame> = params
-                .grayscale_keyframes
-                .iter()
-                .map(|keyframe| {
-                    let mut rgb = [0u8; 3];
-                    for i in 0..3 {
-                        let color = LinearInterpolator.interpolate(
-                            keyframe.value,
-                            root_color[i] as f32,
-                            params.boundary_set_color_rgb[i] as f32,
-                        );
-                        rgb[i] = color.clamp(0.0, 255.0).round() as u8;
-                    }
+        let inner_color_maps = params
+            .color_map_spec
+            .to_color_map_vec(params.boundary_set_color_rgb);
 
-                    ColorMapKeyFrame {
-                        query: keyframe.query,
-                        rgb_raw: rgb,
-                    }
-                })
-                .collect();
-            inner_color_maps.push(ColorMap::new(&keyframes, LinearInterpolator));
-            color_maps.push(ColorMapLookUpTable::from_color_map(
-                inner_color_maps.last().unwrap(),
-                params.lookup_table_count,
-            ))
+        let color_maps: Vec<ColorMapLookUpTable> = inner_color_maps
+            .iter()
+            .map(|cm| ColorMapLookUpTable::from_color_map(cm, params.lookup_table_count))
+            .collect();
+
+        if color_maps.is_empty() {
+            panic!("color_map_spec must define at least one color map");
         }
+
         let histogram = Histogram::new(
             params.histogram_bin_count,
             params.max_iteration_count as f32,
         );
+
         let mut renderable = Self {
             system,
             cdf: CumulativeDistributionFunction::new(&histogram),
@@ -278,7 +355,8 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SystemType {
-    RootsOfUnity(Box<RootsOfUnityParams>), // number of roots == root_colors_rgb.len()
+    RootsOfUnity(Box<RootsOfUnityParams>), // f(z) = z^n - 1
+    CoshMinusOne(Box<CoshMinusOneParams>), // f(z) cosh(z) - 1
 }
 
 impl<F> SpeedOptimizer for NewtonsMethodRenderable<F>
@@ -374,6 +452,10 @@ pub fn render_newtons_method(
             NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
         ),
+        SystemType::CoshMinusOne(system_params) => image_utils::render(
+            NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+            file_prefix,
+        ),
     }
 }
 
@@ -384,6 +466,14 @@ pub fn explore_fractal(
     match &params.system {
         SystemType::RootsOfUnity(system_params) => {
             file_prefix.create_and_step_into_sub_directory("roots_of_unity");
+            user_interface::explore(
+                file_prefix,
+                params.params.image_specification,
+                NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+            )
+        }
+        SystemType::CoshMinusOne(system_params) => {
+            file_prefix.create_and_step_into_sub_directory("cosh_minus_one");
             user_interface::explore(
                 file_prefix,
                 params.params.image_specification,
