@@ -195,7 +195,7 @@ fn view_center_command_from_user_input(
 }
 
 fn reset_command_from_key_press(raw: &RawInputState) -> bool {
-    raw.key_held(VirtualKeyCode::R) || raw.key_pressed_this_frame(VirtualKeyCode::R)
+    raw.key_held(VirtualKeyCode::R)
 }
 
 /**
@@ -313,9 +313,7 @@ pub fn explore<F: Renderable + 'static>(
 
         if let Event::MainEventsCleared = event {
             // Close events
-            if raw_input.key_pressed_this_frame(VirtualKeyCode::Escape)
-                || raw_input.key_held(VirtualKeyCode::Escape)
-            {
+            if raw_input.key_held(VirtualKeyCode::Escape) {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
