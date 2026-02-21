@@ -214,9 +214,7 @@ where
         if scheduled_command.is_none() && user_interaction {
             scheduled_command = Some(0.0);
             if debug_enabled {
-                eprintln!(
-                    "[explore-debug] scheduling fallback render due to active interaction"
-                );
+                eprintln!("[explore-debug] scheduling fallback render due to active interaction");
             }
         }
         if scheduled_command.is_none() && !self.has_started_rendering {

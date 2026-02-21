@@ -26,7 +26,12 @@ const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for 
 
 fn explorer_debug_enabled() -> bool {
     env::var("FRACTAL_EXPLORER_DEBUG")
-        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -139,7 +144,10 @@ fn zoom_velocity_command_from_key_press(
     }
 }
 
-fn view_center_command_from_key_press(input: &WinitInputHelper, raw: &RawInputState) -> CenterCommand {
+fn view_center_command_from_key_press(
+    input: &WinitInputHelper,
+    raw: &RawInputState,
+) -> CenterCommand {
     // Pan control:  arrow keys
     let pan_up_down_command = direction_from_key_pair(
         key_held(input, raw, VirtualKeyCode::Down),
@@ -340,9 +348,7 @@ pub fn explore<F: Renderable + 'static>(
             let zoom_command = zoom_velocity_command_from_key_press(&input, &raw_input);
 
             if debug_enabled {
-                eprintln!(
-                    "[explore-debug] center={center_command:?} zoom={zoom_command:?}"
-                );
+                eprintln!("[explore-debug] center={center_command:?} zoom={zoom_command:?}");
             }
 
             // Check for reset requests
