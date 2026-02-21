@@ -2,6 +2,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
+use std::{env, sync::OnceLock};
 
 use image::Rgb;
 
@@ -88,9 +89,26 @@ pub struct PixelGrid<F: Renderable> {
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
     redraw_required: Arc<AtomicBool>,
+
+    // Tracks whether a render has ever been launched for this window instance.
+    has_started_rendering: bool,
 }
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
+
+fn explorer_debug_enabled() -> bool {
+    static DEBUG: OnceLock<bool> = OnceLock::new();
+    *DEBUG.get_or_init(|| {
+        env::var("FRACTAL_EXPLORER_DEBUG")
+            .map(|value| {
+                matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false)
+    })
+}
 
 impl<F> PixelGrid<F>
 where
@@ -114,6 +132,7 @@ where
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
+            has_started_rendering: false,
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 1.0 / TARGET_RENDER_FRAMES_PER_SECOND,
             ),
@@ -131,12 +150,17 @@ where
         let image_specification = *self.image_specification();
         let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
         let redraw_required = self.redraw_required.clone();
+        let debug_enabled = explorer_debug_enabled();
 
         std::thread::spawn(move || {
             let mut display_buffer_mut = display_buffer.lock().unwrap();
             let mut renderer_mut = renderer.lock().unwrap();
             renderer_mut.set_image_specification(image_specification);
             renderer_mut.render_to_buffer(&mut display_buffer_mut);
+
+            if debug_enabled {
+                eprintln!("[explore-debug] render thread completed frame");
+            }
 
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
@@ -175,11 +199,34 @@ where
         // There are two reasons that we might want to render the fractal:
         // (1) the view control reports that user-interaction has changed the view port onto the fractal
         // (2) the adaptive quality regulator reports that the render quality needs to be modified
+        let debug_enabled = explorer_debug_enabled();
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
         let render_required = self
             .adaptive_quality_regulator
             .render_required(user_interaction);
-        if let Some(command) = render_required {
+        if debug_enabled {
+            eprintln!(
+                "[explore-debug] interaction={user_interaction} render_required={render_required:?} busy={}",
+                self.render_task_is_busy.load(Ordering::Acquire)
+            );
+        }
+        let mut scheduled_command = render_required;
+        if scheduled_command.is_none() && user_interaction {
+            scheduled_command = Some(0.0);
+            if debug_enabled {
+                eprintln!(
+                    "[explore-debug] scheduling fallback render due to active interaction"
+                );
+            }
+        }
+        if scheduled_command.is_none() && !self.has_started_rendering {
+            scheduled_command = Some(0.0);
+            if debug_enabled {
+                eprintln!("[explore-debug] scheduling initial render");
+            }
+        }
+
+        if let Some(command) = scheduled_command {
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 // If we reach here, then the background thread is ready to render an image.
@@ -190,6 +237,10 @@ where
                 // Mark the start of the render operation so that we can collect accurate timing.
                 self.adaptive_quality_regulator
                     .begin_rendering(time, command);
+                self.has_started_rendering = true;
+                if debug_enabled {
+                    eprintln!("[explore-debug] begin render command={command:.3}");
+                }
                 self.render();
             }
         }
