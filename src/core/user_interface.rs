@@ -280,7 +280,7 @@ pub fn explore<F: Renderable + 'static>(
             }
         }
 
-        // The one and only event that winit_input_helper doesn't have for us...
+        // Handle redraw requests from the windowing system.
         if let Event::RedrawRequested(_) = event {
             render_window.draw(pixels.frame_mut());
             if pixels.render().is_err() {
