@@ -128,6 +128,14 @@ where
         pixel_grid
     }
 
+    pub fn render_task_is_busy(&self) -> bool {
+        self.render_task_is_busy.load(Ordering::Acquire)
+    }
+
+    pub fn redraw_required(&self) -> bool {
+        self.redraw_required.load(Ordering::Acquire)
+    }
+
     /// Renders the fractal, pixel-by-pixel, on a background thread(s).
     fn render(&mut self) {
         let display_buffer = self.display_buffer.clone();

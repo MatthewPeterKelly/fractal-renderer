@@ -1,5 +1,6 @@
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::{collections::HashSet, env, fs};
+use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
@@ -67,6 +68,10 @@ impl RawInputState {
 
     fn key_pressed_this_frame(&self, key: VirtualKeyCode) -> bool {
         self.pressed_keys_this_frame.contains(&key)
+    }
+
+    fn has_active_keys(&self) -> bool {
+        !self.held_keys.is_empty()
     }
 
     fn end_frame(&mut self) {
@@ -259,7 +264,14 @@ pub fn explore<F: Renderable + 'static>(
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        let should_tick = raw_input.has_active_keys()
+            || render_window.render_task_is_busy()
+            || render_window.redraw_required();
+        *control_flow = if should_tick {
+            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(8))
+        } else {
+            ControlFlow::Wait
+        };
 
         if let Event::WindowEvent { event, .. } = &event {
             raw_input.observe_window_event(event);
