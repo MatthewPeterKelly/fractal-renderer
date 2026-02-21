@@ -6,7 +6,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use winit_input_helper::WinitInputHelper;
 
 use crate::core::{
     file_io::FilePrefix,
@@ -23,17 +22,6 @@ const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
 const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
-
-fn explorer_debug_enabled() -> bool {
-    env::var("FRACTAL_EXPLORER_DEBUG")
-        .map(|value| {
-            matches!(
-                value.to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-}
 
 #[derive(Default)]
 struct RawInputState {
@@ -114,25 +102,18 @@ fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     }
 }
 
-fn key_held(input: &WinitInputHelper, raw: &RawInputState, key: VirtualKeyCode) -> bool {
-    input.key_held(key) || raw.key_held(key)
-}
-
-fn zoom_velocity_command_from_key_press(
-    input: &WinitInputHelper,
-    raw: &RawInputState,
-) -> ZoomVelocityCommand {
+fn zoom_velocity_command_from_key_press(raw: &RawInputState) -> ZoomVelocityCommand {
     // Zoom control --> W and S keys
     let direction = direction_from_key_pair(
-        key_held(input, raw, VirtualKeyCode::W),
-        key_held(input, raw, VirtualKeyCode::S),
+        raw.key_held(VirtualKeyCode::W),
+        raw.key_held(VirtualKeyCode::S),
     );
     if direction == ScalarDirection::Zero() {
         // See if the user is doing a "fast zoom" instead:
         return ZoomVelocityCommand {
             zoom_direction: direction_from_key_pair(
-                key_held(input, raw, VirtualKeyCode::D),
-                key_held(input, raw, VirtualKeyCode::A),
+                raw.key_held(VirtualKeyCode::D),
+                raw.key_held(VirtualKeyCode::A),
             ),
             zoom_rate: FAST_ZOOM_RATE,
         };
@@ -144,18 +125,15 @@ fn zoom_velocity_command_from_key_press(
     }
 }
 
-fn view_center_command_from_key_press(
-    input: &WinitInputHelper,
-    raw: &RawInputState,
-) -> CenterCommand {
+fn view_center_command_from_key_press(raw: &RawInputState) -> CenterCommand {
     // Pan control:  arrow keys
     let pan_up_down_command = direction_from_key_pair(
-        key_held(input, raw, VirtualKeyCode::Down),
-        key_held(input, raw, VirtualKeyCode::Up),
+        raw.key_held(VirtualKeyCode::Down),
+        raw.key_held(VirtualKeyCode::Up),
     );
     let pan_left_right_command = direction_from_key_pair(
-        key_held(input, raw, VirtualKeyCode::Left),
-        key_held(input, raw, VirtualKeyCode::Right),
+        raw.key_held(VirtualKeyCode::Left),
+        raw.key_held(VirtualKeyCode::Right),
     );
 
     let center_velocity = CenterVelocityCommand {
@@ -172,17 +150,16 @@ fn view_center_command_from_key_press(
 }
 
 fn view_center_command_from_user_input(
-    input: &WinitInputHelper,
     raw: &RawInputState,
     pixels: &Pixels,
     image_specification: &ImageSpecification,
 ) -> CenterCommand {
     // Check for mouse click --> used to command a view target
-    if input.mouse_pressed(0) || raw.mouse_left_pressed_this_frame {
+    if raw.mouse_left_pressed_this_frame {
         // Figure out where the mouse click happened.
-        let mouse_click_coordinates = input
-            .mouse()
-            .or(raw.last_cursor_position.map(|(x, y)| (x as f32, y as f32)))
+        let mouse_click_coordinates = raw
+            .last_cursor_position
+            .map(|(x, y)| (x as f32, y as f32))
             .map(|(mx, my)| {
                 let (mx_i, my_i) = pixels
                     .window_pos_to_pixel((mx, my))
@@ -199,21 +176,12 @@ fn view_center_command_from_user_input(
         })
     } else {
         // No mouse click, so let's see if the user wants to pan/zoom with the keyboard:
-        view_center_command_from_key_press(input, raw)
+        view_center_command_from_key_press(raw)
     }
 }
 
-fn reset_command_from_key_press(input: &WinitInputHelper, raw: &RawInputState) -> bool {
-    if key_held(input, raw, VirtualKeyCode::R) {
-        return true;
-    }
-    if raw.key_pressed_this_frame(VirtualKeyCode::R) {
-        return true;
-    }
-    if input.key_pressed(VirtualKeyCode::R) {
-        return true;
-    }
-    false
+fn reset_command_from_key_press(raw: &RawInputState) -> bool {
+    raw.key_held(VirtualKeyCode::R) || raw.key_pressed_this_frame(VirtualKeyCode::R)
 }
 
 /**
@@ -229,8 +197,6 @@ pub fn explore<F: Renderable + 'static>(
     image_specification: ImageSpecification,
     renderer: F,
 ) -> Result<(), Error> {
-    let debug_enabled = explorer_debug_enabled();
-
     // Keep backend selection under user control and let winit auto-detect by default.
     if running_in_wsl() && env::var_os("WINIT_UNIX_BACKEND").is_none() {
         eprintln!(
@@ -256,7 +222,6 @@ pub fn explore<F: Renderable + 'static>(
             std::process::exit(1);
         });
 
-    let mut input = WinitInputHelper::new();
     let mut raw_input = RawInputState::default();
     let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
 
@@ -296,8 +261,6 @@ pub fn explore<F: Renderable + 'static>(
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        let _ = input.update(&event);
-
         if let Event::WindowEvent { event, .. } = &event {
             raw_input.observe_window_event(event);
 
@@ -329,30 +292,23 @@ pub fn explore<F: Renderable + 'static>(
 
         if let Event::MainEventsCleared = event {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape)
-                || raw_input.key_pressed_this_frame(VirtualKeyCode::Escape)
+            if raw_input.key_pressed_this_frame(VirtualKeyCode::Escape)
                 || raw_input.key_held(VirtualKeyCode::Escape)
-                || input.close_requested()
             {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
 
             let center_command = view_center_command_from_user_input(
-                &input,
                 &raw_input,
                 &pixels,
                 render_window.image_specification(),
             );
 
-            let zoom_command = zoom_velocity_command_from_key_press(&input, &raw_input);
-
-            if debug_enabled {
-                eprintln!("[explore-debug] center={center_command:?} zoom={zoom_command:?}");
-            }
+            let zoom_command = zoom_velocity_command_from_key_press(&raw_input);
 
             // Check for reset requests
-            if reset_command_from_key_press(&input, &raw_input) {
+            if reset_command_from_key_press(&raw_input) {
                 render_window.reset();
             }
 
@@ -363,17 +319,11 @@ pub fn explore<F: Renderable + 'static>(
                 zoom_command,
             );
 
-            if debug_enabled {
-                eprintln!("[explore-debug] redraw_required={redraw_required}");
-            }
-
             if redraw_required {
                 window.request_redraw();
             }
 
-            if input.key_pressed_os(VirtualKeyCode::Space)
-                || raw_input.key_pressed_this_frame(VirtualKeyCode::Space)
-            {
+            if raw_input.key_pressed_this_frame(VirtualKeyCode::Space) {
                 render_window.render_to_file();
             }
 

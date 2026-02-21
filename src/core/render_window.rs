@@ -2,7 +2,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
-use std::{env, sync::OnceLock};
 
 use image::Rgb;
 
@@ -96,20 +95,6 @@ pub struct PixelGrid<F: Renderable> {
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
 
-fn explorer_debug_enabled() -> bool {
-    static DEBUG: OnceLock<bool> = OnceLock::new();
-    *DEBUG.get_or_init(|| {
-        env::var("FRACTAL_EXPLORER_DEBUG")
-            .map(|value| {
-                matches!(
-                    value.to_ascii_lowercase().as_str(),
-                    "1" | "true" | "yes" | "on"
-                )
-            })
-            .unwrap_or(false)
-    })
-}
-
 impl<F> PixelGrid<F>
 where
     F: Renderable + Send + Sync + 'static,
@@ -150,17 +135,12 @@ where
         let image_specification = *self.image_specification();
         let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
         let redraw_required = self.redraw_required.clone();
-        let debug_enabled = explorer_debug_enabled();
 
         std::thread::spawn(move || {
             let mut display_buffer_mut = display_buffer.lock().unwrap();
             let mut renderer_mut = renderer.lock().unwrap();
             renderer_mut.set_image_specification(image_specification);
             renderer_mut.render_to_buffer(&mut display_buffer_mut);
-
-            if debug_enabled {
-                eprintln!("[explore-debug] render thread completed frame");
-            }
 
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
@@ -199,32 +179,13 @@ where
         // There are two reasons that we might want to render the fractal:
         // (1) the view control reports that user-interaction has changed the view port onto the fractal
         // (2) the adaptive quality regulator reports that the render quality needs to be modified
-        let debug_enabled = explorer_debug_enabled();
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
         let render_required = self
             .adaptive_quality_regulator
             .render_required(user_interaction);
-        if debug_enabled {
-            eprintln!(
-                "[explore-debug] interaction={user_interaction} render_required={render_required:?} busy={}",
-                self.render_task_is_busy.load(Ordering::Acquire)
-            );
-        }
-        let mut scheduled_command = render_required;
-        if scheduled_command.is_none() && user_interaction {
-            scheduled_command = Some(0.0);
-            if debug_enabled {
-                eprintln!("[explore-debug] scheduling fallback render due to active interaction");
-            }
-        }
-        if scheduled_command.is_none() && !self.has_started_rendering {
-            scheduled_command = Some(0.0);
-            if debug_enabled {
-                eprintln!("[explore-debug] scheduling initial render");
-            }
-        }
+        let fallback_command = (user_interaction || !self.has_started_rendering).then_some(0.0);
 
-        if let Some(command) = scheduled_command {
+        if let Some(command) = render_required.or(fallback_command) {
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 // If we reach here, then the background thread is ready to render an image.
@@ -236,9 +197,6 @@ where
                 self.adaptive_quality_regulator
                     .begin_rendering(time, command);
                 self.has_started_rendering = true;
-                if debug_enabled {
-                    eprintln!("[explore-debug] begin render command={command:.3}");
-                }
                 self.render();
             }
         }
