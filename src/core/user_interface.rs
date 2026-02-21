@@ -1,6 +1,6 @@
 use pixels::{Error, Pixels, SurfaceTexture};
-use std::{collections::HashSet, env, fs};
 use std::time::{Duration, Instant};
+use std::{collections::HashSet, env, fs};
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
@@ -23,6 +23,9 @@ const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
 const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
+                                           // While rendering or when keys are held, wake periodically to keep interaction smooth
+                                           // without busy-spinning the event loop.
+const ACTIVE_LOOP_TICK_MS: u64 = 10;
 
 #[derive(Default)]
 struct RawInputState {
@@ -57,6 +60,12 @@ impl RawInputState {
                 ..
             } => {
                 self.mouse_left_pressed_this_frame = true;
+            }
+            WindowEvent::Focused(false) => {
+                self.held_keys.clear();
+                self.pressed_keys_this_frame.clear();
+                self.mouse_left_pressed_this_frame = false;
+                self.last_cursor_position = None;
             }
             _ => {}
         }
@@ -268,7 +277,7 @@ pub fn explore<F: Renderable + 'static>(
             || render_window.render_task_is_busy()
             || render_window.redraw_required();
         *control_flow = if should_tick {
-            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(8))
+            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
         } else {
             ControlFlow::Wait
         };
