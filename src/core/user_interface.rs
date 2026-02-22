@@ -23,10 +23,16 @@ const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
 const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
 const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
-                                           // While rendering or when keys are held, wake periodically to keep interaction smooth
-                                           // without busy-spinning the event loop.
+
+// While rendering or when keys are held, wake periodically to keep interaction smooth
+// without busy-spinning the event loop.
 const ACTIVE_LOOP_TICK_MS: u64 = 10;
 
+/// The `RawInputState` struct is responsible for tracking the current state of user input devices
+/// (keyboard and mouse). It listens to window events and updates its internal state accordingly,
+/// allowing the application to query which keys are currently held down, which keys were pressed
+/// in the current frame, and whether the left mouse button was clicked. This abstraction simplifies
+/// input handling for the rest of the application.
 #[derive(Default)]
 struct RawInputState {
     held_keys: HashSet<VirtualKeyCode>,
@@ -116,18 +122,18 @@ fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     }
 }
 
-fn zoom_velocity_command_from_key_press(raw: &RawInputState) -> ZoomVelocityCommand {
+fn zoom_velocity_command_from_key_press(input: &RawInputState) -> ZoomVelocityCommand {
     // Zoom control --> W and S keys
     let direction = direction_from_key_pair(
-        raw.key_held(VirtualKeyCode::W),
-        raw.key_held(VirtualKeyCode::S),
+        input.key_held(VirtualKeyCode::W),
+        input.key_held(VirtualKeyCode::S),
     );
     if direction == ScalarDirection::Zero() {
         // See if the user is doing a "fast zoom" instead:
         return ZoomVelocityCommand {
             zoom_direction: direction_from_key_pair(
-                raw.key_held(VirtualKeyCode::D),
-                raw.key_held(VirtualKeyCode::A),
+                input.key_held(VirtualKeyCode::D),
+                input.key_held(VirtualKeyCode::A),
             ),
             zoom_rate: FAST_ZOOM_RATE,
         };
@@ -139,15 +145,15 @@ fn zoom_velocity_command_from_key_press(raw: &RawInputState) -> ZoomVelocityComm
     }
 }
 
-fn view_center_command_from_key_press(raw: &RawInputState) -> CenterCommand {
+fn view_center_command_from_key_press(input: &RawInputState) -> CenterCommand {
     // Pan control:  arrow keys
     let pan_up_down_command = direction_from_key_pair(
-        raw.key_held(VirtualKeyCode::Down),
-        raw.key_held(VirtualKeyCode::Up),
+        input.key_held(VirtualKeyCode::Down),
+        input.key_held(VirtualKeyCode::Up),
     );
     let pan_left_right_command = direction_from_key_pair(
-        raw.key_held(VirtualKeyCode::Left),
-        raw.key_held(VirtualKeyCode::Right),
+        input.key_held(VirtualKeyCode::Left),
+        input.key_held(VirtualKeyCode::Right),
     );
 
     let center_velocity = CenterVelocityCommand {
@@ -164,14 +170,14 @@ fn view_center_command_from_key_press(raw: &RawInputState) -> CenterCommand {
 }
 
 fn view_center_command_from_user_input(
-    raw: &RawInputState,
+    input: &RawInputState,
     pixels: &Pixels,
     image_specification: &ImageSpecification,
 ) -> CenterCommand {
     // Check for mouse click --> used to command a view target
-    if raw.mouse_left_pressed_this_frame {
+    if input.mouse_left_pressed_this_frame {
         // Figure out where the mouse click happened.
-        let mouse_click_coordinates = raw
+        let mouse_click_coordinates = input
             .last_cursor_position
             .map(|(x, y)| (x as f32, y as f32))
             .map(|(mx, my)| {
@@ -190,12 +196,12 @@ fn view_center_command_from_user_input(
         })
     } else {
         // No mouse click, so let's see if the user wants to pan/zoom with the keyboard:
-        view_center_command_from_key_press(raw)
+        view_center_command_from_key_press(input)
     }
 }
 
-fn reset_command_from_key_press(raw: &RawInputState) -> bool {
-    raw.key_held(VirtualKeyCode::R)
+fn reset_command_from_key_press(input: &RawInputState) -> bool {
+    input.key_held(VirtualKeyCode::R)
 }
 
 /**
