@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use std::{collections::HashSet, env, fs};
 use winit::{
     dpi::LogicalSize,
-    event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, MouseButton, StartCause, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -273,7 +273,11 @@ pub fn explore<F: Renderable + 'static>(
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        // Initialize once at startup; do not set a per-event default here.
+        // `MainEventsCleared` is the sole owner of `WaitUntil(...)` scheduling.
+        if let Event::NewEvents(StartCause::Init) = event {
+            *control_flow = ControlFlow::Wait;
+        }
 
         if let Event::WindowEvent { event, .. } = &event {
             raw_input.observe_window_event(event);
