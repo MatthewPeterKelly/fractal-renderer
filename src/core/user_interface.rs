@@ -343,7 +343,8 @@ pub fn explore<F: Renderable + 'static>(
 
             let should_tick = raw_input.has_active_keys()
                 || render_window.render_task_is_busy()
-                || render_window.redraw_required();
+                || render_window.redraw_required()
+                || render_window.adaptive_rendering_required();
             *control_flow = if should_tick {
                 ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
             } else {

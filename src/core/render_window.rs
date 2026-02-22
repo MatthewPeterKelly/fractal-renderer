@@ -136,6 +136,10 @@ where
         self.redraw_required.load(Ordering::Acquire)
     }
 
+    pub fn adaptive_rendering_required(&self) -> bool {
+        !self.adaptive_quality_regulator.is_idle()
+    }
+
     /// Renders the fractal, pixel-by-pixel, on a background thread(s).
     fn render(&mut self) {
         let display_buffer = self.display_buffer.clone();
