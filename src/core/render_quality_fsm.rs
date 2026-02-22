@@ -149,6 +149,10 @@ where
         self.previous_interactive_render_command = self.initial_render_command;
     }
 
+    pub fn is_idle(&self) -> bool {
+        self.mode == Mode::Idle
+    }
+
     /// @param previous_render_command: previous render command, if one has been set
     /// @param render_period: if the command has been completed, how long did it take?
     /// @param is_interactive:  is the user interacting with the fractal view port?
@@ -265,6 +269,10 @@ impl AdaptiveOptimizationRegulator {
         self.render_start_time = None;
         self.render_period = None;
         self.render_command = None;
+    }
+
+    pub fn is_idle(&self) -> bool {
+        self.render_policy_fsm.is_idle()
     }
 
     /// This method is called each time that the `explore` pipeline would like

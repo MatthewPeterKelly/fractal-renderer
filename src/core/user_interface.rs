@@ -1,12 +1,12 @@
 use pixels::{Error, Pixels, SurfaceTexture};
-use std::{env, fs};
+use std::time::{Duration, Instant};
+use std::{collections::HashSet, env, fs};
 use winit::{
     dpi::LogicalSize,
-    event::{Event, VirtualKeyCode},
+    event::{ElementState, Event, MouseButton, StartCause, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use winit_input_helper::WinitInputHelper;
 
 use crate::core::{
     file_io::FilePrefix,
@@ -24,16 +24,82 @@ const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
 const PAN_RATE: f64 = 0.2; // window width per second
 const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
 
+// While rendering or when keys are held, wake periodically to keep interaction smooth
+// without busy-spinning the event loop.
+const ACTIVE_LOOP_TICK_MS: u64 = 10;
+
+/// The `RawInputState` struct is responsible for tracking the current state of user input devices
+/// (keyboard and mouse). It listens to window events and updates its internal state accordingly,
+/// allowing the application to query which keys are currently held down, which keys were pressed
+/// in the current frame, and whether the left mouse button was clicked. This abstraction simplifies
+/// input handling for the rest of the application.
+#[derive(Default)]
+struct RawInputState {
+    held_keys: HashSet<VirtualKeyCode>,
+    pressed_keys_this_frame: HashSet<VirtualKeyCode>,
+    mouse_left_pressed_this_frame: bool,
+    last_cursor_position: Option<(f64, f64)>,
+}
+
+impl RawInputState {
+    fn observe_window_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput { input, .. } => {
+                if let Some(keycode) = input.virtual_keycode {
+                    match input.state {
+                        ElementState::Pressed => {
+                            self.held_keys.insert(keycode);
+                            self.pressed_keys_this_frame.insert(keycode);
+                        }
+                        ElementState::Released => {
+                            self.held_keys.remove(&keycode);
+                        }
+                    }
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.last_cursor_position = Some((position.x, position.y));
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                self.mouse_left_pressed_this_frame = true;
+            }
+            WindowEvent::Focused(false) => {
+                self.held_keys.clear();
+                self.pressed_keys_this_frame.clear();
+                self.mouse_left_pressed_this_frame = false;
+                self.last_cursor_position = None;
+            }
+            _ => {}
+        }
+    }
+
+    fn key_held(&self, key: VirtualKeyCode) -> bool {
+        self.held_keys.contains(&key)
+    }
+
+    fn key_pressed_this_frame(&self, key: VirtualKeyCode) -> bool {
+        self.pressed_keys_this_frame.contains(&key)
+    }
+
+    fn has_active_keys(&self) -> bool {
+        !self.held_keys.is_empty()
+    }
+
+    fn end_frame(&mut self) {
+        self.pressed_keys_this_frame.clear();
+        self.mouse_left_pressed_this_frame = false;
+    }
+}
+
 fn running_in_wsl() -> bool {
     env::var_os("WSL_INTEROP").is_some()
         || fs::read_to_string("/proc/sys/kernel/osrelease")
             .map(|s| s.to_lowercase().contains("microsoft"))
             .unwrap_or(false)
-}
-
-// WSLg usually sets WAYLAND_DISPLAY and DISPLAY; DISPLAY enables XWayland.
-fn running_in_wslg() -> bool {
-    running_in_wsl() && env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
@@ -56,7 +122,7 @@ fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
     }
 }
 
-fn zoom_velocity_command_from_key_press(input: &WinitInputHelper) -> ZoomVelocityCommand {
+fn zoom_velocity_command_from_key_press(input: &RawInputState) -> ZoomVelocityCommand {
     // Zoom control --> W and S keys
     let direction = direction_from_key_pair(
         input.key_held(VirtualKeyCode::W),
@@ -79,7 +145,7 @@ fn zoom_velocity_command_from_key_press(input: &WinitInputHelper) -> ZoomVelocit
     }
 }
 
-fn view_center_command_from_key_press(input: &WinitInputHelper) -> CenterCommand {
+fn view_center_command_from_key_press(input: &RawInputState) -> CenterCommand {
     // Pan control:  arrow keys
     let pan_up_down_command = direction_from_key_pair(
         input.key_held(VirtualKeyCode::Down),
@@ -104,15 +170,16 @@ fn view_center_command_from_key_press(input: &WinitInputHelper) -> CenterCommand
 }
 
 fn view_center_command_from_user_input(
-    input: &WinitInputHelper,
+    input: &RawInputState,
     pixels: &Pixels,
     image_specification: &ImageSpecification,
 ) -> CenterCommand {
     // Check for mouse click --> used to command a view target
-    if input.mouse_pressed(0) {
+    if input.mouse_left_pressed_this_frame {
         // Figure out where the mouse click happened.
         let mouse_click_coordinates = input
-            .mouse()
+            .last_cursor_position
+            .map(|(x, y)| (x as f32, y as f32))
             .map(|(mx, my)| {
                 let (mx_i, my_i) = pixels
                     .window_pos_to_pixel((mx, my))
@@ -133,14 +200,8 @@ fn view_center_command_from_user_input(
     }
 }
 
-fn reset_command_from_key_press(input: &WinitInputHelper) -> bool {
-    if input.key_held(VirtualKeyCode::R) {
-        return true;
-    }
-    if input.key_pressed(VirtualKeyCode::R) {
-        return true;
-    }
-    false
+fn reset_command_from_key_press(input: &RawInputState) -> bool {
+    input.key_held(VirtualKeyCode::R)
 }
 
 /**
@@ -156,13 +217,11 @@ pub fn explore<F: Renderable + 'static>(
     image_specification: ImageSpecification,
     renderer: F,
 ) -> Result<(), Error> {
-    // Respect an explicit user choice if they set it themselves.
-    let user_forced_backend = env::var_os("WINIT_UNIX_BACKEND").is_some();
-
-    if running_in_wslg() && !user_forced_backend {
-        // Safer than removing WAYLAND_DISPLAY: only winit cares.
-        env::set_var("WINIT_UNIX_BACKEND", "x11");
-        eprintln!("Note: WSLg detected; forcing winit backend to X11 (WINIT_UNIX_BACKEND=x11).");
+    // Keep backend selection under user control and let winit auto-detect by default.
+    if running_in_wsl() && env::var_os("WINIT_UNIX_BACKEND").is_none() {
+        eprintln!(
+            "Note: WSL detected; using winit auto backend selection. Set WINIT_UNIX_BACKEND=wayland or x11 to force a backend."
+        );
     }
 
     // Create the event loop with a friendlier failure path.
@@ -183,7 +242,7 @@ pub fn explore<F: Renderable + 'static>(
             std::process::exit(1);
         });
 
-    let mut input = WinitInputHelper::new();
+    let mut raw_input = RawInputState::default();
     let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
 
     // Read the parameters file here and convert it into a `RenderWindow`.
@@ -220,7 +279,32 @@ pub fn explore<F: Renderable + 'static>(
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
-        // The one and only event that winit_input_helper doesn't have for us...
+        // Initialize once at startup; do not set a per-event default here.
+        // `MainEventsCleared` is the sole owner of `WaitUntil(...)` scheduling.
+        if let Event::NewEvents(StartCause::Init) = event {
+            *control_flow = ControlFlow::Wait;
+        }
+
+        if let Event::WindowEvent { event, .. } = &event {
+            raw_input.observe_window_event(event);
+
+            match event {
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+                WindowEvent::Resized(size) => {
+                    if pixels.resize_surface(size.width, size.height).is_err() {
+                        println!("ERROR:  unable to resize surface. Aborting.");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Handle redraw requests from the windowing system.
         if let Event::RedrawRequested(_) = event {
             render_window.draw(pixels.frame_mut());
             if pixels.render().is_err() {
@@ -230,49 +314,52 @@ pub fn explore<F: Renderable + 'static>(
             }
         }
 
-        // For everything else, for let winit_input_helper collect events to build its state.
-        // It returns `true` when it is time to update our game state and request a redraw.
-        if input.update(&event) {
+        if let Event::MainEventsCleared = event {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.close_requested() {
+            if raw_input.key_held(VirtualKeyCode::Escape) {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
 
             let center_command = view_center_command_from_user_input(
-                &input,
+                &raw_input,
                 &pixels,
                 render_window.image_specification(),
             );
 
-            let zoom_command = zoom_velocity_command_from_key_press(&input);
-
-            // Resize the window
-            if let Some(size) = input.window_resized() {
-                if pixels.resize_surface(size.width, size.height).is_err() {
-                    println!("ERROR:  unable to resize surface. Aborting.");
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-            }
+            let zoom_command = zoom_velocity_command_from_key_press(&raw_input);
 
             // Check for reset requests
-            if reset_command_from_key_press(&input) {
+            if reset_command_from_key_press(&raw_input) {
                 render_window.reset();
             }
 
             // Now do the hard rendering math:
-            if render_window.update(
+            let redraw_required = render_window.update(
                 stopwatch.total_elapsed_seconds(),
                 center_command,
                 zoom_command,
-            ) {
+            );
+
+            if redraw_required {
                 window.request_redraw();
             }
 
-            if input.key_pressed_os(VirtualKeyCode::Space) {
+            if raw_input.key_pressed_this_frame(VirtualKeyCode::Space) {
                 render_window.render_to_file();
             }
+
+            raw_input.end_frame();
+
+            let should_tick = raw_input.has_active_keys()
+                || render_window.render_task_is_busy()
+                || render_window.redraw_required()
+                || render_window.adaptive_rendering_required();
+            *control_flow = if should_tick {
+                ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
+            } else {
+                ControlFlow::Wait
+            };
         }
     });
 }

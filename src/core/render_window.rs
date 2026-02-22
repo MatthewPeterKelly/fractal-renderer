@@ -88,6 +88,9 @@ pub struct PixelGrid<F: Renderable> {
     // Set to `true` when rendering is complete and the display buffer needs
     // to be copied to the screen.
     redraw_required: Arc<AtomicBool>,
+
+    // Tracks whether a render has ever been launched for this window instance.
+    has_started_rendering: bool,
 }
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
@@ -114,6 +117,7 @@ where
             speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
+            has_started_rendering: false,
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 1.0 / TARGET_RENDER_FRAMES_PER_SECOND,
             ),
@@ -122,6 +126,18 @@ where
             .view_control
             .update(time, center_command, ZoomVelocityCommand::zero());
         pixel_grid
+    }
+
+    pub fn render_task_is_busy(&self) -> bool {
+        self.render_task_is_busy.load(Ordering::Acquire)
+    }
+
+    pub fn redraw_required(&self) -> bool {
+        self.redraw_required.load(Ordering::Acquire)
+    }
+
+    pub fn adaptive_rendering_required(&self) -> bool {
+        !self.adaptive_quality_regulator.is_idle()
     }
 
     /// Renders the fractal, pixel-by-pixel, on a background thread(s).
@@ -176,10 +192,21 @@ where
         // (1) the view control reports that user-interaction has changed the view port onto the fractal
         // (2) the adaptive quality regulator reports that the render quality needs to be modified
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
+
+        // If redraw is required, it tells us that the previous rendering operation has
+        // completed. Capture this timing *before* possibly launching a new render, so that
+        // the measured period is associated with the correct command.
+        let redraw_required = self.redraw_required.load(Ordering::Acquire);
+        if redraw_required {
+            self.adaptive_quality_regulator.finish_rendering(time);
+        }
+
         let render_required = self
             .adaptive_quality_regulator
             .render_required(user_interaction);
-        if let Some(command) = render_required {
+        let fallback_command = (user_interaction || !self.has_started_rendering).then_some(0.0);
+
+        if let Some(command) = render_required.or(fallback_command) {
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 // If we reach here, then the background thread is ready to render an image.
@@ -190,19 +217,11 @@ where
                 // Mark the start of the render operation so that we can collect accurate timing.
                 self.adaptive_quality_regulator
                     .begin_rendering(time, command);
+                self.has_started_rendering = true;
                 self.render();
             }
         }
-        // Redraw will be required once the background render thread has finished working.
-        let redraw_required = self.redraw_required.load(Ordering::Acquire);
-        // If redraw is required, it tells us that the rendering operation has completed,
-        // so we mark it as finished, giving us timing information to use in the next
-        // render quality update. Note that this `finish_rendering()` might be called
-        // twice if we call `update()` multiple times before hitting the `draw()` method
-        // below, which happens depending on render rates and user inputs.
-        if redraw_required {
-            self.adaptive_quality_regulator.finish_rendering(time);
-        }
+        // Redraw is required if a completed background render is waiting to be drawn.
         redraw_required
     }
 
