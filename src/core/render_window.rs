@@ -210,9 +210,6 @@ where
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 // If we reach here, then the background thread is ready to render an image.
-                eprintln!(
-                    "[speed-opt] command={command:.3} adaptive={render_required:?} fallback={fallback_command:?} interaction={user_interaction}",
-                );
                 self.renderer
                     .lock()
                     .unwrap()
