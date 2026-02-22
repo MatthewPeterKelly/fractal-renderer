@@ -273,14 +273,7 @@ pub fn explore<F: Renderable + 'static>(
 
     // GUI application main loop:
     event_loop.run(move |event, _, control_flow| {
-        let should_tick = raw_input.has_active_keys()
-            || render_window.render_task_is_busy()
-            || render_window.redraw_required();
-        *control_flow = if should_tick {
-            ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
-        } else {
-            ControlFlow::Wait
-        };
+        *control_flow = ControlFlow::Wait;
 
         if let Event::WindowEvent { event, .. } = &event {
             raw_input.observe_window_event(event);
@@ -347,6 +340,15 @@ pub fn explore<F: Renderable + 'static>(
             }
 
             raw_input.end_frame();
+
+            let should_tick = raw_input.has_active_keys()
+                || render_window.render_task_is_busy()
+                || render_window.redraw_required();
+            *control_flow = if should_tick {
+                ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
+            } else {
+                ControlFlow::Wait
+            };
         }
     });
 }
