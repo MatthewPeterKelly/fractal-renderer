@@ -12,6 +12,7 @@ pub enum CommandsEnum {
     Render(ParameterFilePath),
     Explore(ParameterFilePath),
     ColorSwatch(ParameterFilePath),
+    ColorMapEditor(ParameterFilePath),
 }
 
 #[derive(Debug, Args)]

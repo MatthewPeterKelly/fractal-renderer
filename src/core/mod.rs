@@ -1,4 +1,5 @@
 pub mod chaos_game;
+pub mod color_map_editor_ui;
 pub mod color_map;
 pub mod controller;
 pub mod dynamical_systems;
