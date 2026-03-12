@@ -185,10 +185,15 @@ struct EditorState {
 
 impl EditorState {
     fn new(keyframes: Vec<ColorMapKeyFrame>) -> Self {
+        let hsv = if keyframes.is_empty() {
+            [0.0, 0.0, 1.0]
+        } else {
+            rgb_to_hsv(keyframes[0].rgb_raw)
+        };
         Self {
             keyframes,
-            selected:       None,
-            hsv:            [0.0, 0.0, 1.0],
+            selected:       Some(0),
+            hsv,
             drag:           Drag::None,
             keyframes_dirty: true,
             view_dirty:     false,
@@ -335,7 +340,6 @@ impl EditorState {
         }
 
         // Color picker sliders + value boxes (only when keyframe selected)
-        eprintln!("DEBUG click: x={x:.1} y={y:.1} selected={:?}", self.selected);
         if self.selected.is_some() {
             let sliders = [
                 (SlotId::H, COL_L_X, 0u32),
@@ -349,21 +353,16 @@ impl EditorState {
                 let by = bar_y(n, row);
                 let sl_x = col_x + BAR_SL_OFF;
                 let vb_x = col_x + BAR_VAL_OFF;
-                eprintln!("  check {slot:?}: slider=[{sl_x}..{}] valbox=[{vb_x}..{}] y=[{by}..{}]",
-                    sl_x+BAR_SL_W, vb_x+BAR_VAL_W, by+BAR_H);
                 if hit_rect(x, y, sl_x, by, BAR_SL_W, BAR_H) {
-                    eprintln!("  -> slider hit {slot:?}");
                     self.drag = Drag::Slider(slot);
                     self.apply_slider_drag(x, sl_x, slot);
                     return;
                 }
                 if hit_rect(x, y, vb_x, by, BAR_VAL_W, BAR_H) {
-                    eprintln!("  -> valbox hit {slot:?}");
                     self.activate_input(FieldId::Slot(slot));
                     return;
                 }
             }
-            eprintln!("  -> no color picker match");
         }
 
         // Click on timeline background → deselect
@@ -386,17 +385,7 @@ impl EditorState {
     }
 
     fn activate_input(&mut self, field: FieldId) {
-        let text = match field {
-            FieldId::Query(i) => format!("{:.4}", self.keyframes[i].query),
-            FieldId::Slot(SlotId::H) => format!("{:.1}", self.hsv[0]),
-            FieldId::Slot(SlotId::S) => format!("{:.1}", self.hsv[1] * 100.0),
-            FieldId::Slot(SlotId::V) => format!("{:.1}", self.hsv[2] * 100.0),
-            FieldId::Slot(s) => {
-                let rgb = self.selected_rgb().unwrap_or([0,0,0]);
-                format!("{}", match s { SlotId::R => rgb[0], SlotId::G => rgb[1], _ => rgb[2] })
-            }
-        };
-        self.active_input = Some(TextInput { field, text });
+        self.active_input = Some(TextInput { field, text: String::new() });
         self.view_dirty = true;
     }
 
