@@ -8,7 +8,7 @@ use std::{
 };
 use winit::{
     dpi::LogicalSize,
-    event::{ElementState, Event, MouseButton, StartCause, VirtualKeyCode, WindowEvent},
+    event::{ElementState, Event, ModifiersState, MouseButton, StartCause, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -19,72 +19,163 @@ use crate::core::{
     interpolation::LinearInterpolator,
 };
 
-// ── Editor window dimensions ────────────────────────────────────────────────
+// ── Window dimensions ────────────────────────────────────────────────────────
 const W: u32 = 800;
-const H: u32 = 460;
+const H: u32 = 420;
 
-// ── Layout (y-coordinates) ───────────────────────────────────────────────────
-const GRAD_Y: u32 = 16;
-const GRAD_H: u32 = 52;
-
-const TL_Y: u32 = 86;   // timeline top
-const TL_H: u32 = 52;   // timeline height
-const TL_CY: i32 = (TL_Y + TL_H / 2) as i32; // marker centre y
-
-const PICK_Y: u32 = 158; // picker section top
-
-const R_SY: u32 = PICK_Y + 8;
-const G_SY: u32 = R_SY + 42;
-const B_SY: u32 = G_SY + 42;
-const SL_H: u32 = 28;
-
-const SW_X: u32 = 16;   // swatch x
-const SW_W: u32 = 52;   // swatch width
-const SW_H: u32 = 3 * 42 - 14 + SL_H; // covers all three sliders
-
-const SL_X: u32 = SW_X + SW_W + 12; // slider left edge
-const SL_W: u32 = W - SL_X - 16;   // slider width
-
-const BTN_Y: u32 = B_SY + SL_H + 20;
-const BTN_SZ: u32 = 32;
-const ADD_X: u32 = 16;
-const REM_X: u32 = ADD_X + BTN_SZ + 10;
-
-const MARKER_R: i32 = 11;
-const MARKER_SEL_RING: i32 = 15; // outer ring radius when selected
-
+// ── Layout ───────────────────────────────────────────────────────────────────
 const TL_X: u32 = 16;
 const TL_W: u32 = W - 32;
 
-// ── Colour palette ───────────────────────────────────────────────────────────
-const BG:       [u8; 4] = [22,  22,  32,  255];
-const BG_DARK:  [u8; 4] = [14,  14,  22,  255];
-const BG_MID:   [u8; 4] = [38,  38,  52,  255];
-const WHITE:    [u8; 4] = [255, 255, 255, 255];
-const DIM:      [u8; 4] = [100, 100, 120, 255];
-const ADD_COL:  [u8; 4] = [50,  160,  70, 255];
-const REM_COL:  [u8; 4] = [180,  50,  50, 255];
+const GRAD_Y: u32 = 14;
+const GRAD_H: u32 = 44;
+
+const TL_Y:  u32 = 68;
+const TL_H:  u32 = 80;
+// Markers stack upward from TL_BASE_Y; row 0 = bottom row.
+const TL_BASE_Y:    i32 = (TL_Y + TL_H) as i32 - MARKER_R - 4;
+const MARKER_R:     i32 = 9;
+const MARKER_SEL:   i32 = 13;  // selection ring outer radius
+const MARKER_STRIDE: i32 = 2 * MARKER_R + 4;
+
+// Color-picker section
+const PICK_Y:  u32 = 158;
+const SV_X:    u32 = TL_X;
+const SV_Y:    u32 = PICK_Y;
+const SV_SIZE: u32 = 200;
+const HS_X:    u32 = SV_X + SV_SIZE + 8;   // hue strip x
+const HS_W:    u32 = 22;                    // hue strip width
+const HS_H:    u32 = SV_SIZE;
+const SWATCH_X: u32 = HS_X + HS_W + 8;
+const SWATCH_W: u32 = 58;
+const SWATCH_H: u32 = 58;
+
+// Buttons
+const BTN_Y:  u32 = PICK_Y + SV_SIZE + 12;
+const BTN_SZ: u32 = 32;
+const ADD_X:  u32 = TL_X;
+const REM_X:  u32 = ADD_X + BTN_SZ + 10;
+
+// ── Palette ──────────────────────────────────────────────────────────────────
+const BG:      [u8; 4] = [22,  22,  32,  255];
+const BG_DARK: [u8; 4] = [14,  14,  22,  255];
+const BG_MID:  [u8; 4] = [38,  38,  52,  255];
+const WHITE:   [u8; 4] = [255, 255, 255, 255];
+const DIM:     [u8; 4] = [80,  80,  100, 255];
+const ADD_COL: [u8; 4] = [50,  160,  70, 255];
+const REM_COL: [u8; 4] = [180,  50,  50, 255];
+
+// ── HSV conversion ───────────────────────────────────────────────────────────
+
+/// Returns H ∈ [0,360), S ∈ [0,1], V ∈ [0,1].
+fn rgb_to_hsv(rgb: [u8; 3]) -> [f32; 3] {
+    let r = rgb[0] as f32 / 255.0;
+    let g = rgb[1] as f32 / 255.0;
+    let b = rgb[2] as f32 / 255.0;
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let d = max - min;
+    let h = if d < 1e-6 {
+        0.0
+    } else if max == r {
+        60.0 * ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        60.0 * ((b - r) / d + 2.0)
+    } else {
+        60.0 * ((r - g) / d + 4.0)
+    };
+    let s = if max < 1e-6 { 0.0 } else { d / max };
+    [h, s, max]
+}
+
+fn hsv_to_rgb(hsv: [f32; 3]) -> [u8; 3] {
+    let [h, s, v] = [hsv[0], hsv[1].clamp(0.0, 1.0), hsv[2].clamp(0.0, 1.0)];
+    let h = h.rem_euclid(360.0);
+    let c = v * s;
+    let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+    let m = v - c;
+    let (r, g, b) = match h as u32 / 60 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    [
+        ((r + m) * 255.0).round() as u8,
+        ((g + m) * 255.0).round() as u8,
+        ((b + m) * 255.0).round() as u8,
+    ]
+}
+
+fn hue_to_rgb(h: f32) -> [u8; 3] {
+    hsv_to_rgb([h, 1.0, 1.0])
+}
+
+// ── Stagger helpers ──────────────────────────────────────────────────────────
+
+/// For each keyframe, returns its stagger row (0 = bottom/foreground).
+/// Overlapping markers (within 2*MARKER_R px) are placed in different rows.
+fn compute_stagger(keyframes: &[ColorMapKeyFrame]) -> Vec<i32> {
+    let xs: Vec<i32> = keyframes.iter().map(|kf| query_to_x(kf.query)).collect();
+    let mut rows = vec![0i32; keyframes.len()];
+    for i in 0..keyframes.len() {
+        let occupied: Vec<i32> = (0..i)
+            .filter(|&j| (xs[i] - xs[j]).abs() < 2 * MARKER_R + 2)
+            .map(|j| rows[j])
+            .collect();
+        rows[i] = (0..).find(|r| !occupied.contains(r)).unwrap();
+    }
+    rows
+}
+
+fn stagger_cy(row: i32) -> i32 {
+    TL_BASE_Y - row * MARKER_STRIDE
+}
+
+// ── Coordinate helpers ───────────────────────────────────────────────────────
+
+fn query_to_x(q: f32) -> i32 {
+    TL_X as i32 + (q * TL_W as f32).round() as i32
+}
+
+fn x_to_query(x: i32) -> f32 {
+    ((x - TL_X as i32) as f32 / TL_W as f32).clamp(0.0, 1.0)
+}
+
+fn hit_rect(x: f32, y: f32, rx: u32, ry: u32, rw: u32, rh: u32) -> bool {
+    x >= rx as f32 && x < (rx + rw) as f32 && y >= ry as f32 && y < (ry + rh) as f32
+}
 
 // ── Drag state ───────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Drag {
     None,
     Marker(usize),
-    Red,
-    Green,
-    Blue,
+    SVSquare,
+    HueStrip,
 }
 
 // ── Editor state ─────────────────────────────────────────────────────────────
+
 struct EditorState {
     keyframes: Vec<ColorMapKeyFrame>,
     selected: Option<usize>,
+    /// HSV for the selected keyframe; kept in sync to avoid rounding artifacts
+    /// while dragging within the picker.
+    hsv: [f32; 3],
     drag: Drag,
-    dirty: bool,         // keyframes changed, need fractal re-render
+    /// Keyframes changed → update renderer + editor.
+    keyframes_dirty: bool,
+    /// Only the view changed (e.g. selection) → redraw editor only.
+    view_dirty: bool,
     save_requested: bool,
     quit_requested: bool,
     cursor: (f64, f64),
     mouse_down: bool,
+    modifiers: ModifiersState,
 }
 
 impl EditorState {
@@ -92,35 +183,37 @@ impl EditorState {
         Self {
             keyframes,
             selected: None,
+            hsv: [0.0, 0.0, 1.0],
             drag: Drag::None,
-            dirty: true,
+            keyframes_dirty: true,
+            view_dirty: false,
             save_requested: false,
             quit_requested: false,
             cursor: (0.0, 0.0),
             mouse_down: false,
+            modifiers: ModifiersState::default(),
         }
     }
 
     fn handle_window_event(&mut self, event: &WindowEvent) {
         match event {
+            WindowEvent::ModifiersChanged(m) => self.modifiers = *m,
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x, position.y);
                 if self.mouse_down {
                     self.apply_drag(position.x as f32, position.y as f32);
                 }
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
-                match state {
-                    ElementState::Pressed => {
-                        self.mouse_down = true;
-                        self.on_mouse_down(self.cursor.0 as f32, self.cursor.1 as f32);
-                    }
-                    ElementState::Released => {
-                        self.mouse_down = false;
-                        self.drag = Drag::None;
-                    }
+            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => match state {
+                ElementState::Pressed => {
+                    self.mouse_down = true;
+                    self.on_mouse_down(self.cursor.0 as f32, self.cursor.1 as f32);
                 }
-            }
+                ElementState::Released => {
+                    self.mouse_down = false;
+                    self.drag = Drag::None;
+                }
+            },
             WindowEvent::KeyboardInput { input, .. } => {
                 if input.state == ElementState::Pressed {
                     if let Some(key) = input.virtual_keycode {
@@ -142,14 +235,17 @@ impl EditorState {
             VirtualKeyCode::S => self.save_requested = true,
             VirtualKeyCode::N | VirtualKeyCode::Return => self.add_keyframe(),
             VirtualKeyCode::Delete | VirtualKeyCode::Back => self.remove_selected(),
-            VirtualKeyCode::Left => self.select_adjacent(-1),
-            VirtualKeyCode::Right => self.select_adjacent(1),
+            // Shift+arrow: nudge query position; plain arrow: cycle selection.
+            VirtualKeyCode::Left if self.modifiers.shift() => self.nudge_query(-1),
+            VirtualKeyCode::Right if self.modifiers.shift() => self.nudge_query(1),
+            VirtualKeyCode::Left => self.cycle_selected(-1),
+            VirtualKeyCode::Right => self.cycle_selected(1),
             _ => {}
         }
     }
 
     fn on_mouse_down(&mut self, x: f32, y: f32) {
-        // Check + / - buttons
+        // Buttons
         if hit_rect(x, y, ADD_X, BTN_Y, BTN_SZ, BTN_SZ) {
             self.add_keyframe();
             return;
@@ -159,115 +255,170 @@ impl EditorState {
             return;
         }
 
-        // Check timeline markers
+        // Timeline markers (check all; prefer the selected one on tie)
+        let stagger = compute_stagger(&self.keyframes);
+        let mut best: Option<(usize, i32)> = None;
         for (i, kf) in self.keyframes.iter().enumerate() {
             let mx = query_to_x(kf.query);
+            let my = stagger_cy(stagger[i]);
             let dx = x as i32 - mx;
-            let dy = y as i32 - TL_CY;
-            if dx * dx + dy * dy <= (MARKER_SEL_RING + 4) * (MARKER_SEL_RING + 4) {
-                self.selected = Some(i);
-                self.drag = Drag::Marker(i);
-                return;
+            let dy = y as i32 - my;
+            let d2 = dx * dx + dy * dy;
+            let hit_r = MARKER_SEL + 4;
+            if d2 <= hit_r * hit_r {
+                let is_better = best.map_or(true, |(prev_i, prev_d2)| {
+                    // prefer currently selected; otherwise prefer closest
+                    let sel_bonus = |idx: usize| if self.selected == Some(idx) { 0 } else { 1 };
+                    (sel_bonus(i), d2) < (sel_bonus(prev_i), prev_d2)
+                });
+                if is_better {
+                    best = Some((i, d2));
+                }
             }
         }
-
-        // Check RGB sliders (only when keyframe selected)
-        if self.selected.is_some() {
-            if hit_rect(x, y, SL_X, R_SY, SL_W, SL_H) {
-                self.drag = Drag::Red;
-                self.apply_slider(x, Drag::Red);
-                return;
-            }
-            if hit_rect(x, y, SL_X, G_SY, SL_W, SL_H) {
-                self.drag = Drag::Green;
-                self.apply_slider(x, Drag::Green);
-                return;
-            }
-            if hit_rect(x, y, SL_X, B_SY, SL_W, SL_H) {
-                self.drag = Drag::Blue;
-                self.apply_slider(x, Drag::Blue);
-                return;
-            }
+        if let Some((i, _)) = best {
+            self.set_selected(Some(i));
+            self.drag = Drag::Marker(i);
+            return;
         }
 
-        // Click on empty timeline background — deselect
+        // SV square (only when keyframe selected)
+        if self.selected.is_some() && hit_rect(x, y, SV_X, SV_Y, SV_SIZE, SV_SIZE) {
+            self.drag = Drag::SVSquare;
+            self.apply_sv_drag(x, y);
+            return;
+        }
+
+        // H strip
+        if self.selected.is_some() && hit_rect(x, y, HS_X, SV_Y, HS_W, HS_H) {
+            self.drag = Drag::HueStrip;
+            self.apply_h_drag(y);
+            return;
+        }
+
+        // Empty timeline → deselect
         if hit_rect(x, y, TL_X, TL_Y, TL_W, TL_H) {
-            self.selected = None;
+            self.set_selected(None);
         }
     }
 
-    fn apply_drag(&mut self, x: f32, _y: f32) {
+    fn apply_drag(&mut self, x: f32, y: f32) {
         match self.drag {
             Drag::None => {}
             Drag::Marker(i) => self.drag_marker(i, x),
-            d @ (Drag::Red | Drag::Green | Drag::Blue) => self.apply_slider(x, d),
+            Drag::SVSquare => self.apply_sv_drag(x, y),
+            Drag::HueStrip => self.apply_h_drag(y),
         }
     }
 
     fn drag_marker(&mut self, i: usize, x: f32) {
         let n = self.keyframes.len();
-        // First and last are fixed
         if i == 0 || i == n - 1 {
             return;
         }
         let lo = self.keyframes[i - 1].query + 0.001;
         let hi = self.keyframes[i + 1].query - 0.001;
         let q = x_to_query(x as i32).clamp(lo, hi);
-        if (self.keyframes[i].query - q).abs() > 1e-5 {
+        if (self.keyframes[i].query - q).abs() > 1e-6 {
             self.keyframes[i].query = q;
-            self.dirty = true;
+            self.keyframes_dirty = true;
         }
     }
 
-    fn apply_slider(&mut self, x: f32, component: Drag) {
+    fn apply_sv_drag(&mut self, x: f32, y: f32) {
+        let s = ((x - SV_X as f32) / SV_SIZE as f32).clamp(0.0, 1.0);
+        let v = 1.0 - ((y - SV_Y as f32) / SV_SIZE as f32).clamp(0.0, 1.0);
+        self.hsv[1] = s;
+        self.hsv[2] = v;
+        self.flush_hsv();
+    }
+
+    fn apply_h_drag(&mut self, y: f32) {
+        let h = ((y - SV_Y as f32) / HS_H as f32).clamp(0.0, 1.0) * 360.0;
+        self.hsv[0] = h;
+        self.flush_hsv();
+    }
+
+    /// Write current `self.hsv` back to the selected keyframe's rgb_raw.
+    fn flush_hsv(&mut self) {
         let Some(sel) = self.selected else { return };
-        let val = x_to_component(x as i32);
-        let rgb = &mut self.keyframes[sel].rgb_raw;
-        let changed = match component {
-            Drag::Red   => { let old = rgb[0]; rgb[0] = val; old != val }
-            Drag::Green => { let old = rgb[1]; rgb[1] = val; old != val }
-            Drag::Blue  => { let old = rgb[2]; rgb[2] = val; old != val }
-            _ => false,
+        let new_rgb = hsv_to_rgb(self.hsv);
+        if self.keyframes[sel].rgb_raw != new_rgb {
+            self.keyframes[sel].rgb_raw = new_rgb;
+            self.keyframes_dirty = true;
+        }
+    }
+
+    fn set_selected(&mut self, idx: Option<usize>) {
+        if self.selected != idx {
+            self.selected = idx;
+            self.sync_hsv();
+            self.view_dirty = true;
+        }
+    }
+
+    /// Refresh `self.hsv` from the currently selected keyframe.
+    fn sync_hsv(&mut self) {
+        if let Some(sel) = self.selected {
+            self.hsv = rgb_to_hsv(self.keyframes[sel].rgb_raw);
+        }
+    }
+
+    fn cycle_selected(&mut self, dir: i32) {
+        let n = self.keyframes.len() as i32;
+        let cur = self.selected.map(|i| i as i32).unwrap_or(-1);
+        let next = ((cur + dir).rem_euclid(n)) as usize;
+        self.set_selected(Some(next));
+    }
+
+    /// Move the selected keyframe's query value 10 % of the way toward its
+    /// left (dir = -1) or right (dir = +1) neighbour. This is idempotent and
+    /// asymptotically convergent: it can never cross a neighbour.
+    fn nudge_query(&mut self, dir: i32) {
+        let Some(sel) = self.selected else { return };
+        let n = self.keyframes.len();
+        if sel == 0 || sel == n - 1 {
+            return;
+        }
+        let cur = self.keyframes[sel].query;
+        let lo = self.keyframes[sel - 1].query;
+        let hi = self.keyframes[sel + 1].query;
+        let new_q = if dir < 0 {
+            cur - 0.1 * (cur - lo) // 10 % toward left neighbour
+        } else {
+            cur + 0.1 * (hi - cur) // 10 % toward right neighbour
         };
-        if changed {
-            self.dirty = true;
+        let new_q = new_q.clamp(lo + 1e-5, hi - 1e-5);
+        if (new_q - cur).abs() > 1e-7 {
+            self.keyframes[sel].query = new_q;
+            self.keyframes_dirty = true;
         }
     }
 
     fn add_keyframe(&mut self) {
-        // Insert midway between selected and next, or at 0.5 if nothing selected
-        let (i, lo, hi) = if let Some(sel) = self.selected {
+        let (insert_at, lo, hi) = if let Some(sel) = self.selected {
             let lo = self.keyframes[sel].query;
-            let hi = if sel + 1 < self.keyframes.len() {
-                self.keyframes[sel + 1].query
-            } else {
-                1.0
-            };
+            let hi = self.keyframes.get(sel + 1).map_or(1.0, |k| k.query);
             (sel + 1, lo, hi)
         } else {
-            // find midpoint of largest gap
-            let mut best = (0, 0.0_f32);
-            for i in 0..self.keyframes.len() - 1 {
-                let gap = self.keyframes[i + 1].query - self.keyframes[i].query;
-                if gap > best.1 {
-                    best = (i, gap);
-                }
-            }
-            let i = best.0;
-            (i + 1, self.keyframes[i].query, self.keyframes[i + 1].query)
+            // Largest gap
+            let (best_i, _) = (0..self.keyframes.len() - 1)
+                .map(|i| (i, self.keyframes[i + 1].query - self.keyframes[i].query))
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                .unwrap_or((0, 0.0));
+            (best_i + 1, self.keyframes[best_i].query, self.keyframes[best_i + 1].query)
         };
         if hi - lo < 0.002 {
             return;
         }
         let q = 0.5 * (lo + hi);
-        // interpolate color between neighbors
-        let c0 = self.keyframes[i - 1].rgb_raw;
-        let c1 = self.keyframes[i].rgb_raw;
+        let c0 = self.keyframes[insert_at - 1].rgb_raw;
+        let c1 = self.keyframes[insert_at].rgb_raw;
         let lerp = |a: u8, b: u8| (0.5 * (a as f32 + b as f32)).round() as u8;
         let rgb = [lerp(c0[0], c1[0]), lerp(c0[1], c1[1]), lerp(c0[2], c1[2])];
-        self.keyframes.insert(i, ColorMapKeyFrame { query: q, rgb_raw: rgb });
-        self.selected = Some(i);
-        self.dirty = true;
+        self.keyframes.insert(insert_at, ColorMapKeyFrame { query: q, rgb_raw: rgb });
+        self.set_selected(Some(insert_at));
+        self.keyframes_dirty = true;
     }
 
     fn remove_selected(&mut self) {
@@ -277,42 +428,13 @@ impl EditorState {
             return;
         }
         self.keyframes.remove(sel);
-        self.selected = Some(sel.min(self.keyframes.len() - 2));
-        self.dirty = true;
-    }
-
-    fn select_adjacent(&mut self, dir: i32) {
-        let n = self.keyframes.len() as i32;
-        let cur = self.selected.map(|i| i as i32).unwrap_or(0);
-        self.selected = Some(((cur + dir).rem_euclid(n)) as usize);
+        let new_sel = sel.min(self.keyframes.len() - 2);
+        self.set_selected(Some(new_sel));
+        self.keyframes_dirty = true;
     }
 }
 
-// ── Coordinate helpers ───────────────────────────────────────────────────────
-
-fn query_to_x(q: f32) -> i32 {
-    TL_X as i32 + (q * TL_W as f32).round() as i32
-}
-
-fn x_to_query(x: i32) -> f32 {
-    ((x - TL_X as i32) as f32 / TL_W as f32).clamp(0.0, 1.0)
-}
-
-fn x_to_component(x: i32) -> u8 {
-    ((x - SL_X as i32) as f32 / SL_W as f32 * 255.0)
-        .clamp(0.0, 255.0)
-        .round() as u8
-}
-
-fn component_x(val: u8) -> i32 {
-    SL_X as i32 + (val as f32 / 255.0 * SL_W as f32).round() as i32
-}
-
-fn hit_rect(x: f32, y: f32, rx: u32, ry: u32, rw: u32, rh: u32) -> bool {
-    x >= rx as f32 && x < (rx + rw) as f32 && y >= ry as f32 && y < (ry + rh) as f32
-}
-
-// ── Pixel drawing primitives ─────────────────────────────────────────────────
+// ── Drawing primitives ───────────────────────────────────────────────────────
 
 fn set_pixel(frame: &mut [u8], x: i32, y: i32, color: [u8; 4]) {
     if x < 0 || y < 0 || x >= W as i32 || y >= H as i32 {
@@ -323,47 +445,54 @@ fn set_pixel(frame: &mut [u8], x: i32, y: i32, color: [u8; 4]) {
 }
 
 fn fill_rect(frame: &mut [u8], x: u32, y: u32, w: u32, h: u32, color: [u8; 4]) {
-    let x1 = (x + w).min(W);
-    let y1 = (y + h).min(H);
-    for py in y..y1 {
-        for px in x..x1 {
+    for py in y..(y + h).min(H) {
+        for px in x..(x + w).min(W) {
             let idx = ((py * W + px) * 4) as usize;
             frame[idx..idx + 4].copy_from_slice(&color);
         }
     }
 }
 
-fn draw_h_gradient(frame: &mut [u8], x: u32, y: u32, w: u32, h: u32, left: [u8; 3], right: [u8; 3]) {
-    let x1 = (x + w).min(W);
-    let y1 = (y + h).min(H);
-    for px in x..x1 {
+fn draw_colormap_gradient(frame: &mut [u8], x: u32, y: u32, w: u32, h: u32,
+                           color_map: &ColorMap<LinearInterpolator>) {
+    for px in x..(x + w).min(W) {
         let t = if w > 1 { (px - x) as f32 / (w - 1) as f32 } else { 0.0 };
-        let lerp = |a: u8, b: u8| (a as f32 + t * (b as f32 - a as f32)).round() as u8;
-        let c = [lerp(left[0], right[0]), lerp(left[1], right[1]), lerp(left[2], right[2]), 255];
-        for py in y..y1 {
+        let rgb = color_map.compute_pixel(t);
+        let c = [rgb[0], rgb[1], rgb[2], 255];
+        for py in y..(y + h).min(H) {
             let idx = ((py * W + px) * 4) as usize;
             frame[idx..idx + 4].copy_from_slice(&c);
         }
     }
 }
 
-fn draw_colormap_gradient(
-    frame: &mut [u8],
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-    color_map: &ColorMap<LinearInterpolator>,
-) {
-    let x1 = (x + w).min(W);
-    let y1 = (y + h).min(H);
-    for px in x..x1 {
-        let t = if w > 1 { (px - x) as f32 / (w - 1) as f32 } else { 0.0 };
-        let rgb = color_map.compute_pixel(t);
+fn draw_sv_square(frame: &mut [u8], x: u32, y: u32, size: u32, hue: f32) {
+    for py in 0..size {
+        let v = 1.0 - py as f32 / (size - 1) as f32;
+        for px in 0..size {
+            let s = px as f32 / (size - 1) as f32;
+            let rgb = hsv_to_rgb([hue, s, v]);
+            let idx = (((y + py) * W + (x + px)) * 4) as usize;
+            if idx + 3 < frame.len() {
+                frame[idx]     = rgb[0];
+                frame[idx + 1] = rgb[1];
+                frame[idx + 2] = rgb[2];
+                frame[idx + 3] = 255;
+            }
+        }
+    }
+}
+
+fn draw_h_strip(frame: &mut [u8], x: u32, y: u32, w: u32, h: u32) {
+    for py in 0..h {
+        let hue = py as f32 / (h - 1) as f32 * 360.0;
+        let rgb = hue_to_rgb(hue);
         let c = [rgb[0], rgb[1], rgb[2], 255];
-        for py in y..y1 {
-            let idx = ((py * W + px) * 4) as usize;
-            frame[idx..idx + 4].copy_from_slice(&c);
+        for px in x..(x + w).min(W) {
+            let idx = (((y + py) * W + px) * 4) as usize;
+            if idx + 3 < frame.len() {
+                frame[idx..idx + 4].copy_from_slice(&c);
+            }
         }
     }
 }
@@ -392,38 +521,47 @@ fn draw_ring(frame: &mut [u8], cx: i32, cy: i32, outer: i32, inner: i32, color: 
     }
 }
 
-/// Draws a 3-px-wide vertical thumb bar
-fn draw_thumb(frame: &mut [u8], x: i32, y: u32, h: u32, color: [u8; 4]) {
-    for dy in 0..h {
-        for dx in -2i32..=2 {
-            set_pixel(frame, x + dx, y as i32 + dy as i32, color);
+/// Small right-pointing arrow (▶) as a hue-strip marker.
+fn draw_arrow_right(frame: &mut [u8], tip_x: i32, tip_y: i32, size: i32, color: [u8; 4]) {
+    for dy in -size..=size {
+        for dx in 0..=(size - dy.abs()) {
+            set_pixel(frame, tip_x - dx, tip_y + dy, color);
+        }
+    }
+}
+
+/// Crosshair ring used to mark the current position in the SV square.
+fn draw_crosshair(frame: &mut [u8], cx: i32, cy: i32, r: i32, color: [u8; 4]) {
+    draw_ring(frame, cx, cy, r, r - 2, color);
+    // small cross
+    for d in -(r + 3)..=(r + 3) {
+        if d.abs() > r {
+            set_pixel(frame, cx + d, cy, color);
+            set_pixel(frame, cx, cy + d, color);
         }
     }
 }
 
 fn draw_plus(frame: &mut [u8], cx: i32, cy: i32, arm: i32, color: [u8; 4]) {
     for d in -arm..=arm {
-        set_pixel(frame, cx + d, cy, color);
-        set_pixel(frame, cx, cy + d, color);
-        set_pixel(frame, cx + d, cy - 1, color);
-        set_pixel(frame, cx + d, cy + 1, color);
-        set_pixel(frame, cx - 1, cy + d, color);
-        set_pixel(frame, cx + 1, cy + d, color);
+        for t in -1i32..=1 {
+            set_pixel(frame, cx + d, cy + t, color);
+            set_pixel(frame, cx + t, cy + d, color);
+        }
     }
 }
 
 fn draw_minus(frame: &mut [u8], cx: i32, cy: i32, arm: i32, color: [u8; 4]) {
     for d in -arm..=arm {
-        set_pixel(frame, cx + d, cy - 1, color);
-        set_pixel(frame, cx + d, cy, color);
-        set_pixel(frame, cx + d, cy + 1, color);
+        for t in -1i32..=1 {
+            set_pixel(frame, cx + d, cy + t, color);
+        }
     }
 }
 
-// ── Draw the entire editor frame ─────────────────────────────────────────────
+// ── Draw the editor frame ────────────────────────────────────────────────────
 
 fn draw_editor(frame: &mut [u8], state: &EditorState) {
-    // Background
     fill_rect(frame, 0, 0, W, H, BG);
 
     let color_map = ColorMap::new(&state.keyframes, LinearInterpolator {});
@@ -433,8 +571,7 @@ fn draw_editor(frame: &mut [u8], state: &EditorState) {
 
     // ── Timeline ─────────────────────────────────────────────────────────
     fill_rect(frame, TL_X, TL_Y, TL_W, TL_H, BG_DARK);
-
-    // Tick marks at 0.25 intervals
+    // Tick lines at 0, 0.25, 0.5, 0.75, 1.0
     for i in 0..=4u32 {
         let tx = TL_X as i32 + (i as f32 / 4.0 * TL_W as f32) as i32;
         for dy in 0..TL_H as i32 {
@@ -442,71 +579,75 @@ fn draw_editor(frame: &mut [u8], state: &EditorState) {
         }
     }
 
-    // Keyframe markers (back to front: unselected first)
+    let stagger = compute_stagger(&state.keyframes);
+
+    // Draw unselected markers first so selected renders on top.
     for (i, kf) in state.keyframes.iter().enumerate() {
         if state.selected == Some(i) {
             continue;
         }
-        let mx = query_to_x(kf.query);
+        let cx = query_to_x(kf.query);
+        let cy = stagger_cy(stagger[i]);
         let c = [kf.rgb_raw[0], kf.rgb_raw[1], kf.rgb_raw[2], 255];
-        draw_circle(frame, mx, TL_CY, MARKER_R, c);
-        draw_ring(frame, mx, TL_CY, MARKER_R, MARKER_R - 2, DIM);
+        draw_circle(frame, cx, cy, MARKER_R, c);
+        draw_ring(frame, cx, cy, MARKER_R, MARKER_R - 2, DIM);
     }
-    // Draw selected marker on top with ring
     if let Some(sel) = state.selected {
         let kf = &state.keyframes[sel];
-        let mx = query_to_x(kf.query);
+        let cx = query_to_x(kf.query);
+        let cy = stagger_cy(stagger[sel]);
         let c = [kf.rgb_raw[0], kf.rgb_raw[1], kf.rgb_raw[2], 255];
-        draw_ring(frame, mx, TL_CY, MARKER_SEL_RING, MARKER_R, WHITE);
-        draw_circle(frame, mx, TL_CY, MARKER_R, c);
+        draw_ring(frame, cx, cy, MARKER_SEL, MARKER_R, WHITE);
+        draw_circle(frame, cx, cy, MARKER_R, c);
     }
 
-    // ── RGB sliders (only when something is selected) ─────────────────────
+    // ── Color picker ──────────────────────────────────────────────────────
     if let Some(sel) = state.selected {
+        let [h, s, v] = state.hsv;
         let [r, g, b] = state.keyframes[sel].rgb_raw;
 
+        // SV square
+        draw_sv_square(frame, SV_X, SV_Y, SV_SIZE, h);
+        // Crosshair at current S/V
+        let sx = SV_X as i32 + (s * (SV_SIZE - 1) as f32).round() as i32;
+        let sy = SV_Y as i32 + ((1.0 - v) * (SV_SIZE - 1) as f32).round() as i32;
+        let ring_color = if v > 0.4 { [0u8, 0, 0, 255] } else { WHITE };
+        draw_crosshair(frame, sx, sy, 7, ring_color);
+
+        // H strip (vertical)
+        draw_h_strip(frame, HS_X, SV_Y, HS_W, HS_H);
+        // Arrow marker on left side of strip
+        let hy = SV_Y as i32 + (h / 360.0 * (HS_H - 1) as f32).round() as i32;
+        draw_arrow_right(frame, HS_X as i32 - 2, hy, 5, WHITE);
+
         // Color swatch
-        fill_rect(frame, SW_X, R_SY, SW_W, SW_H, [r, g, b, 255]);
-        draw_ring(frame, (SW_X + SW_W / 2) as i32, (R_SY + SW_H / 2) as i32,
-                  (SW_W / 2) as i32, (SW_W / 2 - 2) as i32, DIM);
-
-        // R slider
-        draw_h_gradient(frame, SL_X, R_SY, SL_W, SL_H, [0, g, b], [255, g, b]);
-        draw_thumb(frame, component_x(r), R_SY, SL_H, WHITE);
-
-        // G slider
-        draw_h_gradient(frame, SL_X, G_SY, SL_W, SL_H, [r, 0, b], [r, 255, b]);
-        draw_thumb(frame, component_x(g), G_SY, SL_H, WHITE);
-
-        // B slider
-        draw_h_gradient(frame, SL_X, B_SY, SL_W, SL_H, [r, g, 0], [r, g, 255]);
-        draw_thumb(frame, component_x(b), B_SY, SL_H, WHITE);
+        fill_rect(frame, SWATCH_X, SV_Y, SWATCH_W, SWATCH_H, [r, g, b, 255]);
+        draw_ring(frame,
+            (SWATCH_X + SWATCH_W / 2) as i32,
+            (SV_Y + SWATCH_H / 2) as i32,
+            (SWATCH_W / 2) as i32,
+            (SWATCH_W / 2 - 2) as i32,
+            DIM);
     } else {
-        // Dim placeholder
-        fill_rect(frame, SW_X, R_SY, W - SW_X * 2, SW_H, BG_MID);
-        fill_rect(frame, TL_X, R_SY + SW_H / 2 - 1, TL_W, 2, DIM);
+        // Dim placeholder when nothing is selected
+        fill_rect(frame, SV_X, SV_Y, SV_SIZE, SV_SIZE, BG_MID);
+        fill_rect(frame, HS_X, SV_Y, HS_W, HS_H, BG_MID);
+        fill_rect(frame, SWATCH_X, SV_Y, SWATCH_W, SWATCH_H, BG_MID);
     }
 
-    // ── Buttons ───────────────────────────────────────────────────────────
+    // ── Add / Remove buttons ──────────────────────────────────────────────
     fill_rect(frame, ADD_X, BTN_Y, BTN_SZ, BTN_SZ, ADD_COL);
     draw_plus(frame,
-        (ADD_X + BTN_SZ / 2) as i32, (BTN_Y + BTN_SZ / 2) as i32,
-        9, WHITE);
+        (ADD_X + BTN_SZ / 2) as i32, (BTN_Y + BTN_SZ / 2) as i32, 8, WHITE);
 
     fill_rect(frame, REM_X, BTN_Y, BTN_SZ, BTN_SZ, REM_COL);
     draw_minus(frame,
-        (REM_X + BTN_SZ / 2) as i32, (BTN_Y + BTN_SZ / 2) as i32,
-        9, WHITE);
+        (REM_X + BTN_SZ / 2) as i32, (BTN_Y + BTN_SZ / 2) as i32, 8, WHITE);
 }
 
-// ── Draw the fractal preview ─────────────────────────────────────────────────
+// ── Fractal preview ──────────────────────────────────────────────────────────
 
-fn draw_preview(
-    frame: &mut [u8],
-    buffer: &[Vec<image::Rgb<u8>>],
-    pw: u32,
-    ph: u32,
-) {
+fn draw_preview(frame: &mut [u8], buffer: &[Vec<image::Rgb<u8>>], pw: u32, ph: u32) {
     debug_assert_eq!(frame.len(), (pw * ph * 4) as usize);
     for (flat, pixel) in frame.chunks_exact_mut(4).enumerate() {
         let x = (flat as u32) % pw;
@@ -517,8 +658,6 @@ fn draw_preview(
         }
     }
 }
-
-// ── Background render helper ─────────────────────────────────────────────────
 
 fn spawn_render<F: Renderable + Send + 'static>(
     renderer: Arc<Mutex<F>>,
@@ -537,26 +676,21 @@ fn spawn_render<F: Renderable + Send + 'static>(
     });
 }
 
-// ── Public entry point ───────────────────────────────────────────────────────
-
-/// Scale an `ImageSpecification` so it fits within `max_w × max_h` pixels.
 fn scale_preview(spec: &ImageSpecification, max_w: u32, max_h: u32) -> ImageSpecification {
-    let sx = max_w as f64 / spec.resolution[0] as f64;
-    let sy = max_h as f64 / spec.resolution[1] as f64;
-    let scale = sx.min(sy).min(1.0);
+    let scale = (max_w as f64 / spec.resolution[0] as f64)
+        .min(max_h as f64 / spec.resolution[1] as f64)
+        .min(1.0);
     let pw = ((spec.resolution[0] as f64 * scale).round() as u32).max(1);
     let ph = ((spec.resolution[1] as f64 * scale).round() as u32).max(1);
-    ImageSpecification {
-        resolution: [pw, ph],
-        center: spec.center,
-        width: spec.width,
-    }
+    ImageSpecification { resolution: [pw, ph], center: spec.center, width: spec.width }
 }
+
+// ── Public entry point ───────────────────────────────────────────────────────
 
 /// Open the two-window color-map editor.
 ///
-/// * `renderer`   – fractal renderer (implements both `Renderable` and `ColorMapEditable`)
-/// * `save_fn`    – called with the final keyframes on save ('S') or window close
+/// * `renderer`  – fractal renderer (must implement `Renderable` + `ColorMapEditable`)
+/// * `save_fn`   – called with the final keyframes on 'S' or window close
 pub fn edit<F, Save>(renderer: F, save_fn: Save) -> Result<(), Error>
 where
     F: Renderable + ColorMapEditable + Send + Sync + 'static,
@@ -569,11 +703,13 @@ where
     eprintln!(
         "\nColor Map Editor Controls:\n\
          \x20 • Click/drag markers on the timeline to reposition keyframes\n\
-         \x20 • Click/drag R/G/B sliders to change the selected keyframe's color\n\
-         \x20 • Left/Right arrow keys to change selected keyframe\n\
-         \x20 • N or Enter  – add keyframe at midpoint\n\
+         \x20 • ←/→ arrow keys – cycle through keyframes\n\
+         \x20 • Shift+←/→      – nudge query value 10 % toward neighbor\n\
+         \x20 • Click/drag the SV square to change saturation & value\n\
+         \x20 • Click/drag the hue strip to change hue\n\
+         \x20 • N or Enter     – add keyframe at midpoint\n\
          \x20 • Delete/Backspace – remove selected keyframe\n\
-         \x20 • S            – save params back to file\n\
+         \x20 • S              – save params back to file\n\
          \x20 • Escape or close either window – save and quit\n"
     );
 
@@ -594,7 +730,7 @@ where
         .unwrap();
 
     let fractal_wid = fractal_window.id();
-    let editor_wid = editor_window.id();
+    let editor_wid  = editor_window.id();
 
     let mut fractal_pixels = {
         let sz = fractal_window.inner_size();
@@ -605,25 +741,18 @@ where
         Pixels::new(W, H, SurfaceTexture::new(sz.width, sz.height, &editor_window))?
     };
 
-    // Set up the renderer with the preview resolution (initialises CDF/histogram)
     let mut renderer = renderer;
     renderer.set_image_specification(preview_spec);
 
-    let renderer = Arc::new(Mutex::new(renderer));
+    let renderer      = Arc::new(Mutex::new(renderer));
     let display_buffer: Arc<Mutex<Vec<Vec<image::Rgb<u8>>>>> =
         Arc::new(Mutex::new(create_buffer(image::Rgb([0u8, 0, 0]), &[pw, ph])));
-    let render_busy = Arc::new(AtomicBool::new(false));
+    let render_busy  = Arc::new(AtomicBool::new(false));
     let render_ready = Arc::new(AtomicBool::new(false));
 
     let mut state = EditorState::new(initial_keyframes);
 
-    // Kick off first render
-    spawn_render(
-        renderer.clone(),
-        display_buffer.clone(),
-        render_busy.clone(),
-        render_ready.clone(),
-    );
+    spawn_render(renderer.clone(), display_buffer.clone(), render_busy.clone(), render_ready.clone());
 
     event_loop.run(move |event, _, control_flow| {
         if let Event::NewEvents(StartCause::Init) = event {
@@ -638,6 +767,10 @@ where
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
+                // Keyboard events work from either window so focus doesn't matter.
+                WindowEvent::KeyboardInput { .. } | WindowEvent::ModifiersChanged(_) => {
+                    state.handle_window_event(event);
+                }
                 WindowEvent::Resized(sz) if window_id == fractal_wid => {
                     fractal_pixels.resize_surface(sz.width, sz.height).ok();
                 }
@@ -651,11 +784,10 @@ where
             }
         }
 
-        // ── Redraw requests ───────────────────────────────────────────────
+        // ── Redraws ───────────────────────────────────────────────────────
         if let Event::RedrawRequested(wid) = event {
             if wid == fractal_wid {
-                let buf = display_buffer.lock().unwrap();
-                draw_preview(fractal_pixels.frame_mut(), &buf, pw, ph);
+                draw_preview(fractal_pixels.frame_mut(), &display_buffer.lock().unwrap(), pw, ph);
                 fractal_pixels.render().ok();
             } else if wid == editor_wid {
                 draw_editor(editor_pixels.frame_mut(), &state);
@@ -663,44 +795,37 @@ where
             }
         }
 
-        // ── Main update tick ──────────────────────────────────────────────
+        // ── Main tick ─────────────────────────────────────────────────────
         if let Event::MainEventsCleared = event {
             if state.quit_requested {
                 save_fn(&state.keyframes);
                 *control_flow = ControlFlow::Exit;
                 return;
             }
-
             if state.save_requested {
                 save_fn(&state.keyframes);
                 state.save_requested = false;
             }
 
-            let mut need_editor_redraw = false;
+            let need_editor = state.view_dirty || state.keyframes_dirty;
+            state.view_dirty = false;
 
-            if state.dirty {
-                state.dirty = false;
-                need_editor_redraw = true;
-                let kf = state.keyframes.clone();
-                renderer.lock().unwrap().set_keyframes(kf);
-                spawn_render(
-                    renderer.clone(),
-                    display_buffer.clone(),
-                    render_busy.clone(),
-                    render_ready.clone(),
-                );
+            if state.keyframes_dirty {
+                state.keyframes_dirty = false;
+                renderer.lock().unwrap().set_keyframes(state.keyframes.clone());
+                spawn_render(renderer.clone(), display_buffer.clone(),
+                             render_busy.clone(), render_ready.clone());
             }
 
             if render_ready.swap(false, Ordering::AcqRel) {
                 fractal_window.request_redraw();
             }
-
-            if need_editor_redraw {
+            if need_editor {
                 editor_window.request_redraw();
             }
 
-            let busy = render_busy.load(Ordering::Acquire) || state.mouse_down;
-            *control_flow = if busy {
+            let active = render_busy.load(Ordering::Acquire) || state.mouse_down;
+            *control_flow = if active {
                 ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16))
             } else {
                 ControlFlow::Wait
