@@ -4,7 +4,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
-        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        color_map::{ColorMap, ColorMapEditable, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
             scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
@@ -231,6 +231,24 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
         );
         self.cdf.reset(&self.histogram);
 
+        reset_color_map_lookup_table_from_cdf(
+            &mut self.color_map,
+            &self.cdf,
+            &self.inner_color_map,
+        );
+    }
+}
+
+impl<T: QuadraticMapParams> ColorMapEditable for QuadraticMap<T> {
+    fn get_keyframes(&self) -> Vec<ColorMapKeyFrame> {
+        self.fractal_params.color_map().keyframes.clone()
+    }
+
+    /// Updates keyframes and rebuilds the color lookup table using the existing CDF
+    /// (no expensive histogram recomputation), suitable for interactive editing.
+    fn set_keyframes(&mut self, keyframes: Vec<ColorMapKeyFrame>) {
+        self.fractal_params.color_map_mut().keyframes = keyframes.clone();
+        self.inner_color_map = ColorMap::new(&keyframes, LinearInterpolator {});
         reset_color_map_lookup_table_from_cdf(
             &mut self.color_map,
             &self.cdf,

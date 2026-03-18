@@ -136,6 +136,12 @@ impl ColorMapper for ColorMapLookUpTable {
     }
 }
 
+/// Trait for renderers that support live editing of their color map keyframes.
+pub trait ColorMapEditable {
+    fn get_keyframes(&self) -> Vec<ColorMapKeyFrame>;
+    fn set_keyframes(&mut self, keyframes: Vec<ColorMapKeyFrame>);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
