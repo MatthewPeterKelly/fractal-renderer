@@ -19,7 +19,9 @@ nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
 num = "0.4.3"
 num-traits =  "0.2"
 ordered-float = "3.0"
+fontdue = "0.9"
 pixels = "0.13"
+tiny-skia = "0.12"
 rand = { version = "0.8", features = ["std"] }
 rayon = "1.8.1"
 serde = { version = "1.0", features = ["derive"] }

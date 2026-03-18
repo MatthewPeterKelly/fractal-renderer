@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 #[allow(dead_code)]
 use fractal_renderer::{
-    cli::{color_swatch::generate_color_swatch, explore::explore_fractal, render::render_fractal},
+    cli::{
+        color_map_editor::edit_color_map, color_swatch::generate_color_swatch,
+        explore::explore_fractal, render::render_fractal,
+    },
     core::file_io::FilePrefix,
 };
 
@@ -125,4 +128,12 @@ pub fn color_swatch_example_from_string(example_name: &str) {
             file_base: String::from("result"),
         },
     );
+}
+
+#[allow(dead_code)]
+pub fn color_map_editor_example_from_string(example_name: &str) {
+    let params_path = example_params_path(example_name);
+    let json_text = read_params_file_or_panic(example_name, &params_path);
+    let fractal_params = parse_params_json_or_panic(example_name, &params_path, &json_text);
+    edit_color_map(&fractal_params).unwrap();
 }

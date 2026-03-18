@@ -4,7 +4,9 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
-        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        color_map::{
+            ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper,
+        },
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
             scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
