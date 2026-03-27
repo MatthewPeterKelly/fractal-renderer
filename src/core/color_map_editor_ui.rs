@@ -1,3 +1,10 @@
+/// Interactive color-map editor.
+///
+/// This module provides the `edit` entry point that opens two windows side by
+/// side: a live fractal preview and an editor panel.  In this first phase the
+/// editor panel displays the color-gradient bar and basic keyboard shortcuts.
+/// Keyframe timeline interaction and the HSV/RGB color picker are added in
+/// subsequent pull requests.
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::{
     sync::{
@@ -14,13 +21,13 @@ use winit::{
 };
 
 use crate::core::{
-    color_map::{ColorMapEditable, ColorMapKeyFrame},
+    color_map::{interpolate_keyframe_color, ColorMapEditable, ColorMapKeyFrame},
     image_utils::{create_buffer, ImageSpecification, Renderable},
 };
 
 // ── Editor window dimensions ──────────────────────────────────────────────────
 const W: u32 = 900;
-const H: u32 = 260; // Phase 1: header + gradient bar only
+const H: u32 = 260; // Phase 1: gradient bar + hint text only
 
 // ── Gradient bar layout ───────────────────────────────────────────────────────
 const GRAD_X: u32 = 16;
@@ -29,100 +36,97 @@ const GRAD_H: u32 = 44;
 const GRAD_Y: u32 = 12;
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-const BG: [u8; 4] = [22, 22, 32, 255];
+
+/// Dark navy background used for the editor panel.
+const BACKGROUND: [u8; 4] = [22, 22, 32, 255];
+/// Full white used for primary labels.
 const WHITE: [u8; 4] = [255, 255, 255, 255];
+/// Muted blue-grey used for secondary / hint text.
 const DIM: [u8; 4] = [90, 90, 110, 255];
 
-// ── Minimal canvas ────────────────────────────────────────────────────────────
+// ── Canvas ────────────────────────────────────────────────────────────────────
 
+/// Thin wrapper around a raw RGBA pixel buffer that provides drawing primitives.
+///
+/// All coordinates are in pixels relative to the top-left corner of the buffer.
+/// Writes outside the buffer bounds are silently ignored.
 struct Canvas<'a> {
     frame: &'a mut [u8],
 }
 
 impl<'a> Canvas<'a> {
-    fn fill_rect(&mut self, x: u32, y: u32, w: u32, h: u32, c: [u8; 4]) {
-        for row in y..y + h {
-            for col in x..x + w {
+    /// Fills an axis-aligned rectangle with a solid color.
+    fn fill_rect(&mut self, left: u32, top: u32, width: u32, height: u32, color: [u8; 4]) {
+        for row in top..top + height {
+            for col in left..left + width {
                 let off = ((row * W + col) * 4) as usize;
                 if off + 4 <= self.frame.len() {
-                    self.frame[off..off + 4].copy_from_slice(&c);
+                    self.frame[off..off + 4].copy_from_slice(&color);
                 }
             }
         }
     }
 
-    /// Draw a horizontal gradient strip by linearly interpolating the keyframes.
-    fn colormap_gradient(&mut self, x: u32, y: u32, w: u32, h: u32, kf: &[ColorMapKeyFrame]) {
-        if kf.is_empty() {
+    /// Draws a horizontal gradient strip by linearly interpolating across the
+    /// given color-map keyframes from left to right.
+    fn colormap_gradient(
+        &mut self,
+        left: u32,
+        top: u32,
+        width: u32,
+        height: u32,
+        keyframes: &[ColorMapKeyFrame],
+    ) {
+        if keyframes.is_empty() {
             return;
         }
-        for col in 0..w {
-            let t = col as f32 / (w - 1).max(1) as f32;
-            let rgb = interp_keyframes(t, kf);
-            let c = [rgb[0], rgb[1], rgb[2], 255];
-            for row in y..y + h {
-                let off = ((row * W + x + col) * 4) as usize;
+        for col in 0..width {
+            let t = col as f32 / (width - 1).max(1) as f32;
+            let rgb = interpolate_keyframe_color(t, keyframes);
+            let color = [rgb[0], rgb[1], rgb[2], 255];
+            for row in top..top + height {
+                let off = ((row * W + left + col) * 4) as usize;
                 if off + 4 <= self.frame.len() {
-                    self.frame[off..off + 4].copy_from_slice(&c);
+                    self.frame[off..off + 4].copy_from_slice(&color);
                 }
             }
         }
     }
 
-    fn glyph(&mut self, ch: char, x: u32, y: u32, scale: u32, c: [u8; 4]) {
+    /// Renders a single 5×7 bitmap glyph at `(left, top)` scaled by `scale`.
+    fn glyph(&mut self, ch: char, left: u32, top: u32, scale: u32, color: [u8; 4]) {
         let rows = glyph_bits(ch);
         for (row, bits) in rows.iter().enumerate() {
             for col in 0..5u32 {
                 if bits & (0x10 >> col) != 0 {
-                    self.fill_rect(x + col * scale, y + row as u32 * scale, scale, scale, c);
+                    self.fill_rect(
+                        left + col * scale,
+                        top + row as u32 * scale,
+                        scale,
+                        scale,
+                        color,
+                    );
                 }
             }
         }
     }
 
-    fn text(&mut self, s: &str, x: u32, y: u32, scale: u32, c: [u8; 4]) {
-        let mut cx = x;
+    /// Renders a string of text starting at `(left, top)` using the bitmap font.
+    fn text(&mut self, s: &str, left: u32, top: u32, scale: u32, color: [u8; 4]) {
+        let mut x = left;
         for ch in s.chars() {
-            self.glyph(ch, cx, y, scale, c);
-            cx += 6 * scale;
+            self.glyph(ch, x, top, scale, color);
+            x += 6 * scale;
         }
     }
-}
-
-// ── Color helpers ─────────────────────────────────────────────────────────────
-
-fn interp_keyframes(t: f32, kf: &[ColorMapKeyFrame]) -> [u8; 3] {
-    if kf.len() == 1 {
-        return kf[0].rgb_raw;
-    }
-    if t <= kf[0].query {
-        return kf[0].rgb_raw;
-    }
-    let last = kf.last().unwrap();
-    if t >= last.query {
-        return last.rgb_raw;
-    }
-    for i in 1..kf.len() {
-        let a = &kf[i - 1];
-        let b = &kf[i];
-        if t <= b.query {
-            let s = (t - a.query) / (b.query - a.query);
-            return [
-                lerp_u8(a.rgb_raw[0], b.rgb_raw[0], s),
-                lerp_u8(a.rgb_raw[1], b.rgb_raw[1], s),
-                lerp_u8(a.rgb_raw[2], b.rgb_raw[2], s),
-            ];
-        }
-    }
-    last.rgb_raw
-}
-
-fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    (a as f32 + t * (b as f32 - a as f32)).round() as u8
 }
 
 // ── 5×7 bitmap font ───────────────────────────────────────────────────────────
 
+/// Returns the 5×7 bitmap for character `c` as seven row bytes.
+///
+/// Each byte represents one row; bit 4 is the leftmost pixel.  Characters not
+/// in the table render as a solid 5×7 block so that missing glyphs are visible.
 fn glyph_bits(c: char) -> [u8; 7] {
     match c {
         '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
@@ -163,25 +167,36 @@ fn glyph_bits(c: char) -> [u8; 7] {
         '+' => [0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00],
         '/' => [0x01, 0x02, 0x04, 0x08, 0x10, 0x00, 0x00],
         ' ' => [0x00; 7],
-        _   => [0x1F; 7],
+        _ => [0x1F; 7],
     }
 }
 
-// ── Drawing ───────────────────────────────────────────────────────────────────
+// ── Editor drawing ────────────────────────────────────────────────────────────
 
+/// Renders the editor panel: background, gradient bar, and hint text.
 fn draw_editor(frame: &mut [u8], keyframes: &[ColorMapKeyFrame]) {
-    let mut c = Canvas { frame };
-    c.fill_rect(0, 0, W, H, BG);
-    c.colormap_gradient(GRAD_X, GRAD_Y, GRAD_W, GRAD_H, keyframes);
-    c.text("Color Map Editor", 16, 80, 1, WHITE);
-    c.text("Coming soon: keyframe timeline and color picker", 16, 100, 1, DIM);
-    c.text("Q or Escape to quit   Space to save", 16, 120, 1, DIM);
+    let mut canvas = Canvas { frame };
+    canvas.fill_rect(0, 0, W, H, BACKGROUND);
+    canvas.colormap_gradient(GRAD_X, GRAD_Y, GRAD_W, GRAD_H, keyframes);
+    canvas.text("Color Map Editor", 16, 80, 1, WHITE);
+    canvas.text(
+        "Coming soon: keyframe timeline and color picker",
+        16,
+        100,
+        1,
+        DIM,
+    );
+    canvas.text("Q or Escape to quit   Space to save", 16, 120, 1, DIM);
 }
 
-fn draw_preview(frame: &mut [u8], buf: &[Vec<image::Rgb<u8>>], pw: u32) {
+// ── Preview drawing ───────────────────────────────────────────────────────────
+
+/// Copies a rendered fractal buffer (column-major `buf[x][y]`) into the flat
+/// RGBA pixel frame used by `pixels`.
+fn draw_preview(frame: &mut [u8], buf: &[Vec<image::Rgb<u8>>], preview_width: u32) {
     for (flat, pixel) in frame.chunks_exact_mut(4).enumerate() {
-        let x = flat as u32 % pw;
-        let y = flat as u32 / pw;
+        let x = flat as u32 % preview_width;
+        let y = flat as u32 / preview_width;
         if (x as usize) < buf.len() && (y as usize) < buf[x as usize].len() {
             let rgb = buf[x as usize][y as usize];
             pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
@@ -191,11 +206,16 @@ fn draw_preview(frame: &mut [u8], buf: &[Vec<image::Rgb<u8>>], pw: u32) {
 
 // ── Background render ─────────────────────────────────────────────────────────
 
+/// Launches a background render thread if none is already running.
+///
+/// Returns `true` if a thread was started, `false` if the renderer was busy.
+/// On completion the thread sets `ready` to `true` so the event loop can
+/// schedule a redraw.
 fn spawn_render<F: Renderable + Send + 'static>(
     renderer: Arc<Mutex<F>>,
-    buffer:   Arc<Mutex<Vec<Vec<image::Rgb<u8>>>>>,
-    busy:     Arc<AtomicBool>,
-    ready:    Arc<AtomicBool>,
+    buffer: Arc<Mutex<Vec<Vec<image::Rgb<u8>>>>>,
+    busy: Arc<AtomicBool>,
+    ready: Arc<AtomicBool>,
 ) -> bool {
     if busy.swap(true, Ordering::Acquire) {
         return false;
@@ -209,17 +229,34 @@ fn spawn_render<F: Renderable + Send + 'static>(
     true
 }
 
+/// Scales an `ImageSpecification` so that neither dimension exceeds the given
+/// maximums, preserving aspect ratio and never upscaling.
 fn scale_preview(spec: &ImageSpecification, max_w: u32, max_h: u32) -> ImageSpecification {
     let scale = (max_w as f64 / spec.resolution[0] as f64)
         .min(max_h as f64 / spec.resolution[1] as f64)
         .min(1.0);
     let pw = ((spec.resolution[0] as f64 * scale).round() as u32).max(1);
     let ph = ((spec.resolution[1] as f64 * scale).round() as u32).max(1);
-    ImageSpecification { resolution: [pw, ph], center: spec.center, width: spec.width }
+    ImageSpecification {
+        resolution: [pw, ph],
+        center: spec.center,
+        width: spec.width,
+    }
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
+/// Opens the interactive color-map editor for the given renderer.
+///
+/// Two windows appear: a fractal preview (rendered in a background thread) and
+/// an editor panel showing the current color gradient.  The editor calls
+/// `save_fn` with the current keyframes whenever the user presses Space or
+/// closes a window.
+///
+/// # Controls
+/// - **Q / Escape** — quit without saving
+/// - **Space** — save keyframes via `save_fn`
+/// - **Close button** — save and quit
 pub fn edit<F, Save>(mut renderer: F, save_fn: Save) -> Result<(), Error>
 where
     F: Renderable + ColorMapEditable + Send + Sync + 'static,
@@ -251,63 +288,81 @@ where
 
     let mut fractal_pixels = {
         let sz = fractal_window.inner_size();
-        Pixels::new(pw, ph, SurfaceTexture::new(sz.width, sz.height, &fractal_window))?
+        Pixels::new(
+            pw,
+            ph,
+            SurfaceTexture::new(sz.width, sz.height, &fractal_window),
+        )?
     };
     let mut editor_pixels = {
         let sz = editor_window.inner_size();
-        Pixels::new(W, H, SurfaceTexture::new(sz.width, sz.height, &editor_window))?
+        Pixels::new(
+            W,
+            H,
+            SurfaceTexture::new(sz.width, sz.height, &editor_window),
+        )?
     };
 
     let renderer = Arc::new(Mutex::new(renderer));
-    let display_buffer: Arc<Mutex<Vec<Vec<image::Rgb<u8>>>>> =
-        Arc::new(Mutex::new(create_buffer(image::Rgb([0u8, 0, 0]), &[pw, ph])));
-    let render_busy  = Arc::new(AtomicBool::new(false));
+    let display_buffer: Arc<Mutex<Vec<Vec<image::Rgb<u8>>>>> = Arc::new(Mutex::new(create_buffer(
+        image::Rgb([0u8, 0, 0]),
+        &[pw, ph],
+    )));
+    let render_busy = Arc::new(AtomicBool::new(false));
     let render_ready = Arc::new(AtomicBool::new(false));
 
-    spawn_render(renderer.clone(), display_buffer.clone(), render_busy.clone(), render_ready.clone());
+    spawn_render(
+        renderer.clone(),
+        display_buffer.clone(),
+        render_busy.clone(),
+        render_ready.clone(),
+    );
 
     draw_editor(editor_pixels.frame_mut(), &keyframes);
     editor_pixels.render()?;
 
-    let mut quit = false;
-
     event_loop.run(move |event, _, control_flow| {
-        if quit {
-            *control_flow = ControlFlow::Exit;
-            return;
+        // Startup: switch to event-driven scheduling so the thread sleeps
+        // between events instead of spinning.  The `MainEventsCleared` handler
+        // below re-enables polling while a background render is in progress.
+        if let Event::NewEvents(StartCause::Init) = &event {
+            *control_flow = ControlFlow::Wait;
         }
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16));
 
-        match event {
-            Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                if render_ready.swap(false, Ordering::Relaxed) {
-                    fractal_window.request_redraw();
-                }
-            }
-
-            Event::RedrawRequested(wid) if wid == fractal_wid => {
+        if let Event::RedrawRequested(wid) = &event {
+            if *wid == fractal_wid {
                 let buf = display_buffer.lock().unwrap();
                 draw_preview(fractal_pixels.frame_mut(), &buf, pw);
                 drop(buf);
-                fractal_pixels.render().unwrap();
-            }
-
-            Event::RedrawRequested(wid) if wid == editor_wid => {
+                if fractal_pixels.render().is_err() {
+                    eprintln!("ERROR: unable to render fractal preview.");
+                    *control_flow = ControlFlow::Exit;
+                }
+            } else if *wid == editor_wid {
                 draw_editor(editor_pixels.frame_mut(), &keyframes);
-                editor_pixels.render().unwrap();
+                if editor_pixels.render().is_err() {
+                    eprintln!("ERROR: unable to render editor.");
+                    *control_flow = ControlFlow::Exit;
+                }
             }
+        }
 
-            Event::WindowEvent { event, .. } => match event {
+        if let Event::WindowEvent {
+            event: window_event,
+            ..
+        } = &event
+        {
+            match window_event {
                 WindowEvent::CloseRequested => {
                     save_fn(&keyframes);
-                    quit = true;
+                    *control_flow = ControlFlow::Exit;
                 }
                 WindowEvent::KeyboardInput { input, .. }
                     if input.state == ElementState::Pressed =>
                 {
                     match input.virtual_keycode {
                         Some(VirtualKeyCode::Escape) | Some(VirtualKeyCode::Q) => {
-                            quit = true;
+                            *control_flow = ControlFlow::Exit;
                         }
                         Some(VirtualKeyCode::Space) => {
                             save_fn(&keyframes);
@@ -316,9 +371,21 @@ where
                     }
                 }
                 _ => {}
-            },
+            }
+        }
 
-            _ => {}
+        // `MainEventsCleared` fires once per event batch.  It is the sole place
+        // where we update the `ControlFlow` schedule: poll at 16 ms while a
+        // background render is running, then return to event-driven sleep.
+        if let Event::MainEventsCleared = &event {
+            if render_ready.swap(false, Ordering::Relaxed) {
+                fractal_window.request_redraw();
+            }
+            *control_flow = if render_busy.load(Ordering::Relaxed) {
+                ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16))
+            } else {
+                ControlFlow::Wait
+            };
         }
     })
 }

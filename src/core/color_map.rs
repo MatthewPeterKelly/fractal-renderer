@@ -137,9 +137,51 @@ impl ColorMapper for ColorMapLookUpTable {
 }
 
 /// Trait for renderers that support live editing of their color map keyframes.
+///
+/// Both methods are used by the interactive color-map editor:
+/// `get_keyframes` reads the current state for display, and `set_keyframes`
+/// applies edits and rebuilds the lookup table without recomputing the
+/// histogram (so updates are fast enough for interactive use).
 pub trait ColorMapEditable {
+    /// Returns a snapshot of the current color-map keyframes.
     fn get_keyframes(&self) -> Vec<ColorMapKeyFrame>;
+
+    /// Replaces the keyframes and rebuilds all derived lookup tables.
     fn set_keyframes(&mut self, keyframes: Vec<ColorMapKeyFrame>);
+}
+
+/// Linearly interpolates across a sorted slice of keyframes to produce an RGB
+/// color for query value `t` (typically in [0, 1]).
+///
+/// If `t` is outside the keyframe range it is clamped to the nearest endpoint.
+pub fn interpolate_keyframe_color(t: f32, keyframes: &[ColorMapKeyFrame]) -> [u8; 3] {
+    if keyframes.is_empty() {
+        return [0, 0, 0];
+    }
+    if keyframes.len() == 1 || t <= keyframes[0].query {
+        return keyframes[0].rgb_raw;
+    }
+    let last = keyframes.last().unwrap();
+    if t >= last.query {
+        return last.rgb_raw;
+    }
+    for i in 1..keyframes.len() {
+        let a = &keyframes[i - 1];
+        let b = &keyframes[i];
+        if t <= b.query {
+            let s = (t - a.query) / (b.query - a.query);
+            return [
+                lerp_u8(a.rgb_raw[0], b.rgb_raw[0], s),
+                lerp_u8(a.rgb_raw[1], b.rgb_raw[1], s),
+                lerp_u8(a.rgb_raw[2], b.rgb_raw[2], s),
+            ];
+        }
+    }
+    last.rgb_raw
+}
+
+fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+    (a as f32 + t * (b as f32 - a as f32)).round() as u8
 }
 
 #[cfg(test)]
