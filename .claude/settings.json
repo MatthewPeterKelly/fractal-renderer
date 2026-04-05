@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo bench:*)",
+      "Bash(cargo run --example:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo fmt && git add -u"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo clippy -- -D warnings"
+          },
+          {
+            "type": "command",
+            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo test"
+          }
+        ]
+      }
+    ]
+  }
+}
