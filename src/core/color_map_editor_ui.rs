@@ -26,8 +26,9 @@ use winit::{
 };
 
 use crate::core::{
-    color_map::{interpolate_keyframe_color, ColorMapKeyFrame},
+    color_map::{ColorMap, ColorMapKeyFrame, ColorMapper},
     image_utils::{create_buffer, ImageSpecification, Renderable},
+    interpolation::LinearInterpolator,
 };
 
 // Hack Regular, embedded at compile time.  License: MIT + Bitstream Vera.
@@ -126,13 +127,14 @@ fn draw_editor(frame: &mut [u8], keyframes: &[ColorMapKeyFrame], font: &Font) {
 
         // Gradient bar.
         if !keyframes.is_empty() {
+            let color_map = ColorMap::new(keyframes, LinearInterpolator {});
             let mut paint = Paint {
                 anti_alias: false,
                 ..Paint::default()
             };
             for col in 0..GRAD_W {
                 let t = col as f32 / (GRAD_W - 1).max(1) as f32;
-                let rgb = interpolate_keyframe_color(t, keyframes);
+                let rgb = color_map.compute_pixel(t);
                 paint.set_color(Color::from_rgba8(rgb[0], rgb[1], rgb[2], 255));
                 if let Some(rect) = Rect::from_xywh(
                     x0 + (GRAD_X + col) as f32,
