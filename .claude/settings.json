@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(cargo bench:*)",
-      "Bash(cargo run --example:*)"
+      "Bash(cargo run --example:*)",
+      "Bash(python3:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(git add -u:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo test:*)"
     ]
   },
   "hooks": {
