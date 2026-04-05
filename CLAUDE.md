@@ -95,5 +95,3 @@ Parameters are serialized as JSON via serde. The test suite validates all JSON f
 Branch names: `feature/description`, `fix/description`, `perf/description`.
 
 Commit messages: conventional commits (`feat:`, `fix:`, `perf:`, `refactor:`, `test:`, `docs:`, `chore:`) for structured changes; imperative short titles for small focused fixes. One logical change per commit.
-
-Never push or create PRs without explicit user confirmation.
