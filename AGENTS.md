@@ -37,7 +37,7 @@ examples/             # JSON parameter files for each fractal variant
 ### Style
 
 - Prefer iterator/functional style over manual loops: `map`, `filter`, `fold`, `flat_map`, `zip`, `enumerate`, `windows`, `chunks`.
-- Use `rayon` parallel iterators (`par_iter`, `par_iter_mut`, `into_par_iter`) for computationally intensive loops — `populate_histogram` in `core/histogram.rs` is the reference pattern.
+- Use `rayon` parallel iterators (`par_iter`, `par_iter_mut`, `into_par_iter`) for computationally intensive loops — `populate_histogram` in `src/fractals/utilities.rs` is the reference pattern.
 - No `unwrap()` or `expect()` in library code except tests and benchmarks. Use `?` propagation or explicit error handling.
 - Add unit test for any new function with non-trivial logic. This is especially true for the `core/` directory.
 - Match existing style. Keep the code concise and correct. Avoid unnecessary comments - code should be self-documenting.
