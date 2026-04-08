@@ -1,13 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo bench:*)",
-      "Bash(cargo run --example:*)",
-      "Bash(python3:*)",
-      "Bash(cargo fmt:*)",
-      "Bash(git add -u:*)",
-      "Bash(cargo clippy:*)",
-      "Bash(cargo test:*)"
+      "Bash(python3:*)"
     ]
   },
   "hooks": {
@@ -17,7 +11,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo fmt && git add -u"
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo fmt && git add -u; fi"
           }
         ]
       }
@@ -28,11 +22,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo clippy -- -D warnings"
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo clippy -- -D warnings; fi"
           },
           {
             "type": "command",
-            "command": "python3 -c \"import os,json; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); exit(0 if 'git commit' in cmd else 1)\" && cargo test"
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo test; fi"
           }
         ]
       }
