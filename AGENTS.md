@@ -38,7 +38,7 @@ examples/             # JSON parameter files for each fractal variant
 
 - Prefer iterator/functional style over manual loops: `map`, `filter`, `fold`, `flat_map`, `zip`, `enumerate`, `windows`, `chunks`.
 - Use `rayon` parallel iterators (`par_iter`, `par_iter_mut`, `into_par_iter`) for computationally intensive loops — `populate_histogram` in `src/fractals/utilities.rs` is the reference pattern.
-- No `unwrap()` or `expect()` in library code except tests and benchmarks. Use `?` propagation or explicit error handling.
+- Avoid introducing new `unwrap()` or `expect()` in library code except tests and benchmarks. Prefer `?` propagation or explicit error handling; treat existing uses in `src/` as legacy exceptions to clean up opportunistically rather than patterns to copy.
 - Add unit test for any new function with non-trivial logic. This is especially true for the `core/` directory.
 - Match existing style. Keep the code concise and correct. Avoid unnecessary comments - code should be self-documenting.
 
@@ -52,7 +52,7 @@ examples/             # JSON parameter files for each fractal variant
 - Any new or modified function on the render-critical path (called per-pixel or per-sample) must have a criterion benchmark in `benches/benchmark.rs`.
 - Profile before optimizing — use `cargo bench` to measure before and after. Don't guess at bottlenecks.
 - Reference benchmark pattern: `run_quadratic_map_histogram_benchmark` in `benches/benchmark.rs`.
-- Prefer generics for polymorphism, `dyn` is used as a last resort, and is not permitted in core rendering pipeline.
+- Prefer generics for render-critical polymorphism. Avoid `dyn` on per-pixel, per-sample, and other core rendering hot paths; however, non-hot-path uses such as error handling and API-boundary types (for example `Box<dyn std::error::Error>`) are acceptable.
 
 ## CI Requirements
 

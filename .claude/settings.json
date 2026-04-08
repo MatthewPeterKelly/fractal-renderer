@@ -11,22 +11,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo fmt && git add -u; fi"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo clippy -- -D warnings; fi"
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT') or '{}').get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo fmt; fi"
           },
           {
             "type": "command",
-            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT','{}') ).get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo test; fi"
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT') or '{}').get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo clippy -- -D warnings; fi"
+          },
+          {
+            "type": "command",
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT') or '{}').get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo test; fi"
           }
         ]
       }
