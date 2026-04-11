@@ -18,8 +18,7 @@ runtime. All rendering lives in one window.
 
 ### egui for all UI
 
-The manual tiny-skia + fontdue drawing layer established in the prototype is
-replaced by `egui`. Reasons:
+The color map editor uses `egui` for the entire UI. Reasons:
 
 - Immediate mode — widgets are declared inline each frame; no retained state
   graph or event routing to manage
@@ -27,10 +26,9 @@ replaced by `egui`. Reasons:
   uses; integration is a first-class supported pattern with an official example
   in the pixels repo
 - Provides every widget needed: `Slider`, `DragValue`, `TextEdit`,
-  `color_edit_button_rgb`, `ui.label`, and a custom `Painter` for the gradient
+  `color_edit_button_srgb`, `ui.label`, and a custom `Painter` for the gradient
   bar
-- Eliminates the need for an embedded font, `tiny-skia`, `fontdue`, and all
-  manual glyph/pixel blitting code
+- Built-in text rendering with no external font dependencies
 
 ### Compositing model
 
@@ -47,12 +45,9 @@ The fractal preview is written directly into the `pixels` framebuffer. The
 egui panel renders on top with an opaque background, covering the right half.
 No texture upload or `egui::Image` is required yet.
 
-### Fractal renders at preview resolution
+### Fractal preview rendering
 
-`scale_preview` downsizes the `ImageSpecification` before handing it to the
-renderer, so `render_to_buffer` works at `PREVIEW_W × TOTAL_H` rather than the
-original full resolution. The preview is centred in its pane with letterboxing;
-the surrounding area is cleared to black each frame.
+The fractal preview renders at a fixed reduced resolution (set by configuration in the `color-map-editor` subcommand). The preview is centred in its pane with letterboxing; the surrounding area is cleared to black each frame.
 
 ### Background render thread (already established)
 
@@ -65,20 +60,14 @@ main thread:  MainEventsCleared: if render_ready → request_redraw
 
 ## Exact Dependency Versions
 
+Add to `Cargo.toml`:
 ```toml
-# Add
 egui         = "0.22"
 egui-wgpu    = "0.22"
 egui-winit   = "0.22"     # use full default features for full event handling
-
-# Remove
-tiny-skia    = "0.12"   # replaced by egui Painter
-fontdue      = "0.9"    # replaced by egui text
 ```
 
-Remove from the repo:
-- `assets/Hack-Regular.ttf`
-- `THIRD_PARTY_LICENSES.md` (Hack attribution no longer needed)
+Note: `tiny-skia` and `fontdue` are not currently in the codebase, so no removals needed.
 
 ---
 
@@ -122,31 +111,26 @@ left pane.
 ### Cargo.toml changes
 
 - Add `egui = "0.22"`, `egui-wgpu = "0.22"`, `egui-winit = "0.22"`
-- Remove `tiny-skia = "0.12"`, `fontdue = "0.9"`
 
 ### Files changed
 
 | File | Change |
 |---|---|
-| `Cargo.toml` | Swap deps as above |
-| `assets/Hack-Regular.ttf` | Delete |
-| `THIRD_PARTY_LICENSES.md` | Delete |
-| `src/core/color_map_editor_ui.rs` | Full rewrite (see below) |
+| `Cargo.toml` | Add egui deps as above |
+| `src/core/color_map_editor_ui.rs` | Create new file (see below) |
+| `src/core/mod.rs` | Add `pub mod color_map_editor_ui;` |
 
-No other files change — `color_map.rs`, `cli/color_map_editor.rs`, the example,
-and the rest of the renderer are untouched.
+No other files change. The color map editor subcommand will be created separately (already exists or will be added as part of the CLI structure).
 
 ### `color_map_editor_ui.rs` — Full rewrite
 
 **Keep from existing code (if any):**
 - `PREVIEW_W`, `EDITOR_W`, `TOTAL_W`, `TOTAL_H` layout constants
 - `spawn_render` (background thread logic unchanged)
-- `scale_preview` (fractal resolution scaling unchanged)
-- `draw_preview` (blits fractal pixels into left pane, unchanged)
+- Any existing preview rendering logic
 
 **Remove:**
-- All tiny-skia imports and color constants
-- All fontdue imports (e.g., `HACK_FONT_BYTES`)
+- None (no existing color map editor UI code to replace)
 
 **Add — persistent state structure:**
 
@@ -374,11 +358,9 @@ No interaction with the renderer yet — state changes are local to `EditorState
 
 PR 3 wires the editor state to the renderer:
 
-- `ColorMapEditable::set_keyframes` (to be re-added) called whenever
-  `EditorState` changes
+- `ColorMapEditable::set_keyframes` called whenever `EditorState` changes
 - Any change triggers `spawn_render` (existing background thread mechanism)
 - `render_busy` flag prevents double-spawning during a slow render
-- Speed optimizer / downsampled preview during drag, full quality on release
 
 ---
 
