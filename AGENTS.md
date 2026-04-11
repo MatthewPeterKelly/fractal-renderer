@@ -72,7 +72,10 @@ cargo bench --no-run         # Benchmarks must compile
 1. `cargo fmt` — format all files.
 2. `cargo clippy -- -D warnings` — fix all warnings before committing.
 3. `cargo test` — verify correctness.
-4. If you modified a hot path: `cargo bench` to check for regressions.
+4. `cargo bench --no-run` — verify benchmarks compile.
+5. If you modified a hot path: `cargo bench` to check for regressions.
+
+When running inside Claude Code, steps 1–4 are enforced automatically by pre-commit hooks in `.claude/settings.json` before any `git commit` executes.
 
 ### Adding a New Fractal
 
