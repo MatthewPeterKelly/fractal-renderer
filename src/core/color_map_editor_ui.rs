@@ -1,9 +1,12 @@
 //! Color map editor UI using egui.
 //!
 //! This module provides the infrastructure for an interactive color map editor.
-//! In PR1 (this module's initial version), functions are unused stubs that will be
-//! integrated with the color-map-editor subcommand in future PRs.
+//! The public API is consumed by example binaries (e.g. `color-gui-demo`) and
+//! will later be wired into a `color-map-editor` CLI subcommand. Until then,
+//! nothing in the main binary calls into this module, so suppress dead-code warnings.
 #![allow(dead_code)]
+
+use std::time::Duration;
 
 use egui_wgpu::renderer::Renderer as EguiRenderer;
 use egui_wgpu::renderer::ScreenDescriptor;
@@ -84,7 +87,8 @@ pub fn init_egui(
 
 /// Update screen descriptor on window resize
 pub fn update_screen_descriptor(screen_descriptor: &mut ScreenDescriptor, window: &Window) {
-    screen_descriptor.size_in_pixels = [window.inner_size().width, window.inner_size().height];
+    let size = window.inner_size();
+    screen_descriptor.size_in_pixels = [size.width, size.height];
     screen_descriptor.pixels_per_point = window.scale_factor() as f32;
 }
 
@@ -149,30 +153,41 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
     }
 }
 
-/// Render a frame with egui composited on top of fractal preview
+/// Render a frame with egui composited on top of the fractal preview.
+///
+/// Returns the `Duration` that egui requests before the next repaint. A zero duration
+/// means egui wants an immediate repaint (e.g. animation or hover); a longer duration
+/// means the caller can sleep until then if nothing else requires a redraw.
 pub fn render_editor_frame(
     pixels: &mut Pixels,
     egui: &mut EguiRenderContext,
     window: &Window,
     editor_state: &mut EditorState,
     keyframes: &[ColorMapKeyFrame],
-) -> Result<(), pixels::Error> {
-    // Render fractal preview and egui
+) -> Result<Duration, pixels::Error> {
+    let mut repaint_after = Duration::from_secs(1);
+
     pixels.render_with(|encoder, render_target, context| {
-        // 1. Fractal pixels (placeholder for now — would call scaling_renderer here)
-        // context.scaling_renderer.render(encoder, render_target);
+        // 1. Blit fractal pixels from the framebuffer to the render target
+        context.scaling_renderer.render(encoder, render_target);
 
         // 2. Build egui frame
         let raw_input = egui.state.take_egui_input(window);
-        let output = egui.ctx.run(raw_input, |ctx| {
+        let egui::FullOutput {
+            platform_output,
+            repaint_after: egui_repaint,
+            textures_delta,
+            shapes,
+        } = egui.ctx.run(raw_input, |ctx| {
             build_editor_ui(ctx, editor_state, keyframes);
         });
+        repaint_after = egui_repaint;
         egui.state
-            .handle_platform_output(window, egui.ctx, output.platform_output.clone());
-        let paint_jobs = egui.ctx.tessellate(output.shapes.clone());
+            .handle_platform_output(window, egui.ctx, platform_output);
+        let paint_jobs = egui.ctx.tessellate(shapes);
 
         // 3. Upload egui resources
-        for (id, delta) in &output.textures_delta.set {
+        for (id, delta) in &textures_delta.set {
             egui.renderer
                 .update_texture(&context.device, &context.queue, *id, delta);
         }
@@ -202,9 +217,30 @@ pub fn render_editor_frame(
         drop(rpass);
 
         // 5. Free egui textures
-        for id in &output.textures_delta.free {
+        for id in &textures_delta.free {
             egui.renderer.free_texture(id);
         }
         Ok(())
-    })
+    })?;
+
+    Ok(repaint_after)
+}
+
+/// Copy a pre-rendered fractal preview into the left pane of the pixels framebuffer.
+///
+/// The `preview_buffer` should be `PREVIEW_W` columns by `TOTAL_H` rows. Each pixel
+/// in the buffer is written into the corresponding position in the RGBA framebuffer;
+/// pixels outside the preview area are left as-is (black by default).
+pub fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<image::Rgb<u8>>]) {
+    let frame = pixels.frame_mut();
+    let stride = TOTAL_W as usize;
+    for (x, col) in preview_buffer.iter().enumerate().take(PREVIEW_W as usize) {
+        for (y, rgb) in col.iter().enumerate().take(TOTAL_H as usize) {
+            let idx = (y * stride + x) * 4;
+            frame[idx] = rgb[0];
+            frame[idx + 1] = rgb[1];
+            frame[idx + 2] = rgb[2];
+            frame[idx + 3] = 255;
+        }
+    }
 }
