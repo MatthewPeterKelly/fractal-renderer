@@ -136,8 +136,12 @@ fn main() {
                 Ok(repaint_after) => {
                     if repaint_after == Duration::ZERO {
                         window.request_redraw();
+                    } else if let Some(deadline) = Instant::now().checked_add(repaint_after) {
+                        *control_flow = ControlFlow::WaitUntil(deadline);
                     } else {
-                        *control_flow = ControlFlow::WaitUntil(Instant::now() + repaint_after);
+                        // repaint_after is Duration::MAX — egui has no pending
+                        // animation, so sleep until the next user event.
+                        *control_flow = ControlFlow::Wait;
                     }
                 }
                 Err(_) => {
