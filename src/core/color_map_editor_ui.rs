@@ -6,15 +6,18 @@
 //! nothing in the main binary calls into this module, so suppress dead-code warnings.
 #![allow(dead_code)]
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use egui_wgpu::renderer::Renderer as EguiRenderer;
 use egui_wgpu::renderer::ScreenDescriptor;
 use egui_winit::State as EguiState;
+use image::Rgb;
 use pixels::wgpu;
-use pixels::Pixels;
-use winit::event_loop::EventLoop;
-use winit::window::Window;
+use pixels::{Pixels, SurfaceTexture};
+use winit::dpi::LogicalSize;
+use winit::event::{ElementState, Event, StartCause, VirtualKeyCode, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::{Window, WindowBuilder};
 
 use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
 use crate::core::interpolation::LinearInterpolator;
@@ -135,6 +138,9 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
 }
 
 /// Paint a gradient bar showing the color map
+// TODO: cache the ColorMap between frames to avoid re-allocating the interpolator
+// each repaint. For now the cost is negligible (small keyframe count), but it will
+// matter once we support large keyframe sets or high refresh rates.
 fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[ColorMapKeyFrame]) {
     if keyframes.is_empty() {
         return;
@@ -228,14 +234,18 @@ pub fn render_editor_frame(
 
 /// Copy a pre-rendered fractal preview into the left pane of the pixels framebuffer.
 ///
-/// The `preview_buffer` should be `PREVIEW_W` columns by `TOTAL_H` rows. Each pixel
-/// in the buffer is written into the corresponding position in the RGBA framebuffer;
-/// pixels outside the preview area are left as-is (black by default).
-pub fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<image::Rgb<u8>>]) {
+/// The preview is placed in the top-left corner and clipped to `PREVIEW_W x TOTAL_H`.
+/// If the buffer is smaller than the preview area, only the available pixels are copied
+/// and the remainder stays black. If the buffer is larger, extra pixels are ignored.
+/// This makes the function robust to mismatched fractal resolution in the params file
+/// vs. the editor layout constants.
+fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<Rgb<u8>>]) {
     let frame = pixels.frame_mut();
     let stride = TOTAL_W as usize;
-    for (x, col) in preview_buffer.iter().enumerate().take(PREVIEW_W as usize) {
-        for (y, rgb) in col.iter().enumerate().take(TOTAL_H as usize) {
+    let cols = preview_buffer.len().min(PREVIEW_W as usize);
+    for (x, col) in preview_buffer.iter().enumerate().take(cols) {
+        let rows = col.len().min(TOTAL_H as usize);
+        for (y, rgb) in col.iter().enumerate().take(rows) {
             let idx = (y * stride + x) * 4;
             frame[idx] = rgb[0];
             frame[idx + 1] = rgb[1];
@@ -243,4 +253,108 @@ pub fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<im
             frame[idx + 3] = 255;
         }
     }
+}
+
+/// Open the color map editor window with a pre-rendered fractal preview.
+///
+/// `preview_buffer` is a column-major grid of RGB pixels (as produced by
+/// `Renderable::render_to_buffer`). It is blitted into the left pane once at startup.
+/// `keyframes` are displayed read-only in the gradient bar; the demo widgets are
+/// independent and do not yet feed back into the renderer.
+pub fn run_color_editor(
+    preview_buffer: Vec<Vec<Rgb<u8>>>,
+    keyframes: Vec<ColorMapKeyFrame>,
+) -> Result<(), pixels::Error> {
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("Color Map Editor")
+        .with_inner_size(LogicalSize::new(TOTAL_W as f64, TOTAL_H as f64))
+        .build(&event_loop)
+        .expect("failed to create window");
+
+    let mut pixels = {
+        let size = window.inner_size();
+        let surface = SurfaceTexture::new(size.width, size.height, &window);
+        Pixels::new(TOTAL_W, TOTAL_H, surface)?
+    };
+
+    blit_preview_to_framebuffer(&mut pixels, &preview_buffer);
+
+    let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
+        init_egui(&event_loop, &pixels);
+    let mut editor_state = EditorState::default();
+
+    event_loop.run(move |event, _, control_flow| {
+        if let Event::NewEvents(StartCause::Init) = event {
+            *control_flow = ControlFlow::Wait;
+        }
+
+        if let Event::WindowEvent {
+            event: ref window_event,
+            ..
+        } = event
+        {
+            let response = egui_state.on_event(&egui_ctx, window_event);
+            if response.consumed {
+                window.request_redraw();
+                return;
+            }
+
+            match window_event {
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+                WindowEvent::KeyboardInput { input, .. } => {
+                    if input.state == ElementState::Pressed {
+                        if let Some(VirtualKeyCode::Escape | VirtualKeyCode::Q) =
+                            input.virtual_keycode
+                        {
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                    }
+                }
+                WindowEvent::Resized(size) => {
+                    if pixels.resize_surface(size.width, size.height).is_err() {
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                    update_screen_descriptor(&mut screen_descriptor, &window);
+                }
+                _ => {}
+            }
+        }
+
+        if let Event::RedrawRequested(_) = event {
+            let mut egui_render = EguiRenderContext {
+                ctx: &egui_ctx,
+                state: &mut egui_state,
+                renderer: &mut egui_renderer,
+                screen_descriptor: &screen_descriptor,
+            };
+            match render_editor_frame(
+                &mut pixels,
+                &mut egui_render,
+                &window,
+                &mut editor_state,
+                &keyframes,
+            ) {
+                Ok(repaint_after) => {
+                    if repaint_after == Duration::ZERO {
+                        window.request_redraw();
+                    } else {
+                        *control_flow = ControlFlow::WaitUntil(Instant::now() + repaint_after);
+                    }
+                }
+                Err(_) => {
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
+        }
+
+        if let Event::MainEventsCleared = event {
+            window.request_redraw();
+        }
+    });
 }
