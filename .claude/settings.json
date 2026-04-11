@@ -20,6 +20,10 @@
           {
             "type": "command",
             "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT') or '{}').get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo test; fi"
+          },
+          {
+            "type": "command",
+            "command": "if python3 -c \"import os,json,sys; cmd=json.loads(os.environ.get('CLAUDE_TOOL_INPUT') or '{}').get('command',''); sys.exit(0 if 'git commit' in cmd else 1)\"; then cargo bench --no-run; fi"
           }
         ]
       }
