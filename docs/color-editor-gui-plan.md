@@ -69,7 +69,7 @@ main thread:  MainEventsCleared: if render_ready → request_redraw
 # Add
 egui         = "0.22"
 egui-wgpu    = "0.22"
-egui-winit   = { version = "0.22", default-features = false, features = ["links"] }
+egui-winit   = "0.22"     # use full default features for full event handling
 
 # Remove
 tiny-skia    = "0.12"   # replaced by egui Painter
@@ -136,27 +136,46 @@ left pane.
 No other files change — `color_map.rs`, `cli/color_map_editor.rs`, the example,
 and the rest of the renderer are untouched.
 
-### `color_map_editor_ui.rs` rewrite
+### `color_map_editor_ui.rs` — Full rewrite
 
-**Keep:**
+**Keep from existing code (if any):**
 - `PREVIEW_W`, `EDITOR_W`, `TOTAL_W`, `TOTAL_H` layout constants
 - `spawn_render` (background thread logic unchanged)
 - `scale_preview` (fractal resolution scaling unchanged)
 - `draw_preview` (blits fractal pixels into left pane, unchanged)
 
 **Remove:**
-- `draw_text` — egui handles all text
-- `draw_editor` — replaced by `build_editor_ui`
 - All tiny-skia imports and color constants
-- All fontdue imports and `HACK_FONT_BYTES`
+- All fontdue imports (e.g., `HACK_FONT_BYTES`)
 
-**Add:**
+**Add — persistent state structure:**
 
 ```rust
-// Persistent state for hello-world widgets
+/// Persistent UI state for hello-world widgets (PR1)
+/// Each field demos a widget type needed for PR2/PR3
 struct EditorState {
-    slider_value: f32,
-    text_value: String,
+    // Slider demo — will track position in PR2/PR3
+    position_slider: f32,
+    
+    // Text input demo — will track position in PR2/PR3
+    position_text: String,
+    
+    // Color picker demo — will track keyframe color in PR2/PR3
+    color_picker_rgb: [u8; 3],
+    
+    // Drag-value demo — will track numeric edits in PR2/PR3
+    drag_numeric: f32,
+}
+
+impl Default for EditorState {
+    fn default() -> Self {
+        Self {
+            position_slider: 0.5,
+            position_text: "0.5".to_string(),
+            color_picker_rgb: [128, 128, 128],
+            drag_numeric: 1.0,
+        }
+    }
 }
 ```
 
@@ -173,11 +192,23 @@ let mut egui_renderer = egui_wgpu::renderer::Renderer::new(
     None,  // no depth buffer
     1,     // msaa_samples
 );
+
+// Screen descriptor for egui rendering (based on window size)
+let mut screen_descriptor = egui_wgpu::ScreenDescriptor {
+    size_in_pixels: [TOTAL_W as u32, TOTAL_H as u32],
+    pixels_per_point: window.scale_factor() as f32,
+};
 ```
 
 **Event loop changes:**
 
 ```rust
+// On WindowEvent::Resized or whenever window size changes:
+screen_descriptor = egui_wgpu::ScreenDescriptor {
+    size_in_pixels: [new_width as u32, new_height as u32],
+    pixels_per_point: window.scale_factor() as f32,
+};
+
 // In WindowEvent branch — pass events to egui first
 let response = egui_state.on_event(&egui_ctx, &window_event);
 if response.consumed { return; }
@@ -233,15 +264,11 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
     egui::SidePanel::right("editor")
         .exact_width(EDITOR_W as f32)
         .show(ctx, |ui| {
-
             ui.heading("Color Map Editor");
             ui.separator();
 
-            // 1. Static label
-            ui.label("Hello from egui — this text is a widget.");
-            ui.separator();
-
-            // 2. Gradient bar (custom painter, same column-loop as before)
+            // 1. Gradient bar (custom painter — same as before)
+            ui.label("Current color map:");
             let (rect, _) = ui.allocate_exact_size(
                 egui::vec2(EDITOR_W as f32 - 32.0, 44.0),
                 egui::Sense::hover(),
@@ -249,15 +276,27 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
             paint_gradient_bar(ui.painter(), rect, keyframes);
             ui.separator();
 
-            // 3. Slider
-            ui.label("Dummy slider:");
-            ui.add(egui::Slider::new(&mut state.slider_value, 0.0..=1.0));
+            // 2. Slider demo (will track keyframe position in PR2/PR3)
+            ui.label("Position slider (demo):");
+            ui.add(egui::Slider::new(&mut state.position_slider, 0.0..=1.0)
+                .step_by(0.01));
             ui.separator();
 
-            // 4. Numeric text entry
-            ui.label("Numeric text entry:");
-            ui.add(egui::TextEdit::singleline(&mut state.text_value)
-                .hint_text("enter a number"));
+            // 3. Text input demo (will track numeric position in PR2/PR3)
+            ui.label("Position text input (demo):");
+            ui.text_edit_singleline(&mut state.position_text);
+            ui.separator();
+
+            // 4. Color picker demo (will track keyframe color in PR2/PR3)
+            ui.label("Color picker (demo):");
+            ui.color_edit_button_srgb(&mut state.color_picker_rgb);
+            ui.separator();
+
+            // 5. Drag-value demo (will track numeric edits in PR2/PR3)
+            ui.label("Drag-value numeric (demo):");
+            ui.add(egui::DragValue::new(&mut state.drag_numeric)
+                .speed(0.01)
+                .range(0.0..=1.0));
         });
 }
 ```
@@ -281,20 +320,40 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
 }
 ```
 
-### `MainEventsCleared` scheduling (unchanged)
+### Keyframe sourcing
 
-Poll at 16 ms while a background render is in progress; sleep otherwise. If
-egui requests a repaint (`output.repaint_after == Duration::ZERO`), call
-`window.request_redraw()`.
+Keyframes are read from the existing app state/config (loaded by the `color-map-editor` subcommand). PR1 displays them read-only in `paint_gradient_bar`. In PR2, `EditorState` will hold a mutable copy; in PR3, changes will flow back to the renderer via `set_keyframes`.
+
+### `MainEventsCleared` scheduling (updated for egui)
+
+Original behavior: Poll at 16 ms while a background render is in progress; sleep otherwise.
+
+With egui: Also respect `output.repaint_after` from the egui context after each frame:
+```rust
+// After rendering, check if egui requests a repaint
+match output.repaint_after {
+    std::time::Duration::ZERO => {
+        // Repaint immediately (e.g., hovering over widgets)
+        window.request_redraw();
+        control_flow.set_poll_at(Instant::now());
+    }
+    d => {
+        // Repaint after delay if not already polling
+        if !render_busy && !has_active_keys {
+            control_flow.set_wait_until(Instant::now() + d);
+        }
+    }
+}
+```
 
 ### What is explicitly NOT in PR 1
 
-- No interaction between the widgets and the renderer
-- No color picker
-- No per-keyframe rows
-- No add/remove keyframe buttons
-- No live preview update on slider drag
-- No fractal-as-egui-texture (fractal stays in the pixels buffer directly)
+- **No interaction between widgets and renderer** — `EditorState` is local; changes do not call `set_keyframes` or trigger renders
+- **No per-keyframe editor rows** — saved for PR2 (layout with one row per keyframe)
+- **No add/remove keyframe buttons** — saved for PR2
+- **No live preview updates** — fractals render on a background schedule, not on widget input
+- **No fractals-as-egui-texture** — fractal preview stays in the `pixels` framebuffer; egui panels composite on top with `LoadOp::Load`
+- **No validation or constraints** — widgets accept any input; PR2/PR3 will add bounds checking
 
 ---
 
@@ -320,3 +379,29 @@ PR 3 wires the editor state to the renderer:
 - Any change triggers `spawn_render` (existing background thread mechanism)
 - `render_busy` flag prevents double-spawning during a slow render
 - Speed optimizer / downsampled preview during drag, full quality on release
+
+---
+
+## Implementation Notes
+
+### Window size constraints
+
+The layout assumes `TOTAL_W = 1500` and `TOTAL_H = 480` are fixed. If the window is resizable, ensure `screen_descriptor` updates on `WindowEvent::Resized` and clamp the render resolution appropriately.
+
+### Keyframe storage: read-only vs mutable
+
+- **PR1**: Pass keyframes as `&[ColorMapKeyFrame]` (read-only reference from app state)
+- **PR2**: Copy keyframes into `EditorState` as a mutable `Vec<ColorMapKeyFrame>`
+- **PR3**: Sync mutations back to the renderer on each change
+
+### Texture management
+
+egui's texture atlas updates are handled automatically via `output.textures_delta.set` and `.free`. Do not manually manage egui textures beyond what the plan shows.
+
+### Event consumption
+
+Always check `egui_state.on_event` response and skip other event handling if egui consumed the event (e.g., text input within an egui widget should not also pan the fractal).
+
+### Performance: first-frame stutter
+
+egui's font rasterization may cause a hitch on the first frame. This is normal and will smooth out after the first few frames as glyphs are cached.
