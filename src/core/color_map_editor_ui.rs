@@ -39,7 +39,7 @@ pub struct EditorState {
     pub position_text: String,
 
     /// Color picker demonstration — will track keyframe color in PR2/PR3
-    pub color_picker_rgb: [u8; 3],
+    pub color_picker_color: egui::Color32,
 
     /// Drag-value demonstration — will track numeric edits in PR2/PR3
     pub drag_numeric: f32,
@@ -50,7 +50,7 @@ impl Default for EditorState {
         Self {
             position_slider: 0.5,
             position_text: "0.5".to_string(),
-            color_picker_rgb: [128, 128, 128],
+            color_picker_color: egui::Color32::from_rgb(128, 128, 128),
             drag_numeric: 1.0,
         }
     }
@@ -124,18 +124,26 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
             ui.text_edit_singleline(&mut state.position_text);
             ui.separator();
 
-            // 4. Color picker demo (will track keyframe color in PR2/PR3)
-            ui.label("Color picker (demo):");
-            ui.color_edit_button_srgb(&mut state.color_picker_rgb);
-            ui.separator();
-
-            // 5. Drag-value demo (will track numeric edits in PR2/PR3)
+            // 4. Drag-value demo (will track numeric edits in PR2/PR3)
             ui.label("Drag-value numeric (demo):");
             ui.add(
                 egui::DragValue::new(&mut state.drag_numeric)
                     .speed(0.01)
                     .clamp_range(0.0..=1.0),
             );
+
+            // 5. Inline color picker anchored to the bottom of the panel.
+            //    Using the embedded picker avoids popup focus issues with our
+            //    custom event loop and keeps the color always visible for
+            //    live feedback alongside the gradient bar.
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                ui.label("Color picker (demo):");
+                egui::color_picker::color_picker_color32(
+                    ui,
+                    &mut state.color_picker_color,
+                    egui::color_picker::Alpha::Opaque,
+                );
+            });
         });
 }
 
