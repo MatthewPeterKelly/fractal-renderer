@@ -235,9 +235,6 @@ pub fn render_editor_frame(
     let mut repaint_after = Duration::from_secs(1);
 
     pixels.render_with(|encoder, render_target, context| {
-        // Render the black framebuffer as a background clear
-        context.scaling_renderer.render(encoder, render_target);
-
         // Build egui frame
         let raw_input = egui.state.take_egui_input(window);
         let egui::FullOutput {
@@ -266,13 +263,13 @@ pub fn render_editor_frame(
             egui.screen_descriptor,
         );
 
-        // Composite egui on top of the background (LoadOp::Load preserves it)
+        // egui render pass — clears to black and draws all panels
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("egui render pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: render_target,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: true,
                 },
                 resolve_target: None,
@@ -325,9 +322,10 @@ pub fn run_color_editor(
         .build(&event_loop)
         .expect("failed to create window");
 
-    // The pixels framebuffer is kept at the window dimensions but left black —
-    // the scaling_renderer draws it as a solid black background, and egui
-    // composites the preview texture and UI on top via LoadOp::Load.
+    // The pixels framebuffer is unused for rendering — egui owns the entire
+    // render target via LoadOp::Clear(BLACK). We keep the framebuffer at the
+    // initial window dimensions because Pixels::new(1, 1, ..) caused rendering
+    // issues in earlier experiments. The memory cost is negligible.
     let mut pixels = {
         let size = window.inner_size();
         let surface = SurfaceTexture::new(size.width, size.height, &window);
