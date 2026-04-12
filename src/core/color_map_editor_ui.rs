@@ -127,6 +127,7 @@ fn build_editor_ui(
 ) {
     egui::SidePanel::right("editor")
         .exact_width(EDITOR_W as f32)
+        .show_separator_line(false)
         .show(ctx, |ui| {
             ui.heading("Color Map Editor");
             ui.separator();
@@ -335,6 +336,15 @@ pub fn run_color_editor(
 
     let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
         init_egui(&event_loop, &pixels, &window);
+
+    // Use black panel fill so panel backgrounds match the LoadOp::Clear(BLACK)
+    // background. This eliminates sub-pixel gap artifacts at panel boundaries,
+    // especially on fullscreen / non-integer DPI. Disabling bg_stroke removes
+    // the 1px separator lines that egui draws between panels by default.
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = egui::Color32::BLACK;
+    visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
+    egui_ctx.set_visuals(visuals);
 
     let preview_image = buffer_to_color_image(&preview_buffer);
     let preview_texture = egui_ctx.load_texture(
