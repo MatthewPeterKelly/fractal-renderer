@@ -68,6 +68,7 @@ pub struct EguiRenderContext<'a> {
 pub fn init_egui(
     event_loop: &EventLoop<()>,
     pixels: &Pixels,
+    window: &Window,
 ) -> (egui::Context, EguiState, EguiRenderer, ScreenDescriptor) {
     let egui_ctx = egui::Context::default();
     let mut egui_state = EguiState::new(event_loop);
@@ -80,9 +81,10 @@ pub fn init_egui(
         1,    // msaa_samples
     );
 
+    let size = window.inner_size();
     let screen_descriptor = ScreenDescriptor {
-        size_in_pixels: [TOTAL_W, TOTAL_H],
-        pixels_per_point: 1.0,
+        size_in_pixels: [size.width, size.height],
+        pixels_per_point: window.scale_factor() as f32,
     };
 
     (egui_ctx, egui_state, egui_renderer, screen_descriptor)
@@ -147,12 +149,15 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
     }
 
     let color_map = ColorMap::new(keyframes, LinearInterpolator {});
-    let steps = rect.width() as u32;
-    // Draw the gradient as adjacent 1-pixel-wide vertical line segments, each
-    // filled with the color at the corresponding query value.  Using line_segment
-    // rather than filled rectangles avoids edge artifacts between strips.
+    let steps = (rect.width() as u32).max(2);
+    // Render the gradient as adjacent 1-pixel-wide vertical line segments, each
+    // filled with the interpolated color at that position. The query parameter t
+    // is linearly spaced from 0.0 to 1.0 inclusive, so the first and last columns
+    // show the exact boundary keyframe colors. We compute the reciprocal of
+    // (steps - 1) once to avoid a division per iteration.
+    let t_step = 1.0 / (steps - 1) as f32;
     for i in 0..steps {
-        let t = i as f32 / steps.max(1) as f32;
+        let t = i as f32 * t_step;
         let rgb = color_map.compute_pixel(t);
         let x = rect.left() + i as f32;
         painter.line_segment(
@@ -288,9 +293,13 @@ pub fn run_color_editor(
     blit_preview_to_framebuffer(&mut pixels, &preview_buffer);
 
     let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
-        init_egui(&event_loop, &pixels);
+        init_egui(&event_loop, &pixels, &window);
     let mut editor_state = EditorState::default();
 
+    // Repaint scheduling is driven entirely by egui's repaint_after value
+    // (handled in RedrawRequested). We intentionally omit a MainEventsCleared
+    // handler — requesting a redraw there unconditionally would defeat
+    // ControlFlow::WaitUntil and spin the CPU when the UI is idle.
     event_loop.run(move |event, _, control_flow| {
         if let Event::NewEvents(StartCause::Init) = event {
             *control_flow = ControlFlow::Wait;
@@ -373,10 +382,5 @@ pub fn run_color_editor(
                 }
             }
         }
-
-        // Repaint scheduling is driven entirely by egui's repaint_after value
-        // (handled in RedrawRequested above).  Requesting a redraw unconditionally
-        // in MainEventsCleared would defeat ControlFlow::WaitUntil and spin the
-        // CPU at full frame rate even when the UI is idle, so we do nothing here.
     });
 }
