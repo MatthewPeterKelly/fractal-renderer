@@ -148,6 +148,9 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
 
     let color_map = ColorMap::new(keyframes, LinearInterpolator {});
     let steps = rect.width() as u32;
+    // Draw the gradient as adjacent 1-pixel-wide vertical line segments, each
+    // filled with the color at the corresponding query value.  Using line_segment
+    // rather than filled rectangles avoids edge artifacts between strips.
     for i in 0..steps {
         let t = i as f32 / steps.max(1) as f32;
         let rgb = color_map.compute_pixel(t);
@@ -265,7 +268,11 @@ pub fn run_color_editor(
     preview_buffer: Vec<Vec<Rgb<u8>>>,
     keyframes: Vec<ColorMapKeyFrame>,
 ) -> Result<(), pixels::Error> {
-    let event_loop = EventLoop::new();
+    // Use catch_unwind so that platforms without a display server (e.g. bare WSL)
+    // produce a readable error instead of an opaque panic.
+    let event_loop = std::panic::catch_unwind(EventLoop::new).unwrap_or_else(|_| {
+        panic!("Failed to create EventLoop — is a display server available?");
+    });
     let window = WindowBuilder::new()
         .with_title("Color Map Editor")
         .with_inner_size(LogicalSize::new(TOTAL_W as f64, TOTAL_H as f64))
@@ -322,6 +329,16 @@ pub fn run_color_editor(
                     }
                     update_screen_descriptor(&mut screen_descriptor, &window);
                 }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    if pixels
+                        .resize_surface(new_inner_size.width, new_inner_size.height)
+                        .is_err()
+                    {
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
+                    update_screen_descriptor(&mut screen_descriptor, &window);
+                }
                 _ => {}
             }
         }
@@ -343,8 +360,12 @@ pub fn run_color_editor(
                 Ok(repaint_after) => {
                     if repaint_after == Duration::ZERO {
                         window.request_redraw();
+                    } else if let Some(deadline) = Instant::now().checked_add(repaint_after) {
+                        *control_flow = ControlFlow::WaitUntil(deadline);
                     } else {
-                        *control_flow = ControlFlow::WaitUntil(Instant::now() + repaint_after);
+                        // repaint_after is Duration::MAX — egui has no pending
+                        // animation; sleep until the next user event.
+                        *control_flow = ControlFlow::Wait;
                     }
                 }
                 Err(_) => {
@@ -353,8 +374,9 @@ pub fn run_color_editor(
             }
         }
 
-        if let Event::MainEventsCleared = event {
-            window.request_redraw();
-        }
+        // Repaint scheduling is driven entirely by egui's repaint_after value
+        // (handled in RedrawRequested above).  Requesting a redraw unconditionally
+        // in MainEventsCleared would defeat ControlFlow::WaitUntil and spin the
+        // CPU at full frame rate even when the UI is idle, so we do nothing here.
     });
 }
