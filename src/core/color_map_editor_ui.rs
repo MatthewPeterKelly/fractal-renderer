@@ -22,11 +22,16 @@ use winit::window::{Window, WindowBuilder};
 use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
 use crate::core::interpolation::LinearInterpolator;
 
-/// Layout constants for the editor window
-pub const PREVIEW_W: u32 = 640;
-pub const EDITOR_W: u32 = 860;
-pub const TOTAL_W: u32 = PREVIEW_W + EDITOR_W;
-pub const TOTAL_H: u32 = 480;
+/// Minimum preview dimensions — guardrails to ensure the preview pane is usable.
+const MIN_PREVIEW_W: u32 = 200;
+const MIN_PREVIEW_H: u32 = 150;
+
+/// Maximum preview dimensions — prevent absurdly large preview buffers.
+const MAX_PREVIEW_W: u32 = 1920;
+const MAX_PREVIEW_H: u32 = 1080;
+
+/// Fixed width of the editor panel (right-hand side).
+const EDITOR_W: u32 = 860;
 
 /// Persistent UI state for the color map editor
 /// Each field demonstrates a widget type needed for PR2/PR3
@@ -107,10 +112,9 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
 
             // 1. Gradient bar (custom painter — same as before)
             ui.label("Current color map:");
-            let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(EDITOR_W as f32 - 32.0, 44.0),
-                egui::Sense::hover(),
-            );
+            let bar_width = ui.available_width() - 16.0;
+            let (rect, _) = ui
+                .allocate_exact_size(egui::vec2(bar_width.max(100.0), 44.0), egui::Sense::hover());
             paint_gradient_bar(ui.painter(), rect, keyframes);
             ui.separator();
 
@@ -250,17 +254,24 @@ pub fn render_editor_frame(
 
 /// Copy a pre-rendered fractal preview into the left pane of the pixels framebuffer.
 ///
-/// The preview is placed in the top-left corner and clipped to `PREVIEW_W x TOTAL_H`.
+/// The preview is placed in the top-left corner and clipped to `preview_w x preview_h`.
+/// The framebuffer stride is `total_w` (preview width + editor panel width).
 /// If the buffer is smaller than the preview area, only the available pixels are copied
 /// and the remainder stays black. If the buffer is larger, extra pixels are ignored.
 /// This makes the function robust to mismatched fractal resolution in the params file
-/// vs. the editor layout constants.
-fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<Rgb<u8>>]) {
+/// vs. the editor layout.
+fn blit_preview_to_framebuffer(
+    pixels: &mut Pixels,
+    preview_buffer: &[Vec<Rgb<u8>>],
+    preview_w: u32,
+    preview_h: u32,
+    total_w: u32,
+) {
     let frame = pixels.frame_mut();
-    let stride = TOTAL_W as usize;
-    let cols = preview_buffer.len().min(PREVIEW_W as usize);
+    let stride = total_w as usize;
+    let cols = preview_buffer.len().min(preview_w as usize);
     for (x, col) in preview_buffer.iter().enumerate().take(cols) {
-        let rows = col.len().min(TOTAL_H as usize);
+        let rows = col.len().min(preview_h as usize);
         for (y, rgb) in col.iter().enumerate().take(rows) {
             let idx = (y * stride + x) * 4;
             frame[idx] = rgb[0];
@@ -271,7 +282,17 @@ fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<Rgb<u8
     }
 }
 
+/// Clamp a value to a `[min, max]` range.
+fn clamp_dimension(val: u32, min: u32, max: u32) -> u32 {
+    val.max(min).min(max)
+}
+
 /// Open the color map editor window with a pre-rendered fractal preview.
+///
+/// The preview pane dimensions are derived from `preview_resolution` (width, height),
+/// which should come from the fractal's `image_specification.resolution`. The values
+/// are clamped to `[MIN_PREVIEW_W, MAX_PREVIEW_W]` and `[MIN_PREVIEW_H, MAX_PREVIEW_H]`
+/// to ensure a usable layout.
 ///
 /// `preview_buffer` is a column-major grid of RGB pixels (as produced by
 /// `Renderable::render_to_buffer`). It is blitted into the left pane once at startup.
@@ -280,7 +301,13 @@ fn blit_preview_to_framebuffer(pixels: &mut Pixels, preview_buffer: &[Vec<Rgb<u8
 pub fn run_color_editor(
     preview_buffer: Vec<Vec<Rgb<u8>>>,
     keyframes: Vec<ColorMapKeyFrame>,
+    preview_resolution: [u32; 2],
 ) -> Result<(), pixels::Error> {
+    let preview_w = clamp_dimension(preview_resolution[0], MIN_PREVIEW_W, MAX_PREVIEW_W);
+    let preview_h = clamp_dimension(preview_resolution[1], MIN_PREVIEW_H, MAX_PREVIEW_H);
+    let total_w = preview_w + EDITOR_W;
+    let total_h = preview_h;
+
     // Use catch_unwind so that platforms without a display server (e.g. bare WSL)
     // produce a readable error instead of an opaque panic.
     let event_loop = std::panic::catch_unwind(EventLoop::new).unwrap_or_else(|_| {
@@ -288,17 +315,17 @@ pub fn run_color_editor(
     });
     let window = WindowBuilder::new()
         .with_title("Color Map Editor")
-        .with_inner_size(LogicalSize::new(TOTAL_W as f64, TOTAL_H as f64))
+        .with_inner_size(LogicalSize::new(total_w as f64, total_h as f64))
         .build(&event_loop)
         .expect("failed to create window");
 
     let mut pixels = {
         let size = window.inner_size();
         let surface = SurfaceTexture::new(size.width, size.height, &window);
-        Pixels::new(TOTAL_W, TOTAL_H, surface)?
+        Pixels::new(total_w, total_h, surface)?
     };
 
-    blit_preview_to_framebuffer(&mut pixels, &preview_buffer);
+    blit_preview_to_framebuffer(&mut pixels, &preview_buffer, preview_w, preview_h, total_w);
 
     let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
         init_egui(&event_loop, &pixels, &window);
@@ -344,6 +371,21 @@ pub fn run_color_editor(
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
+                    // Resize the internal framebuffer so the scaling renderer
+                    // matches the surface, preventing stale-resolution artifacts.
+                    if size.width > 0 && size.height > 0 {
+                        if pixels.resize_buffer(size.width, size.height).is_err() {
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                        blit_preview_to_framebuffer(
+                            &mut pixels,
+                            &preview_buffer,
+                            preview_w,
+                            preview_h,
+                            size.width,
+                        );
+                    }
                     update_screen_descriptor(&mut screen_descriptor, &window);
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
@@ -353,6 +395,22 @@ pub fn run_color_editor(
                     {
                         *control_flow = ControlFlow::Exit;
                         return;
+                    }
+                    if new_inner_size.width > 0 && new_inner_size.height > 0 {
+                        if pixels
+                            .resize_buffer(new_inner_size.width, new_inner_size.height)
+                            .is_err()
+                        {
+                            *control_flow = ControlFlow::Exit;
+                            return;
+                        }
+                        blit_preview_to_framebuffer(
+                            &mut pixels,
+                            &preview_buffer,
+                            preview_w,
+                            preview_h,
+                            new_inner_size.width,
+                        );
                     }
                     update_screen_descriptor(&mut screen_descriptor, &window);
                 }

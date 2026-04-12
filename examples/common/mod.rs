@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use fractal_renderer::{
     cli::{color_swatch::generate_color_swatch, explore::explore_fractal, render::render_fractal},
     core::{
-        color_map_editor_ui::{run_color_editor, PREVIEW_W, TOTAL_H},
+        color_map_editor_ui::run_color_editor,
         file_io::FilePrefix,
         image_utils::{create_buffer, Renderable},
     },
@@ -139,15 +139,14 @@ pub fn color_editor_example_from_string(example_name: &str) {
     let fractal_params: FractalParams =
         parse_params_json_or_panic(example_name, &params_path, &json_text);
 
-    let (keyframes, preview_buffer) = match fractal_params {
+    let (keyframes, preview_buffer, resolution) = match fractal_params {
         FractalParams::Mandelbrot(params) => {
             let kf = params.color_map.keyframes.clone();
-            let mut preview_params = (*params).clone();
-            preview_params.image_specification.resolution = [PREVIEW_W, TOTAL_H];
-            let renderer = QuadraticMap::new(preview_params);
-            let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &[PREVIEW_W, TOTAL_H]);
+            let resolution = params.image_specification.resolution;
+            let renderer = QuadraticMap::new((*params).clone());
+            let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &resolution);
             renderer.render_to_buffer(&mut buf);
-            (kf, buf)
+            (kf, buf, resolution)
         }
         _ => panic!(
             "color_editor_example '{}' requires Mandelbrot params",
@@ -155,5 +154,5 @@ pub fn color_editor_example_from_string(example_name: &str) {
         ),
     };
 
-    run_color_editor(preview_buffer, keyframes).unwrap();
+    run_color_editor(preview_buffer, keyframes, resolution).unwrap();
 }
