@@ -234,6 +234,9 @@ pub fn render_editor_frame(
     let mut repaint_after = Duration::from_secs(1);
 
     pixels.render_with(|encoder, render_target, context| {
+        // Render the black framebuffer as a background clear
+        context.scaling_renderer.render(encoder, render_target);
+
         // Build egui frame
         let raw_input = egui.state.take_egui_input(window);
         let egui::FullOutput {
@@ -262,13 +265,13 @@ pub fn render_editor_frame(
             egui.screen_descriptor,
         );
 
-        // Render egui (LoadOp::Clear — egui owns the entire render target)
+        // Composite egui on top of the background (LoadOp::Load preserves it)
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("egui render pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: render_target,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Load,
                     store: true,
                 },
                 resolve_target: None,
@@ -321,12 +324,13 @@ pub fn run_color_editor(
         .build(&event_loop)
         .expect("failed to create window");
 
-    // The pixels crate is used only for wgpu surface management. The 1x1
-    // framebuffer is never drawn — egui owns the entire render target.
+    // The pixels framebuffer is kept at the window dimensions but left black —
+    // the scaling_renderer draws it as a solid black background, and egui
+    // composites the preview texture and UI on top via LoadOp::Load.
     let mut pixels = {
         let size = window.inner_size();
         let surface = SurfaceTexture::new(size.width, size.height, &window);
-        Pixels::new(1, 1, surface)?
+        Pixels::new(initial_w, initial_h, surface)?
     };
 
     let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
