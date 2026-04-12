@@ -371,22 +371,10 @@ pub fn run_color_editor(
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
-                    // Resize the internal framebuffer so the scaling renderer
-                    // matches the surface, preventing stale-resolution artifacts.
-                    if size.width > 0 && size.height > 0 {
-                        if pixels.resize_buffer(size.width, size.height).is_err() {
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                        blit_preview_to_framebuffer(
-                            &mut pixels,
-                            &preview_buffer,
-                            preview_w,
-                            preview_h,
-                            size.width,
-                        );
-                    }
                     update_screen_descriptor(&mut screen_descriptor, &window);
+                    // Force an immediate redraw so egui repaints at the new
+                    // surface size, preventing stale panel-border artifacts.
+                    window.request_redraw();
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                     if pixels
@@ -396,23 +384,8 @@ pub fn run_color_editor(
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
-                    if new_inner_size.width > 0 && new_inner_size.height > 0 {
-                        if pixels
-                            .resize_buffer(new_inner_size.width, new_inner_size.height)
-                            .is_err()
-                        {
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                        blit_preview_to_framebuffer(
-                            &mut pixels,
-                            &preview_buffer,
-                            preview_w,
-                            preview_h,
-                            new_inner_size.width,
-                        );
-                    }
                     update_screen_descriptor(&mut screen_descriptor, &window);
+                    window.request_redraw();
                 }
                 _ => {}
             }
