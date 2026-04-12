@@ -9,4 +9,4 @@
 Cargo.lock
 
 # Editor:
-.vscode\settings.json
+.vscode/**/*
