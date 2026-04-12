@@ -22,14 +22,6 @@ use winit::window::{Window, WindowBuilder};
 use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
 use crate::core::interpolation::LinearInterpolator;
 
-/// Minimum preview dimensions — guardrails to ensure the preview pane is usable.
-const MIN_PREVIEW_W: u32 = 200;
-const MIN_PREVIEW_H: u32 = 150;
-
-/// Maximum preview dimensions — prevent absurdly large preview buffers.
-const MAX_PREVIEW_W: u32 = 1920;
-const MAX_PREVIEW_H: u32 = 1080;
-
 /// Fixed width of the editor panel (right-hand side).
 const EDITOR_W: u32 = 860;
 
@@ -102,8 +94,37 @@ pub fn update_screen_descriptor(screen_descriptor: &mut ScreenDescriptor, window
     screen_descriptor.pixels_per_point = window.scale_factor() as f32;
 }
 
+/// Convert a column-major `Vec<Vec<Rgb<u8>>>` preview buffer to a row-major
+/// `egui::ColorImage` suitable for uploading as a GPU texture.
+///
+/// The source buffer uses `buffer[x][y]` indexing (column-major, as produced by
+/// `Renderable::render_to_buffer`). The output `ColorImage` is row-major RGBA,
+/// which is what egui expects.
+fn buffer_to_color_image(buffer: &[Vec<Rgb<u8>>]) -> egui::ColorImage {
+    let width = buffer.len();
+    let height = buffer.first().map_or(0, |col| col.len());
+    // Transpose from column-major (buffer[x][y]) to row-major (egui expects
+    // pixels in left-to-right, top-to-bottom order).
+    let pixels: Vec<egui::Color32> = (0..height)
+        .flat_map(|y| {
+            buffer
+                .iter()
+                .map(move |col| egui::Color32::from_rgb(col[y][0], col[y][1], col[y][2]))
+        })
+        .collect();
+    egui::ColorImage {
+        size: [width, height],
+        pixels,
+    }
+}
+
 /// Build the editor UI with hello-world widgets
-fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[ColorMapKeyFrame]) {
+fn build_editor_ui(
+    ctx: &egui::Context,
+    state: &mut EditorState,
+    keyframes: &[ColorMapKeyFrame],
+    preview_texture: &egui::TextureHandle,
+) {
     egui::SidePanel::right("editor")
         .exact_width(EDITOR_W as f32)
         .show(ctx, |ui| {
@@ -149,6 +170,24 @@ fn build_editor_ui(ctx: &egui::Context, state: &mut EditorState, keyframes: &[Co
                 );
             });
         });
+
+    // Preview panel: fills the remaining space to the left of the editor.
+    // The fractal image is scaled to fit while preserving its aspect ratio.
+    egui::CentralPanel::default().show(ctx, |ui| {
+        let available = ui.available_size();
+        let aspect = preview_texture.aspect_ratio();
+        let (display_w, display_h) = if available.x / available.y.max(1.0) > aspect {
+            (available.y * aspect, available.y)
+        } else {
+            (available.x, available.x / aspect.max(0.001))
+        };
+        ui.centered_and_justified(|ui| {
+            ui.add(egui::Image::new(
+                preview_texture,
+                egui::vec2(display_w, display_h),
+            ));
+        });
+    });
 }
 
 /// Paint a gradient bar showing the color map
@@ -190,14 +229,12 @@ pub fn render_editor_frame(
     window: &Window,
     editor_state: &mut EditorState,
     keyframes: &[ColorMapKeyFrame],
+    preview_texture: &egui::TextureHandle,
 ) -> Result<Duration, pixels::Error> {
     let mut repaint_after = Duration::from_secs(1);
 
     pixels.render_with(|encoder, render_target, context| {
-        // 1. Blit fractal pixels from the framebuffer to the render target
-        context.scaling_renderer.render(encoder, render_target);
-
-        // 2. Build egui frame
+        // Build egui frame
         let raw_input = egui.state.take_egui_input(window);
         let egui::FullOutput {
             platform_output,
@@ -205,14 +242,14 @@ pub fn render_editor_frame(
             textures_delta,
             shapes,
         } = egui.ctx.run(raw_input, |ctx| {
-            build_editor_ui(ctx, editor_state, keyframes);
+            build_editor_ui(ctx, editor_state, keyframes, preview_texture);
         });
         repaint_after = egui_repaint;
         egui.state
             .handle_platform_output(window, egui.ctx, platform_output);
         let paint_jobs = egui.ctx.tessellate(shapes);
 
-        // 3. Upload egui resources
+        // Upload egui resources
         for (id, delta) in &textures_delta.set {
             egui.renderer
                 .update_texture(&context.device, &context.queue, *id, delta);
@@ -225,13 +262,13 @@ pub fn render_editor_frame(
             egui.screen_descriptor,
         );
 
-        // 4. Composite egui over the frame (LoadOp::Load = no clear)
+        // Render egui (LoadOp::Clear — egui owns the entire render target)
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("egui render pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: render_target,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: true,
                 },
                 resolve_target: None,
@@ -242,7 +279,7 @@ pub fn render_editor_frame(
             .render(&mut rpass, &paint_jobs, egui.screen_descriptor);
         drop(rpass);
 
-        // 5. Free egui textures
+        // Free egui textures
         for id in &textures_delta.free {
             egui.renderer.free_texture(id);
         }
@@ -252,61 +289,26 @@ pub fn render_editor_frame(
     Ok(repaint_after)
 }
 
-/// Copy a pre-rendered fractal preview into the left pane of the pixels framebuffer.
-///
-/// The preview is placed in the top-left corner and clipped to `preview_w x preview_h`.
-/// The framebuffer stride is `total_w` (preview width + editor panel width).
-/// If the buffer is smaller than the preview area, only the available pixels are copied
-/// and the remainder stays black. If the buffer is larger, extra pixels are ignored.
-/// This makes the function robust to mismatched fractal resolution in the params file
-/// vs. the editor layout.
-fn blit_preview_to_framebuffer(
-    pixels: &mut Pixels,
-    preview_buffer: &[Vec<Rgb<u8>>],
-    preview_w: u32,
-    preview_h: u32,
-    total_w: u32,
-) {
-    let frame = pixels.frame_mut();
-    let stride = total_w as usize;
-    let cols = preview_buffer.len().min(preview_w as usize);
-    for (x, col) in preview_buffer.iter().enumerate().take(cols) {
-        let rows = col.len().min(preview_h as usize);
-        for (y, rgb) in col.iter().enumerate().take(rows) {
-            let idx = (y * stride + x) * 4;
-            frame[idx] = rgb[0];
-            frame[idx + 1] = rgb[1];
-            frame[idx + 2] = rgb[2];
-            frame[idx + 3] = 255;
-        }
-    }
-}
-
-/// Clamp a value to a `[min, max]` range.
-fn clamp_dimension(val: u32, min: u32, max: u32) -> u32 {
-    val.max(min).min(max)
-}
-
 /// Open the color map editor window with a pre-rendered fractal preview.
 ///
-/// The preview pane dimensions are derived from `preview_resolution` (width, height),
-/// which should come from the fractal's `image_specification.resolution`. The values
-/// are clamped to `[MIN_PREVIEW_W, MAX_PREVIEW_W]` and `[MIN_PREVIEW_H, MAX_PREVIEW_H]`
-/// to ensure a usable layout.
+/// The preview is displayed as an egui-managed texture in a `CentralPanel`, while
+/// the editor controls live in a `SidePanel`. egui owns the entire window layout,
+/// so there are no coordinate-space mismatches on resize.
 ///
 /// `preview_buffer` is a column-major grid of RGB pixels (as produced by
-/// `Renderable::render_to_buffer`). It is blitted into the left pane once at startup.
+/// `Renderable::render_to_buffer`). It is converted to an egui texture at startup.
 /// `keyframes` are displayed read-only in the gradient bar; the demo widgets are
 /// independent and do not yet feed back into the renderer.
+///
+/// `preview_resolution` sets the initial window size; egui handles dynamic resizing
+/// from there.
 pub fn run_color_editor(
     preview_buffer: Vec<Vec<Rgb<u8>>>,
     keyframes: Vec<ColorMapKeyFrame>,
     preview_resolution: [u32; 2],
 ) -> Result<(), pixels::Error> {
-    let preview_w = clamp_dimension(preview_resolution[0], MIN_PREVIEW_W, MAX_PREVIEW_W);
-    let preview_h = clamp_dimension(preview_resolution[1], MIN_PREVIEW_H, MAX_PREVIEW_H);
-    let total_w = preview_w + EDITOR_W;
-    let total_h = preview_h;
+    let initial_w = preview_resolution[0] + EDITOR_W;
+    let initial_h = preview_resolution[1];
 
     // Use catch_unwind so that platforms without a display server (e.g. bare WSL)
     // produce a readable error instead of an opaque panic.
@@ -315,20 +317,28 @@ pub fn run_color_editor(
     });
     let window = WindowBuilder::new()
         .with_title("Color Map Editor")
-        .with_inner_size(LogicalSize::new(total_w as f64, total_h as f64))
+        .with_inner_size(LogicalSize::new(initial_w as f64, initial_h as f64))
         .build(&event_loop)
         .expect("failed to create window");
 
+    // The pixels crate is used only for wgpu surface management. The 1x1
+    // framebuffer is never drawn — egui owns the entire render target.
     let mut pixels = {
         let size = window.inner_size();
         let surface = SurfaceTexture::new(size.width, size.height, &window);
-        Pixels::new(total_w, total_h, surface)?
+        Pixels::new(1, 1, surface)?
     };
-
-    blit_preview_to_framebuffer(&mut pixels, &preview_buffer, preview_w, preview_h, total_w);
 
     let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
         init_egui(&event_loop, &pixels, &window);
+
+    let preview_image = buffer_to_color_image(&preview_buffer);
+    let preview_texture = egui_ctx.load_texture(
+        "fractal_preview",
+        preview_image,
+        egui::TextureOptions::LINEAR,
+    );
+
     let mut editor_state = EditorState::default();
 
     // Repaint scheduling is driven entirely by egui's repaint_after value
@@ -404,6 +414,7 @@ pub fn run_color_editor(
                 &window,
                 &mut editor_state,
                 &keyframes,
+                &preview_texture,
             ) {
                 Ok(repaint_after) => {
                     if repaint_after == Duration::ZERO {
@@ -422,4 +433,42 @@ pub fn run_color_editor(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_buffer_to_color_image_transposition() {
+        // 3 columns x 2 rows (column-major: buffer[x][y])
+        let buffer = vec![
+            vec![Rgb([10, 20, 30]), Rgb([40, 50, 60])],
+            vec![Rgb([70, 80, 90]), Rgb([100, 110, 120])],
+            vec![Rgb([130, 140, 150]), Rgb([160, 170, 180])],
+        ];
+
+        let image = buffer_to_color_image(&buffer);
+
+        assert_eq!(image.size, [3, 2]);
+        assert_eq!(image.pixels.len(), 6);
+
+        // Row 0: buffer[0][0], buffer[1][0], buffer[2][0]
+        assert_eq!(image.pixels[0], egui::Color32::from_rgb(10, 20, 30));
+        assert_eq!(image.pixels[1], egui::Color32::from_rgb(70, 80, 90));
+        assert_eq!(image.pixels[2], egui::Color32::from_rgb(130, 140, 150));
+
+        // Row 1: buffer[0][1], buffer[1][1], buffer[2][1]
+        assert_eq!(image.pixels[3], egui::Color32::from_rgb(40, 50, 60));
+        assert_eq!(image.pixels[4], egui::Color32::from_rgb(100, 110, 120));
+        assert_eq!(image.pixels[5], egui::Color32::from_rgb(160, 170, 180));
+    }
+
+    #[test]
+    fn test_buffer_to_color_image_empty() {
+        let buffer: Vec<Vec<Rgb<u8>>> = vec![];
+        let image = buffer_to_color_image(&buffer);
+        assert_eq!(image.size, [0, 0]);
+        assert!(image.pixels.is_empty());
+    }
 }
