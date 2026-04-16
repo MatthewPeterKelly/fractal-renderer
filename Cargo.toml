@@ -11,9 +11,8 @@ approx = "0.5"
 bincode = "1.3"
 chrono = "0.4"
 clap = {version = "4.3.8", features = [ "derive" ]}
+eframe = { version = "0.22", default-features = false, features = ["wgpu"] }
 egui = "0.22"
-egui-wgpu = "0.22"
-egui-winit = "0.22"
 glob = "0.3.1"
 image = "0.24"
 iter_num_tools = "0.7.1"
