@@ -1,4 +1,4 @@
-//! Color map editor UI using egui.
+//! Color map editor UI using egui + eframe.
 //!
 //! This module provides the infrastructure for an interactive color map editor.
 //! The public API is consumed by example binaries (e.g. `color-gui-demo`) and
@@ -6,18 +6,7 @@
 //! nothing in the main binary calls into this module, so suppress dead-code warnings.
 #![allow(dead_code)]
 
-use std::time::{Duration, Instant};
-
-use egui_wgpu::renderer::Renderer as EguiRenderer;
-use egui_wgpu::renderer::ScreenDescriptor;
-use egui_winit::State as EguiState;
 use image::Rgb;
-use pixels::wgpu;
-use pixels::{Pixels, SurfaceTexture};
-use winit::dpi::LogicalSize;
-use winit::event::{ElementState, Event, StartCause, VirtualKeyCode, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Window, WindowBuilder};
 
 use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
 use crate::core::interpolation::LinearInterpolator;
@@ -53,45 +42,65 @@ impl Default for EditorState {
     }
 }
 
-/// Bundled egui renderer state for cleaner function signatures
-pub struct EguiRenderContext<'a> {
-    pub ctx: &'a egui::Context,
-    pub state: &'a mut EguiState,
-    pub renderer: &'a mut EguiRenderer,
-    pub screen_descriptor: &'a ScreenDescriptor,
+/// Application state for the eframe-based color editor.
+struct ColorEditorApp {
+    /// Mutable widget state (sliders, text fields, color picker, etc.)
+    editor_state: EditorState,
+    /// Color map keyframes displayed in the gradient bar.
+    keyframes: Vec<ColorMapKeyFrame>,
+    /// GPU texture containing the fractal preview image.
+    preview_texture: egui::TextureHandle,
 }
 
-/// Initialize egui context and renderer for the color map editor
-pub fn init_egui(
-    event_loop: &EventLoop<()>,
-    pixels: &Pixels,
-    window: &Window,
-) -> (egui::Context, EguiState, EguiRenderer, ScreenDescriptor) {
-    let egui_ctx = egui::Context::default();
-    let mut egui_state = EguiState::new(event_loop);
-    egui_state.set_max_texture_side(pixels.device().limits().max_texture_dimension_2d as usize);
+impl ColorEditorApp {
+    /// Create the app, converting the preview buffer to an egui texture and
+    /// configuring the visual theme.
+    fn new(
+        cc: &eframe::CreationContext,
+        preview_buffer: &[Vec<Rgb<u8>>],
+        keyframes: Vec<ColorMapKeyFrame>,
+    ) -> Self {
+        // Black panel fill matches the clear color, eliminating sub-pixel gap
+        // artifacts at panel boundaries (especially visible at non-integer DPI
+        // or fullscreen). Disabling bg_stroke removes the 1px separator lines
+        // egui draws between panels by default.
+        let mut visuals = egui::Visuals::dark();
+        visuals.panel_fill = egui::Color32::BLACK;
+        visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
+        cc.egui_ctx.set_visuals(visuals);
 
-    let egui_renderer = EguiRenderer::new(
-        pixels.device(),
-        pixels.render_texture_format(),
-        None, // no depth buffer
-        1,    // msaa_samples
-    );
+        let image = buffer_to_color_image(preview_buffer);
+        let texture =
+            cc.egui_ctx
+                .load_texture("fractal_preview", image, egui::TextureOptions::LINEAR);
 
-    let size = window.inner_size();
-    let screen_descriptor = ScreenDescriptor {
-        size_in_pixels: [size.width, size.height],
-        pixels_per_point: window.scale_factor() as f32,
-    };
-
-    (egui_ctx, egui_state, egui_renderer, screen_descriptor)
+        Self {
+            editor_state: EditorState::default(),
+            keyframes,
+            preview_texture: texture,
+        }
+    }
 }
 
-/// Update screen descriptor on window resize
-pub fn update_screen_descriptor(screen_descriptor: &mut ScreenDescriptor, window: &Window) {
-    let size = window.inner_size();
-    screen_descriptor.size_in_pixels = [size.width, size.height];
-    screen_descriptor.pixels_per_point = window.scale_factor() as f32;
+impl eframe::App for ColorEditorApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.0, 0.0, 0.0, 1.0]
+    }
+
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape))
+            || ctx.input(|i| i.key_pressed(egui::Key::Q))
+        {
+            frame.close();
+        }
+
+        build_editor_ui(
+            ctx,
+            &mut self.editor_state,
+            &self.keyframes,
+            &self.preview_texture,
+        );
+    }
 }
 
 /// Convert a column-major `Vec<Vec<Rgb<u8>>>` preview buffer to a row-major
@@ -219,232 +228,38 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
     }
 }
 
-/// Render a frame with egui composited on top of the fractal preview.
-///
-/// Returns the `Duration` that egui requests before the next repaint. A zero duration
-/// means egui wants an immediate repaint (e.g. animation or hover); a longer duration
-/// means the caller can sleep until then if nothing else requires a redraw.
-pub fn render_editor_frame(
-    pixels: &mut Pixels,
-    egui: &mut EguiRenderContext,
-    window: &Window,
-    editor_state: &mut EditorState,
-    keyframes: &[ColorMapKeyFrame],
-    preview_texture: &egui::TextureHandle,
-) -> Result<Duration, pixels::Error> {
-    let mut repaint_after = Duration::from_secs(1);
-
-    pixels.render_with(|encoder, render_target, context| {
-        // Build egui frame
-        let raw_input = egui.state.take_egui_input(window);
-        let egui::FullOutput {
-            platform_output,
-            repaint_after: egui_repaint,
-            textures_delta,
-            shapes,
-        } = egui.ctx.run(raw_input, |ctx| {
-            build_editor_ui(ctx, editor_state, keyframes, preview_texture);
-        });
-        repaint_after = egui_repaint;
-        egui.state
-            .handle_platform_output(window, egui.ctx, platform_output);
-        let paint_jobs = egui.ctx.tessellate(shapes);
-
-        // Upload egui resources
-        for (id, delta) in &textures_delta.set {
-            egui.renderer
-                .update_texture(&context.device, &context.queue, *id, delta);
-        }
-        egui.renderer.update_buffers(
-            &context.device,
-            &context.queue,
-            encoder,
-            &paint_jobs,
-            egui.screen_descriptor,
-        );
-
-        // egui render pass — clears to black and draws all panels
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("egui render pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: render_target,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
-                },
-                resolve_target: None,
-            })],
-            depth_stencil_attachment: None,
-        });
-        egui.renderer
-            .render(&mut rpass, &paint_jobs, egui.screen_descriptor);
-        drop(rpass);
-
-        // Free egui textures
-        for id in &textures_delta.free {
-            egui.renderer.free_texture(id);
-        }
-        Ok(())
-    })?;
-
-    Ok(repaint_after)
-}
-
 /// Open the color map editor window with a pre-rendered fractal preview.
 ///
 /// The preview is displayed as an egui-managed texture in a `CentralPanel`, while
-/// the editor controls live in a `SidePanel`. egui owns the entire window layout,
-/// so there are no coordinate-space mismatches on resize.
+/// the editor controls live in a `SidePanel`. eframe handles window management,
+/// GPU rendering, input routing, DPI scaling, and resize — all cross-platform.
 ///
 /// `preview_buffer` is a column-major grid of RGB pixels (as produced by
 /// `Renderable::render_to_buffer`). It is converted to an egui texture at startup.
 /// `keyframes` are displayed read-only in the gradient bar; the demo widgets are
 /// independent and do not yet feed back into the renderer.
 ///
-/// `preview_resolution` sets the initial window size; egui handles dynamic resizing
-/// from there.
+/// `preview_resolution` sets the initial window size; eframe handles dynamic
+/// resizing from there.
 pub fn run_color_editor(
     preview_buffer: Vec<Vec<Rgb<u8>>>,
     keyframes: Vec<ColorMapKeyFrame>,
     preview_resolution: [u32; 2],
-) -> Result<(), pixels::Error> {
-    let initial_w = preview_resolution[0] + EDITOR_W;
-    let initial_h = preview_resolution[1];
+) -> eframe::Result<()> {
+    let initial_w = preview_resolution[0] as f32 + EDITOR_W as f32;
+    let initial_h = preview_resolution[1] as f32;
 
-    // Use catch_unwind so that platforms without a display server (e.g. bare WSL)
-    // produce a readable error instead of an opaque panic.
-    let event_loop = std::panic::catch_unwind(EventLoop::new).unwrap_or_else(|_| {
-        panic!("Failed to create EventLoop — is a display server available?");
-    });
-    let window = WindowBuilder::new()
-        .with_title("Color Map Editor")
-        .with_inner_size(LogicalSize::new(initial_w as f64, initial_h as f64))
-        .build(&event_loop)
-        .expect("failed to create window");
-
-    // The pixels framebuffer is unused for rendering — egui owns the entire
-    // render target via LoadOp::Clear(BLACK). We keep the framebuffer at the
-    // initial window dimensions because Pixels::new(1, 1, ..) caused rendering
-    // issues in earlier experiments. The memory cost is negligible.
-    let mut pixels = {
-        let size = window.inner_size();
-        let surface = SurfaceTexture::new(size.width, size.height, &window);
-        Pixels::new(initial_w, initial_h, surface)?
+    let options = eframe::NativeOptions {
+        initial_window_size: Some(egui::vec2(initial_w, initial_h)),
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
     };
 
-    let (egui_ctx, mut egui_state, mut egui_renderer, mut screen_descriptor) =
-        init_egui(&event_loop, &pixels, &window);
-
-    // Use black panel fill so panel backgrounds match the LoadOp::Clear(BLACK)
-    // background. This eliminates sub-pixel gap artifacts at panel boundaries,
-    // especially on fullscreen / non-integer DPI. Disabling bg_stroke removes
-    // the 1px separator lines that egui draws between panels by default.
-    let mut visuals = egui::Visuals::dark();
-    visuals.panel_fill = egui::Color32::BLACK;
-    visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
-    egui_ctx.set_visuals(visuals);
-
-    let preview_image = buffer_to_color_image(&preview_buffer);
-    let preview_texture = egui_ctx.load_texture(
-        "fractal_preview",
-        preview_image,
-        egui::TextureOptions::LINEAR,
-    );
-
-    let mut editor_state = EditorState::default();
-
-    // Repaint scheduling is driven entirely by egui's repaint_after value
-    // (handled in RedrawRequested). We intentionally omit a MainEventsCleared
-    // handler — requesting a redraw there unconditionally would defeat
-    // ControlFlow::WaitUntil and spin the CPU when the UI is idle.
-    event_loop.run(move |event, _, control_flow| {
-        if let Event::NewEvents(StartCause::Init) = event {
-            *control_flow = ControlFlow::Wait;
-        }
-
-        if let Event::WindowEvent {
-            event: ref window_event,
-            ..
-        } = event
-        {
-            let response = egui_state.on_event(&egui_ctx, window_event);
-            if response.consumed {
-                window.request_redraw();
-                return;
-            }
-
-            match window_event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                WindowEvent::KeyboardInput { input, .. } => {
-                    if input.state == ElementState::Pressed {
-                        if let Some(VirtualKeyCode::Escape | VirtualKeyCode::Q) =
-                            input.virtual_keycode
-                        {
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                    }
-                }
-                WindowEvent::Resized(size) => {
-                    if pixels.resize_surface(size.width, size.height).is_err() {
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
-                    update_screen_descriptor(&mut screen_descriptor, &window);
-                    // Force an immediate redraw so egui repaints at the new
-                    // surface size, preventing stale panel-border artifacts.
-                    window.request_redraw();
-                }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    if pixels
-                        .resize_surface(new_inner_size.width, new_inner_size.height)
-                        .is_err()
-                    {
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
-                    update_screen_descriptor(&mut screen_descriptor, &window);
-                    window.request_redraw();
-                }
-                _ => {}
-            }
-        }
-
-        if let Event::RedrawRequested(_) = event {
-            let mut egui_render = EguiRenderContext {
-                ctx: &egui_ctx,
-                state: &mut egui_state,
-                renderer: &mut egui_renderer,
-                screen_descriptor: &screen_descriptor,
-            };
-            match render_editor_frame(
-                &mut pixels,
-                &mut egui_render,
-                &window,
-                &mut editor_state,
-                &keyframes,
-                &preview_texture,
-            ) {
-                Ok(repaint_after) => {
-                    if repaint_after == Duration::ZERO {
-                        window.request_redraw();
-                    } else if let Some(deadline) = Instant::now().checked_add(repaint_after) {
-                        *control_flow = ControlFlow::WaitUntil(deadline);
-                    } else {
-                        // repaint_after is Duration::MAX — egui has no pending
-                        // animation; sleep until the next user event.
-                        *control_flow = ControlFlow::Wait;
-                    }
-                }
-                Err(_) => {
-                    *control_flow = ControlFlow::Exit;
-                }
-            }
-        }
-    });
+    eframe::run_native(
+        "Color Map Editor",
+        options,
+        Box::new(move |cc| Box::new(ColorEditorApp::new(cc, &preview_buffer, keyframes))),
+    )
 }
 
 #[cfg(test)]
