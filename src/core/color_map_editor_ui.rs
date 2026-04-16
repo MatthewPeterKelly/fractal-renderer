@@ -135,8 +135,14 @@ fn build_editor_ui(
     preview_texture: &egui::TextureHandle,
 ) {
     egui::SidePanel::right("editor")
-        .exact_width(EDITOR_W as f32)
+        .default_width(EDITOR_W as f32)
+        .width_range(200.0..=1200.0)
         .show_separator_line(false)
+        .frame(
+            egui::Frame::none()
+                .fill(egui::Color32::BLACK)
+                .inner_margin(egui::style::Margin::symmetric(8.0, 2.0)),
+        )
         .show(ctx, |ui| {
             ui.heading("Color Map Editor");
             ui.separator();
@@ -183,21 +189,27 @@ fn build_editor_ui(
 
     // Preview panel: fills the remaining space to the left of the editor.
     // The fractal image is scaled to fit while preserving its aspect ratio.
-    egui::CentralPanel::default().show(ctx, |ui| {
-        let available = ui.available_size();
-        let aspect = preview_texture.aspect_ratio();
-        let (display_w, display_h) = if available.x / available.y.max(1.0) > aspect {
-            (available.y * aspect, available.y)
-        } else {
-            (available.x, available.x / aspect.max(0.001))
-        };
-        ui.centered_and_justified(|ui| {
-            ui.add(egui::Image::new(
-                preview_texture,
-                egui::vec2(display_w, display_h),
-            ));
+    egui::CentralPanel::default()
+        .frame(
+            egui::Frame::none()
+                .fill(egui::Color32::BLACK)
+                .inner_margin(egui::style::Margin::same(8.0)),
+        )
+        .show(ctx, |ui| {
+            let available = ui.available_size();
+            let aspect = preview_texture.aspect_ratio();
+            let (display_w, display_h) = if available.x / available.y.max(1.0) > aspect {
+                (available.y * aspect, available.y)
+            } else {
+                (available.x, available.x / aspect.max(0.001))
+            };
+            ui.centered_and_justified(|ui| {
+                ui.add(egui::Image::new(
+                    preview_texture,
+                    egui::vec2(display_w, display_h),
+                ));
+            });
         });
-    });
 }
 
 /// Paint a gradient bar showing the color map
