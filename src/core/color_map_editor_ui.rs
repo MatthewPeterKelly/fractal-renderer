@@ -100,6 +100,13 @@ impl eframe::App for ColorEditorApp {
             &self.keyframes,
             &self.preview_texture,
         );
+
+        // Defensive repaint: on some platforms (notably XWayland/WSL) the
+        // windowing backend can silently drop resize / DPI-change events.
+        // A continuous repaint cycle lets the surface re-poll its size and
+        // self-correct on the next frame. Cost is modest since egui still
+        // short-circuits painting when nothing has changed.
+        ctx.request_repaint();
     }
 }
 
@@ -223,19 +230,23 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
 
     let color_map = ColorMap::new(keyframes, LinearInterpolator {});
     let steps = (rect.width() as u32).max(2);
-    // Render the gradient as adjacent 1-pixel-wide vertical line segments, each
-    // filled with the interpolated color at that position. The query parameter t
-    // is linearly spaced from 0.0 to 1.0 inclusive, so the first and last columns
-    // show the exact boundary keyframe colors. We compute the reciprocal of
-    // (steps - 1) once to avoid a division per iteration.
+    // Render the gradient as adjacent filled rectangles rather than 1px strokes:
+    // at fractional DPI, 1-logical-pixel strokes anti-alias across two physical
+    // pixels, leaving visible sub-pixel gaps between strips. Contiguous rects
+    // avoid the artifact — each strip's right edge is the next strip's left edge.
+    // The query parameter t is linearly spaced from 0.0 to 1.0 inclusive, so the
+    // first and last strips show the exact boundary keyframe colors.
     let t_step = 1.0 / (steps - 1) as f32;
+    let step_w = rect.width() / steps as f32;
     for i in 0..steps {
         let t = i as f32 * t_step;
         let rgb = color_map.compute_pixel(t);
-        let x = rect.left() + i as f32;
-        painter.line_segment(
-            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2])),
+        let x0 = rect.left() + i as f32 * step_w;
+        let x1 = rect.left() + (i + 1) as f32 * step_w;
+        painter.rect_filled(
+            egui::Rect::from_x_y_ranges(x0..=x1, rect.top()..=rect.bottom()),
+            0.0,
+            egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
         );
     }
 }
