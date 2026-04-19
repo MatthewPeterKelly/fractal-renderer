@@ -61,6 +61,32 @@ pub fn render_example_from_string(example_name: &str) {
     });
 }
 
+#[allow(dead_code)]
+pub fn color_editor_example_from_string(example_name: &str) {
+    let params_path = example_params_path(example_name);
+    let json_text = read_params_file_or_panic(example_name, &params_path);
+    let fractal_params: FractalParams =
+        parse_params_json_or_panic(example_name, &params_path, &json_text);
+
+    // Early prototype. Eventually this will support the same set of fractal types as `explore`.
+    let (keyframes, preview_buffer, resolution) = match fractal_params {
+        FractalParams::Mandelbrot(params) => {
+            let kf = params.color_map.keyframes.clone();
+            let resolution = params.image_specification.resolution;
+            let renderer = QuadraticMap::new((*params).clone());
+            let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &resolution);
+            renderer.render_to_buffer(&mut buf);
+            (kf, buf, resolution)
+        }
+        _ => panic!(
+            "color_editor_example '{}' requires Mandelbrot params",
+            example_name
+        ),
+    };
+
+    run_color_editor(preview_buffer, keyframes, resolution).unwrap();
+}
+
 fn example_params_path(example_name: &str) -> PathBuf {
     PathBuf::from("examples")
         .join(example_name)
@@ -130,29 +156,4 @@ pub fn color_swatch_example_from_string(example_name: &str) {
             file_base: String::from("result"),
         },
     );
-}
-
-#[allow(dead_code)]
-pub fn color_editor_example_from_string(example_name: &str) {
-    let params_path = example_params_path(example_name);
-    let json_text = read_params_file_or_panic(example_name, &params_path);
-    let fractal_params: FractalParams =
-        parse_params_json_or_panic(example_name, &params_path, &json_text);
-
-    let (keyframes, preview_buffer, resolution) = match fractal_params {
-        FractalParams::Mandelbrot(params) => {
-            let kf = params.color_map.keyframes.clone();
-            let resolution = params.image_specification.resolution;
-            let renderer = QuadraticMap::new((*params).clone());
-            let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &resolution);
-            renderer.render_to_buffer(&mut buf);
-            (kf, buf, resolution)
-        }
-        _ => panic!(
-            "color_editor_example '{}' requires Mandelbrot params",
-            example_name
-        ),
-    };
-
-    run_color_editor(preview_buffer, keyframes, resolution).unwrap();
 }

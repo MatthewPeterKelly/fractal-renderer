@@ -15,19 +15,18 @@ use crate::core::interpolation::LinearInterpolator;
 const EDITOR_W: u32 = 860;
 
 /// Persistent UI state for the color map editor
-/// Each field demonstrates a widget type needed for PR2/PR3
+/// Each field demonstrates a different widget type.
+/// This is an early demo / proof of concept. Eventually it
+/// will be replaced with a "real" color GUI that actually hooks
+/// the fractal parameters and modifies the render pipeline.
 #[derive(Debug, Clone)]
 pub struct EditorState {
-    /// Slider demonstration — will track keyframe position in PR2/PR3
     pub position_slider: f32,
 
-    /// Text input demonstration — will track keyframe position in PR2/PR3
     pub position_text: String,
 
-    /// Color picker demonstration — will track keyframe color in PR2/PR3
     pub color_picker_color: egui::Color32,
 
-    /// Drag-value demonstration — will track numeric edits in PR2/PR3
     pub drag_numeric: f32,
 }
 
@@ -100,13 +99,6 @@ impl eframe::App for ColorEditorApp {
             &self.keyframes,
             &self.preview_texture,
         );
-
-        // Defensive repaint: on some platforms (notably XWayland/WSL) the
-        // windowing backend can silently drop resize / DPI-change events.
-        // A continuous repaint cycle lets the surface re-poll its size and
-        // self-correct on the next frame. Cost is modest since egui still
-        // short-circuits painting when nothing has changed.
-        ctx.request_repaint();
     }
 }
 
@@ -154,7 +146,7 @@ fn build_editor_ui(
             ui.heading("Color Map Editor");
             ui.separator();
 
-            // 1. Gradient bar (custom painter — same as before)
+            // 1. Gradient bar (custom painter)
             ui.label("Current color map:");
             let bar_width = ui.available_width() - 16.0;
             let (rect, _) = ui
@@ -162,17 +154,17 @@ fn build_editor_ui(
             paint_gradient_bar(ui.painter(), rect, keyframes);
             ui.separator();
 
-            // 2. Slider demo (will track keyframe position in PR2/PR3)
+            // 2. Slider demo
             ui.label("Position slider (demo):");
             ui.add(egui::Slider::new(&mut state.position_slider, 0.0..=1.0).step_by(0.01));
             ui.separator();
 
-            // 3. Text input demo (will track numeric position in PR2/PR3)
+            // 3. Text input demo
             ui.label("Position text input (demo):");
             ui.text_edit_singleline(&mut state.position_text);
             ui.separator();
 
-            // 4. Drag-value demo (will track numeric edits in PR2/PR3)
+            // 4. Drag-value demo
             ui.label("Drag-value numeric (demo):");
             ui.add(
                 egui::DragValue::new(&mut state.drag_numeric)
@@ -229,16 +221,16 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
     }
 
     let color_map = ColorMap::new(keyframes, LinearInterpolator {});
-    let steps = (rect.width() as u32).max(2);
+    let column_count = (rect.width() as u32).max(2);
     // Render the gradient as adjacent filled rectangles rather than 1px strokes:
     // at fractional DPI, 1-logical-pixel strokes anti-alias across two physical
     // pixels, leaving visible sub-pixel gaps between strips. Contiguous rects
     // avoid the artifact — each strip's right edge is the next strip's left edge.
     // The query parameter t is linearly spaced from 0.0 to 1.0 inclusive, so the
     // first and last strips show the exact boundary keyframe colors.
-    let t_step = 1.0 / (steps - 1) as f32;
-    let step_w = rect.width() / steps as f32;
-    for i in 0..steps {
+    let t_step = 1.0 / (column_count - 1) as f32;
+    let step_w = rect.width() / column_count as f32;
+    for i in 0..column_count {
         let t = i as f32 * t_step;
         let rgb = color_map.compute_pixel(t);
         let x0 = rect.left() + i as f32 * step_w;
