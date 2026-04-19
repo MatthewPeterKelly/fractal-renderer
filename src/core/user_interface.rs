@@ -293,12 +293,12 @@ pub fn explore<F: Renderable + 'static>(
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
-                WindowEvent::Resized(size) => {
-                    if pixels.resize_surface(size.width, size.height).is_err() {
-                        println!("ERROR:  unable to resize surface. Aborting.");
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
+                WindowEvent::Resized(size)
+                    if pixels.resize_surface(size.width, size.height).is_err() =>
+                {
+                    println!("ERROR:  unable to resize surface. Aborting.");
+                    *control_flow = ControlFlow::Exit;
+                    return;
                 }
                 _ => {}
             }
