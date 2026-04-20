@@ -1,5 +1,4 @@
 use num::complex::Complex64;
-use pixels::Error;
 use serde::{Deserialize, Serialize};
 use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
@@ -462,7 +461,7 @@ pub fn render_newtons_method(
 pub fn explore_fractal(
     params: &NewtonsMethodParams,
     mut file_prefix: FilePrefix,
-) -> Result<(), Error> {
+) -> eframe::Result<()> {
     match &params.system {
         SystemType::RootsOfUnity(system_params) => {
             file_prefix.create_and_step_into_sub_directory("roots_of_unity");

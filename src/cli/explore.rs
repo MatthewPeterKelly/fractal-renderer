@@ -1,7 +1,5 @@
 use std::any::type_name;
 
-use pixels::Error;
-
 use crate::{
     core::{file_io::FilePrefix, user_interface},
     fractals::{common::FractalParams, newtons_method, quadratic_map::QuadraticMap},
@@ -15,7 +13,7 @@ use crate::{
  * -- mouse left click to recenter the image
  * -- A/D keys to adjust pan/zoom sensitivity
  */
-pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> Result<(), Error> {
+pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> eframe::Result<()> {
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");

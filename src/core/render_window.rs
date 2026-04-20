@@ -3,6 +3,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
+use egui::{Color32, ColorImage};
 use image::Rgb;
 
 use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
@@ -34,14 +35,16 @@ pub trait RenderWindow {
         zoom_command: ZoomVelocityCommand,
     ) -> bool;
 
-    /// Renders the internal buffer state to the screen. Typically `update()` would be called
-    /// before `draw()`.
+    /// Copies the latest rendered buffer into an `egui::ColorImage` suitable for
+    /// uploading to a `TextureHandle`. Typically `update()` is called before
+    /// `draw()`; the call clears the internal "redraw required" flag.
     ///
     /// # Parameters
     ///
-    /// - `screen`: A mutable slice of `u8` representing the RGBA screen buffer where
-    ///   color data for each pixel will be written.
-    fn draw(&self, screen: &mut [u8]);
+    /// - `image`: A mutable `ColorImage` whose `size` matches the render
+    ///   resolution. Its row-major pixel buffer is overwritten in place with
+    ///   the latest fractal colors.
+    fn draw(&self, image: &mut ColorImage);
 
     /// Saves the current rendered content to a file.
     ///
@@ -225,20 +228,21 @@ where
         redraw_required
     }
 
-    fn draw(&self, screen: &mut [u8]) {
-        debug_assert_eq!(
-            screen.len(),
-            (4 * self.image_specification().resolution[0]
-                * self.image_specification().resolution[1]) as usize
-        );
-        let array_skip = self.image_specification().resolution[0] as usize;
+    fn draw(&self, image: &mut ColorImage) {
+        let [res_w, res_h] = self.image_specification().resolution;
+        let width = res_w as usize;
+        let height = res_h as usize;
+        debug_assert_eq!(image.size, [width, height]);
+        debug_assert_eq!(image.pixels.len(), width * height);
+
+        // The display buffer is column-major (`buffer[x][y]`). `ColorImage`
+        // pixels are row-major, so transpose as we copy.
         let display_buffer = self.display_buffer.lock().unwrap();
-        for (flat_index, pixel) in screen.chunks_exact_mut(4).enumerate() {
-            let j = flat_index / array_skip;
-            let i = flat_index % array_skip;
-            let raw_pixel = display_buffer[i][j];
-            let color = [raw_pixel[0], raw_pixel[1], raw_pixel[2], 255];
-            pixel.copy_from_slice(&color);
+        for (y, row) in image.pixels.chunks_exact_mut(width).enumerate() {
+            for (x, pixel) in row.iter_mut().enumerate() {
+                let rgb = display_buffer[x][y];
+                *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+            }
         }
         self.redraw_required.store(false, Ordering::Release);
     }
