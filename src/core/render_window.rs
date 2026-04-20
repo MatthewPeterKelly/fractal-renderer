@@ -98,6 +98,18 @@ pub struct PixelGrid<F: Renderable> {
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
 
+fn display_buffer_to_color_image(display_buffer: &[Vec<Rgb<u8>>], image: &mut ColorImage) {
+    let width = image.size[0];
+    // The display buffer is column-major (`buffer[x][y]`). `ColorImage`
+    // pixels are row-major, so transpose as we copy.
+    for (y, row) in image.pixels.chunks_exact_mut(width).enumerate() {
+        for (x, pixel) in row.iter_mut().enumerate() {
+            let rgb = display_buffer[x][y];
+            *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        }
+    }
+}
+
 impl<F> PixelGrid<F>
 where
     F: Renderable + Send + Sync + 'static,
@@ -234,16 +246,8 @@ where
         let height = res_h as usize;
         debug_assert_eq!(image.size, [width, height]);
         debug_assert_eq!(image.pixels.len(), width * height);
-
-        // The display buffer is column-major (`buffer[x][y]`). `ColorImage`
-        // pixels are row-major, so transpose as we copy.
         let display_buffer = self.display_buffer.lock().unwrap();
-        for (y, row) in image.pixels.chunks_exact_mut(width).enumerate() {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                let rgb = display_buffer[x][y];
-                *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-            }
-        }
+        display_buffer_to_color_image(&display_buffer, image);
         self.redraw_required.store(false, Ordering::Release);
     }
 
@@ -273,5 +277,30 @@ where
                 .full_path_with_suffix(&format!("_{datetime}.png")),
             |f| imgbuf.save(f),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_buffer_to_color_image_transposition() {
+        // 3 columns x 2 rows (column-major: buffer[x][y])
+        let display_buffer = vec![
+            vec![Rgb([10, 20, 30]), Rgb([40, 50, 60])],
+            vec![Rgb([70, 80, 90]), Rgb([100, 110, 120])],
+            vec![Rgb([130, 140, 150]), Rgb([160, 170, 180])],
+        ];
+        let mut image = ColorImage::new([3, 2], Color32::BLACK);
+
+        display_buffer_to_color_image(&display_buffer, &mut image);
+
+        assert_eq!(image.pixels[0], Color32::from_rgb(10, 20, 30));
+        assert_eq!(image.pixels[1], Color32::from_rgb(70, 80, 90));
+        assert_eq!(image.pixels[2], Color32::from_rgb(130, 140, 150));
+        assert_eq!(image.pixels[3], Color32::from_rgb(40, 50, 60));
+        assert_eq!(image.pixels[4], Color32::from_rgb(100, 110, 120));
+        assert_eq!(image.pixels[5], Color32::from_rgb(160, 170, 180));
     }
 }

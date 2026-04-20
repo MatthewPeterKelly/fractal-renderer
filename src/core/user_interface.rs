@@ -36,7 +36,7 @@ const ACTIVE_TICK: Duration = Duration::from_millis(10);
 
 /// Defensive repaint period when the UI is otherwise idle. Keeps the app
 /// responsive to silently-dropped resize / input events on WSL/XWayland
-/// (see §4.2 of `docs/gui-unification-roadmap.md`).
+/// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
 const IDLE_TICK: Duration = Duration::from_millis(100);
 
 fn direction_from_key_pair(neg: bool, pos: bool) -> ScalarDirection {
