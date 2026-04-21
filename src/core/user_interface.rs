@@ -1,12 +1,13 @@
-use pixels::{Error, Pixels, SurfaceTexture};
-use std::time::{Duration, Instant};
-use std::{collections::HashSet, env, fs};
-use winit::{
-    dpi::LogicalSize,
-    event::{ElementState, Event, MouseButton, StartCause, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
-};
+//! Interactive fractal explorer, built as an `eframe::App`.
+//!
+//! The app owns a background-rendered `PixelGrid` and blits its output into
+//! an `egui` texture each time a new buffer is ready. Input is handled via
+//! `egui::Context::input`; window management, DPI scaling, and resize are all
+//! delegated to eframe.
+
+use std::time::Duration;
+
+use egui::{self, Color32, ColorImage, Frame, Key, Pos2, Rect, Sense};
 
 use crate::core::{
     file_io::FilePrefix,
@@ -19,347 +20,275 @@ use crate::core::{
     },
 };
 
-const ZOOM_RATE: f64 = 0.4; // dimensionless. See `ViewControl` docs.
-const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE; // faster zoom option.
-const PAN_RATE: f64 = 0.2; // window width per second
-const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE; // window width per second; used for "click to go".
+/// Base zoom rate, in units of natural-log-of-view-width per second.
+const ZOOM_RATE: f64 = 0.4;
+/// "Fast" zoom rate, triggered by the A/D keys when W/S are idle.
+const FAST_ZOOM_RATE: f64 = 4.0 * ZOOM_RATE;
+/// Pan rate while arrow keys are held, in view-widths per second.
+const PAN_RATE: f64 = 0.2;
+/// Pan rate when servoing toward a click target.
+const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE;
 
-// While rendering or when keys are held, wake periodically to keep interaction smooth
-// without busy-spinning the event loop.
-const ACTIVE_LOOP_TICK_MS: u64 = 10;
+/// Minimum repaint period while the user is interacting or a render is in
+/// flight. 100 Hz is faster than any common vsync cap, so the actual cadence
+/// is still limited by the display refresh rate.
+const ACTIVE_TICK: Duration = Duration::from_millis(10);
 
-/// The `RawInputState` struct is responsible for tracking the current state of user input devices
-/// (keyboard and mouse). It listens to window events and updates its internal state accordingly,
-/// allowing the application to query which keys are currently held down, which keys were pressed
-/// in the current frame, and whether the left mouse button was clicked. This abstraction simplifies
-/// input handling for the rest of the application.
-#[derive(Default)]
-struct RawInputState {
-    held_keys: HashSet<VirtualKeyCode>,
-    pressed_keys_this_frame: HashSet<VirtualKeyCode>,
-    mouse_left_pressed_this_frame: bool,
-    last_cursor_position: Option<(f64, f64)>,
-}
+/// Defensive repaint period when the UI is otherwise idle. Keeps the app
+/// responsive to silently-dropped resize / input events on WSL/XWayland
+/// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
+const IDLE_TICK: Duration = Duration::from_millis(100);
 
-impl RawInputState {
-    fn observe_window_event(&mut self, event: &WindowEvent) {
-        match event {
-            WindowEvent::KeyboardInput { input, .. } => {
-                if let Some(keycode) = input.virtual_keycode {
-                    match input.state {
-                        ElementState::Pressed => {
-                            self.held_keys.insert(keycode);
-                            self.pressed_keys_this_frame.insert(keycode);
-                        }
-                        ElementState::Released => {
-                            self.held_keys.remove(&keycode);
-                        }
-                    }
-                }
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                self.last_cursor_position = Some((position.x, position.y));
-            }
-            WindowEvent::MouseInput {
-                state: ElementState::Pressed,
-                button: MouseButton::Left,
-                ..
-            } => {
-                self.mouse_left_pressed_this_frame = true;
-            }
-            WindowEvent::Focused(false) => {
-                self.held_keys.clear();
-                self.pressed_keys_this_frame.clear();
-                self.mouse_left_pressed_this_frame = false;
-                self.last_cursor_position = None;
-            }
-            _ => {}
-        }
-    }
-
-    fn key_held(&self, key: VirtualKeyCode) -> bool {
-        self.held_keys.contains(&key)
-    }
-
-    fn key_pressed_this_frame(&self, key: VirtualKeyCode) -> bool {
-        self.pressed_keys_this_frame.contains(&key)
-    }
-
-    fn has_active_keys(&self) -> bool {
-        !self.held_keys.is_empty()
-    }
-
-    fn end_frame(&mut self) {
-        self.pressed_keys_this_frame.clear();
-        self.mouse_left_pressed_this_frame = false;
-    }
-}
-
-fn running_in_wsl() -> bool {
-    env::var_os("WSL_INTEROP").is_some()
-        || fs::read_to_string("/proc/sys/kernel/osrelease")
-            .map(|s| s.to_lowercase().contains("microsoft"))
-            .unwrap_or(false)
-}
-
-fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-    if let Some(s) = payload.downcast_ref::<&'static str>() {
-        (*s).to_string()
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "unknown panic payload".to_string()
-    }
-}
-
-fn direction_from_key_pair(neg_flag: bool, pos_flag: bool) -> ScalarDirection {
-    if neg_flag == pos_flag {
+fn direction_from_key_pair(neg: bool, pos: bool) -> ScalarDirection {
+    if neg == pos {
         ScalarDirection::Zero()
-    } else if pos_flag {
+    } else if pos {
         ScalarDirection::Pos()
     } else {
         ScalarDirection::Neg()
     }
 }
 
-fn zoom_velocity_command_from_key_press(input: &RawInputState) -> ZoomVelocityCommand {
-    // Zoom control --> W and S keys
-    let direction = direction_from_key_pair(
-        input.key_held(VirtualKeyCode::W),
-        input.key_held(VirtualKeyCode::S),
-    );
-    if direction == ScalarDirection::Zero() {
-        // See if the user is doing a "fast zoom" instead:
-        return ZoomVelocityCommand {
-            zoom_direction: direction_from_key_pair(
-                input.key_held(VirtualKeyCode::D),
-                input.key_held(VirtualKeyCode::A),
-            ),
-            zoom_rate: FAST_ZOOM_RATE,
+fn zoom_command_from_input(ctx: &egui::Context) -> ZoomVelocityCommand {
+    ctx.input(|i| {
+        let direction = direction_from_key_pair(i.key_down(Key::W), i.key_down(Key::S));
+        if direction == ScalarDirection::Zero() {
+            ZoomVelocityCommand {
+                zoom_direction: direction_from_key_pair(i.key_down(Key::D), i.key_down(Key::A)),
+                zoom_rate: FAST_ZOOM_RATE,
+            }
+        } else {
+            ZoomVelocityCommand {
+                zoom_direction: direction,
+                zoom_rate: ZOOM_RATE,
+            }
+        }
+    })
+}
+
+fn keyboard_center_command(ctx: &egui::Context) -> CenterCommand {
+    ctx.input(|i| {
+        let up_down = direction_from_key_pair(i.key_down(Key::ArrowDown), i.key_down(Key::ArrowUp));
+        let left_right =
+            direction_from_key_pair(i.key_down(Key::ArrowLeft), i.key_down(Key::ArrowRight));
+        let velocity = CenterVelocityCommand {
+            center_direction: [left_right, up_down],
+            pan_rate: PAN_RATE,
         };
-    }
-
-    ZoomVelocityCommand {
-        zoom_direction: direction,
-        zoom_rate: ZOOM_RATE,
-    }
+        if velocity.center_direction == [ScalarDirection::Zero(), ScalarDirection::Zero()] {
+            CenterCommand::Idle()
+        } else {
+            CenterCommand::Velocity(velocity)
+        }
+    })
 }
 
-fn view_center_command_from_key_press(input: &RawInputState) -> CenterCommand {
-    // Pan control:  arrow keys
-    let pan_up_down_command = direction_from_key_pair(
-        input.key_held(VirtualKeyCode::Down),
-        input.key_held(VirtualKeyCode::Up),
-    );
-    let pan_left_right_command = direction_from_key_pair(
-        input.key_held(VirtualKeyCode::Left),
-        input.key_held(VirtualKeyCode::Right),
-    );
-
-    let center_velocity = CenterVelocityCommand {
-        center_direction: [pan_left_right_command, pan_up_down_command],
-        pan_rate: PAN_RATE,
-    };
-
-    // If the user gave no input, then interpret this as "Idle", not "immediately stop".
-    if center_velocity.center_direction == [ScalarDirection::Zero(), ScalarDirection::Zero()] {
-        CenterCommand::Idle()
-    } else {
-        CenterCommand::Velocity(center_velocity)
-    }
-}
-
-fn view_center_command_from_user_input(
-    input: &RawInputState,
-    pixels: &Pixels,
+/// Convert a click in screen-space to a `CenterCommand` that recenters the
+/// view on the fractal coordinate under the cursor.
+fn click_to_center_command(
+    click_pos: Pos2,
+    image_rect: Rect,
     image_specification: &ImageSpecification,
 ) -> CenterCommand {
-    // Check for mouse click --> used to command a view target
-    if input.mouse_left_pressed_this_frame {
-        // Figure out where the mouse click happened.
-        let mouse_click_coordinates = input
-            .last_cursor_position
-            .map(|(x, y)| (x as f32, y as f32))
-            .map(|(mx, my)| {
-                let (mx_i, my_i) = pixels
-                    .window_pos_to_pixel((mx, my))
-                    .unwrap_or_else(|pos| pixels.clamp_pixel_pos(pos));
-                (mx_i as u32, my_i as u32)
-            })
-            .unwrap_or_default();
+    let normalized_x = ((click_pos.x - image_rect.min.x) / image_rect.width()).clamp(0.0, 1.0);
+    let normalized_y = ((click_pos.y - image_rect.min.y) / image_rect.height()).clamp(0.0, 1.0);
 
-        let pixel_mapper = PixelMapper::new(image_specification);
-        let point = pixel_mapper.map(&mouse_click_coordinates);
-        CenterCommand::Target(CenterTargetCommand {
-            view_center: [point.0, point.1],
-            pan_rate: FAST_PAN_RATE,
-        })
-    } else {
-        // No mouse click, so let's see if the user wants to pan/zoom with the keyboard:
-        view_center_command_from_key_press(input)
+    let max_x = image_specification.resolution[0].saturating_sub(1);
+    let max_y = image_specification.resolution[1].saturating_sub(1);
+    let pixel = (
+        ((normalized_x * image_specification.resolution[0] as f32) as u32).min(max_x),
+        ((normalized_y * image_specification.resolution[1] as f32) as u32).min(max_y),
+    );
+    let (x, y) = PixelMapper::new(image_specification).map(&pixel);
+    CenterCommand::Target(CenterTargetCommand {
+        view_center: [x, y],
+        pan_rate: FAST_PAN_RATE,
+    })
+}
+
+fn any_control_key_held(ctx: &egui::Context) -> bool {
+    const KEYS: &[Key] = &[
+        Key::W,
+        Key::A,
+        Key::S,
+        Key::D,
+        Key::R,
+        Key::ArrowUp,
+        Key::ArrowDown,
+        Key::ArrowLeft,
+        Key::ArrowRight,
+    ];
+    ctx.input(|i| KEYS.iter().any(|k| i.key_down(*k)))
+}
+
+/// eframe application that drives the interactive fractal explorer.
+struct ExploreApp<F: Renderable> {
+    render_window: PixelGrid<F>,
+    stopwatch: Stopwatch,
+    texture: egui::TextureHandle,
+    /// Reusable scratch buffer the render window copies into each time a new
+    /// fractal image is ready. Allocated once to keep texture uploads off the
+    /// allocator on the hot path.
+    display_image: ColorImage,
+}
+
+impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
+    fn new(
+        cc: &eframe::CreationContext<'_>,
+        file_prefix: FilePrefix,
+        image_specification: ImageSpecification,
+        renderer: F,
+    ) -> Self {
+        // Match the color editor's theme: black panel fill + no separator
+        // stroke avoids sub-pixel gap artifacts between panels at fractional
+        // DPI (§4.1 of the roadmap).
+        let mut visuals = egui::Visuals::dark();
+        visuals.panel_fill = Color32::BLACK;
+        visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
+        cc.egui_ctx.set_visuals(visuals);
+
+        let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
+        let time = stopwatch.total_elapsed_seconds();
+        let render_window = PixelGrid::new(
+            time,
+            file_prefix,
+            ViewControl::new(time, image_specification),
+            renderer,
+        );
+
+        let [res_w, res_h] = image_specification.resolution;
+        let display_image = ColorImage::new([res_w as usize, res_h as usize], Color32::BLACK);
+        let texture = cc.egui_ctx.load_texture(
+            "fractal_preview",
+            display_image.clone(),
+            egui::TextureOptions::LINEAR,
+        );
+
+        Self {
+            render_window,
+            stopwatch,
+            texture,
+            display_image,
+        }
+    }
+
+    /// Show the fractal preview, centered in the available space with its
+    /// aspect ratio preserved. Returns the click position (if any) along with
+    /// the rect the image occupies on screen.
+    fn show_preview(&self, ui: &mut egui::Ui) -> Option<(Pos2, Rect)> {
+        let resolution = self.render_window.image_specification().resolution;
+        let aspect = resolution[0] as f32 / resolution[1] as f32;
+        let available = ui.available_size();
+        let (display_w, display_h) = if available.x / available.y.max(1.0) > aspect {
+            (available.y * aspect, available.y)
+        } else {
+            (available.x, available.x / aspect.max(f32::EPSILON))
+        };
+
+        let mut click = None;
+        ui.centered_and_justified(|ui| {
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(display_w, display_h), Sense::click());
+            ui.painter().image(
+                self.texture.id(),
+                rect,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
+            if response.clicked() {
+                if let Some(pos) = response.interact_pointer_pos() {
+                    click = Some((pos, rect));
+                }
+            }
+        });
+        click
     }
 }
 
-fn reset_command_from_key_press(input: &RawInputState) -> bool {
-    input.key_held(VirtualKeyCode::R)
+impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.0, 0.0, 0.0, 1.0]
+    }
+
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        if ctx.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Q)) {
+            frame.close();
+            return;
+        }
+
+        if ctx.input(|i| i.key_down(Key::R)) {
+            self.render_window.reset();
+        }
+
+        let click = egui::CentralPanel::default()
+            .frame(Frame::none().fill(Color32::BLACK))
+            .show(ctx, |ui| self.show_preview(ui))
+            .inner;
+
+        let image_specification = *self.render_window.image_specification();
+        let center_command = match click {
+            Some((pos, rect)) => click_to_center_command(pos, rect, &image_specification),
+            None => keyboard_center_command(ctx),
+        };
+        let zoom_command = zoom_command_from_input(ctx);
+
+        let time = self.stopwatch.total_elapsed_seconds();
+        let new_buffer_ready = self
+            .render_window
+            .update(time, center_command, zoom_command);
+
+        if new_buffer_ready {
+            self.render_window.draw(&mut self.display_image);
+            self.texture
+                .set(self.display_image.clone(), egui::TextureOptions::LINEAR);
+        }
+
+        if ctx.input(|i| i.key_pressed(Key::Space)) {
+            self.render_window.render_to_file();
+        }
+
+        // Keep the UI ticking while work is in flight or the user is driving
+        // pan/zoom. When fully idle, fall back to a slow defensive repaint so
+        // silently-dropped resize events on WSL/XWayland eventually recover.
+        let active = any_control_key_held(ctx)
+            || self.render_window.render_task_is_busy()
+            || self.render_window.redraw_required()
+            || self.render_window.adaptive_rendering_required();
+        ctx.request_repaint_after(if active { ACTIVE_TICK } else { IDLE_TICK });
+    }
 }
 
-/**
- * Create a simple GUI window that can be used to explore a fractal.
- * Supported features:
- * -- arrow keys for pan control
- * -- W/S keys for zoom control
- * -- mouse left click to recenter the image
- * -- A/D keys to adjust pan/zoom sensitivity
- */
-pub fn explore<F: Renderable + 'static>(
+/// Open the interactive fractal explorer window.
+///
+/// Controls:
+/// - Arrow keys: pan the view.
+/// - `W` / `S`: zoom in / out. Hold `A` / `D` (with no W/S) for a fast zoom.
+/// - Left click: recenter the view on the clicked point.
+/// - `R`: reset to the initial view.
+/// - `Space`: save the current frame to disk (alongside its parameter JSON).
+/// - `Esc` / `Q`: exit.
+pub fn explore<F: Renderable + Send + Sync + 'static>(
     file_prefix: FilePrefix,
     image_specification: ImageSpecification,
     renderer: F,
-) -> Result<(), Error> {
-    // Keep backend selection under user control and let winit auto-detect by default.
-    if running_in_wsl() && env::var_os("WINIT_UNIX_BACKEND").is_none() {
-        eprintln!(
-            "Note: WSL detected; using winit auto backend selection. Set WINIT_UNIX_BACKEND=wayland or x11 to force a backend."
-        );
-    }
-
-    // Create the event loop with a friendlier failure path.
-    let event_loop = std::panic::catch_unwind(EventLoop::new)
-        .unwrap_or_else(|p| {
-            let msg = panic_message(p);
-            eprintln!("\nERROR: Failed to initialize windowing backend.\n{msg}\n");
-
-            if running_in_wsl() {
-                eprintln!("WSL detected.");
-                eprintln!("If you're forcing X11, you may be missing X11 runtime libs.");
-                eprintln!("On Ubuntu, try: sudo apt install -y libxcursor1");
-                eprintln!("(and ensure DISPLAY is set; WSLg usually sets it automatically.)");
-            } else {
-                eprintln!("Tip: ensure your system has either a working Wayland compositor or X11 libraries installed.");
-            }
-
-            std::process::exit(1);
-        });
-
-    let mut raw_input = RawInputState::default();
-    let stopwatch = Stopwatch::new("Fractal Explorer".to_string());
-
-    // Read the parameters file here and convert it into a `RenderWindow`.
-    let time = stopwatch.total_elapsed_seconds();
-    let mut render_window = PixelGrid::new(
-        stopwatch.total_elapsed_seconds(),
-        file_prefix,
-        ViewControl::new(time, image_specification),
-        renderer,
-    );
-
-    let window = {
-        let logical_size = LogicalSize::new(
-            render_window.image_specification().resolution[0] as f64,
-            render_window.image_specification().resolution[1] as f64,
-        );
-        WindowBuilder::new()
-            .with_title("Fractal Explorer")
-            .with_inner_size(logical_size)
-            .with_min_inner_size(logical_size)
-            .build(&event_loop)
-            .unwrap()
+) -> eframe::Result<()> {
+    let [res_w, res_h] = image_specification.resolution;
+    let options = eframe::NativeOptions {
+        initial_window_size: Some(egui::vec2(res_w as f32, res_h as f32)),
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
     };
 
-    let mut pixels = {
-        let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(
-            render_window.image_specification().resolution[0],
-            render_window.image_specification().resolution[1],
-            surface_texture,
-        )?
-    };
-
-    // GUI application main loop:
-    event_loop.run(move |event, _, control_flow| {
-        // Initialize once at startup; do not set a per-event default here.
-        // `MainEventsCleared` is the sole owner of `WaitUntil(...)` scheduling.
-        if let Event::NewEvents(StartCause::Init) = event {
-            *control_flow = ControlFlow::Wait;
-        }
-
-        if let Event::WindowEvent { event, .. } = &event {
-            raw_input.observe_window_event(event);
-
-            match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                WindowEvent::Resized(size)
-                    if pixels.resize_surface(size.width, size.height).is_err() =>
-                {
-                    println!("ERROR:  unable to resize surface. Aborting.");
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                _ => {}
-            }
-        }
-
-        // Handle redraw requests from the windowing system.
-        if let Event::RedrawRequested(_) = event {
-            render_window.draw(pixels.frame_mut());
-            if pixels.render().is_err() {
-                println!("ERROR:  unable to render pixels. Aborting.");
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-        }
-
-        if let Event::MainEventsCleared = event {
-            // Close events
-            if raw_input.key_held(VirtualKeyCode::Escape) {
-                *control_flow = ControlFlow::Exit;
-                return;
-            }
-
-            let center_command = view_center_command_from_user_input(
-                &raw_input,
-                &pixels,
-                render_window.image_specification(),
-            );
-
-            let zoom_command = zoom_velocity_command_from_key_press(&raw_input);
-
-            // Check for reset requests
-            if reset_command_from_key_press(&raw_input) {
-                render_window.reset();
-            }
-
-            // Now do the hard rendering math:
-            let redraw_required = render_window.update(
-                stopwatch.total_elapsed_seconds(),
-                center_command,
-                zoom_command,
-            );
-
-            if redraw_required {
-                window.request_redraw();
-            }
-
-            if raw_input.key_pressed_this_frame(VirtualKeyCode::Space) {
-                render_window.render_to_file();
-            }
-
-            raw_input.end_frame();
-
-            let should_tick = raw_input.has_active_keys()
-                || render_window.render_task_is_busy()
-                || render_window.redraw_required()
-                || render_window.adaptive_rendering_required();
-            *control_flow = if should_tick {
-                ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(ACTIVE_LOOP_TICK_MS))
-            } else {
-                ControlFlow::Wait
-            };
-        }
-    });
+    eframe::run_native(
+        "Fractal Explorer",
+        options,
+        Box::new(move |cc| {
+            Box::new(ExploreApp::new(
+                cc,
+                file_prefix,
+                image_specification,
+                renderer,
+            ))
+        }),
+    )
 }

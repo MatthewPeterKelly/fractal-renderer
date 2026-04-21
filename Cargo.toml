@@ -21,13 +21,11 @@ nalgebra = { version = "0.29", features = [ "serde-serialize" ]}
 num = "0.4.3"
 num-traits =  "0.2"
 ordered-float = "3.0"
-pixels = "0.13"
 rand = { version = "0.8", features = ["std"] }
 rayon = "1.8.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.8"
-winit = "0.28"
 
 [dev-dependencies]
 criterion = "0.5"
