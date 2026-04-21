@@ -157,7 +157,7 @@ impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
         );
 
         let [res_w, res_h] = image_specification.resolution;
-        let display_image = ColorImage::new([res_w as usize, res_h as usize], Color32::BLACK);
+        let display_image = ColorImage::filled([res_w as usize, res_h as usize], Color32::BLACK);
         let texture = cc.egui_ctx.load_texture(
             "fractal_preview",
             display_image.clone(),
@@ -195,10 +195,10 @@ impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
                 Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
                 Color32::WHITE,
             );
-            if response.clicked() {
-                if let Some(pos) = response.interact_pointer_pos() {
-                    click = Some((pos, rect));
-                }
+            if response.clicked()
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                click = Some((pos, rect));
             }
         });
         click
@@ -210,9 +210,10 @@ impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
         [0.0, 0.0, 0.0, 1.0]
     }
 
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         if ctx.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Q)) {
-            frame.close();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
 
@@ -221,16 +222,16 @@ impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
         }
 
         let click = egui::CentralPanel::default()
-            .frame(Frame::none().fill(Color32::BLACK))
-            .show(ctx, |ui| self.show_preview(ui))
+            .frame(Frame::NONE.fill(Color32::BLACK))
+            .show_inside(ui, |ui| self.show_preview(ui))
             .inner;
 
         let image_specification = *self.render_window.image_specification();
         let center_command = match click {
             Some((pos, rect)) => click_to_center_command(pos, rect, &image_specification),
-            None => keyboard_center_command(ctx),
+            None => keyboard_center_command(&ctx),
         };
-        let zoom_command = zoom_command_from_input(ctx);
+        let zoom_command = zoom_command_from_input(&ctx);
 
         let time = self.stopwatch.total_elapsed_seconds();
         let new_buffer_ready = self
@@ -250,7 +251,7 @@ impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
         // Keep the UI ticking while work is in flight or the user is driving
         // pan/zoom. When fully idle, fall back to a slow defensive repaint so
         // silently-dropped resize events on WSL/XWayland eventually recover.
-        let active = any_control_key_held(ctx)
+        let active = any_control_key_held(&ctx)
             || self.render_window.render_task_is_busy()
             || self.render_window.redraw_required()
             || self.render_window.adaptive_rendering_required();
@@ -274,7 +275,7 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
 ) -> eframe::Result<()> {
     let [res_w, res_h] = image_specification.resolution;
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(res_w as f32, res_h as f32)),
+        viewport: egui::ViewportBuilder::default().with_inner_size([res_w as f32, res_h as f32]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
@@ -283,12 +284,12 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
         "Fractal Explorer",
         options,
         Box::new(move |cc| {
-            Box::new(ExploreApp::new(
+            Ok(Box::new(ExploreApp::new(
                 cc,
                 file_prefix,
                 image_specification,
                 renderer,
-            ))
+            )))
         }),
     )
 }

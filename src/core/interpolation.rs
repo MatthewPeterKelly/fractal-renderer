@@ -133,11 +133,7 @@ where
     V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
 {
     fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
-        if alpha > self.threshold {
-            upp
-        } else {
-            low
-        }
+        if alpha > self.threshold { upp } else { low }
     }
 }
 

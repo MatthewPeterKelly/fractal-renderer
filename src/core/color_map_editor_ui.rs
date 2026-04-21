@@ -86,15 +86,14 @@ impl eframe::App for ColorEditorApp {
         [0.0, 0.0, 0.0, 1.0]
     }
 
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape))
-            || ctx.input(|i| i.key_pressed(egui::Key::Q))
-        {
-            frame.close();
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx();
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Q)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
         build_editor_ui(
-            ctx,
+            ui,
             &mut self.editor_state,
             &self.keyframes,
             &self.preview_texture,
@@ -120,29 +119,26 @@ fn buffer_to_color_image(buffer: &[Vec<Rgb<u8>>]) -> egui::ColorImage {
                 .map(move |col| egui::Color32::from_rgb(col[y][0], col[y][1], col[y][2]))
         })
         .collect();
-    egui::ColorImage {
-        size: [width, height],
-        pixels,
-    }
+    egui::ColorImage::new([width, height], pixels)
 }
 
 /// Build the editor UI with hello-world widgets
 fn build_editor_ui(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     state: &mut EditorState,
     keyframes: &[ColorMapKeyFrame],
     preview_texture: &egui::TextureHandle,
 ) {
-    egui::SidePanel::right("editor")
-        .default_width(EDITOR_W as f32)
-        .width_range(200.0..=1200.0)
+    egui::Panel::right("editor")
+        .default_size(EDITOR_W as f32)
+        .size_range(200.0..=1200.0)
         .show_separator_line(false)
         .frame(
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(egui::Color32::BLACK)
-                .inner_margin(egui::style::Margin::symmetric(8.0, 2.0)),
+                .inner_margin(egui::Margin::symmetric(8, 2)),
         )
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             ui.heading("Color Map Editor");
             ui.separator();
 
@@ -169,7 +165,7 @@ fn build_editor_ui(
             ui.add(
                 egui::DragValue::new(&mut state.drag_numeric)
                     .speed(0.01)
-                    .clamp_range(0.0..=1.0),
+                    .range(0.0..=1.0),
             );
 
             // 5. Inline color picker anchored to the bottom of the panel.
@@ -190,11 +186,11 @@ fn build_editor_ui(
     // The fractal image is scaled to fit while preserving its aspect ratio.
     egui::CentralPanel::default()
         .frame(
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(egui::Color32::BLACK)
-                .inner_margin(egui::style::Margin::same(8.0)),
+                .inner_margin(egui::Margin::same(8)),
         )
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             let available = ui.available_size();
             let aspect = preview_texture.aspect_ratio();
             let (display_w, display_h) = if available.x / available.y.max(1.0) > aspect {
@@ -203,10 +199,10 @@ fn build_editor_ui(
                 (available.x, available.x / aspect.max(0.001))
             };
             ui.centered_and_justified(|ui| {
-                ui.add(egui::Image::new(
-                    preview_texture,
-                    egui::vec2(display_w, display_h),
-                ));
+                ui.add(
+                    egui::Image::new(preview_texture)
+                        .fit_to_exact_size(egui::vec2(display_w, display_h)),
+                );
             });
         });
 }
@@ -265,7 +261,7 @@ pub fn run_color_editor(
     let initial_h = preview_resolution[1] as f32;
 
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(initial_w, initial_h)),
+        viewport: egui::ViewportBuilder::default().with_inner_size([initial_w, initial_h]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
@@ -273,7 +269,13 @@ pub fn run_color_editor(
     eframe::run_native(
         "Color Map Editor",
         options,
-        Box::new(move |cc| Box::new(ColorEditorApp::new(cc, &preview_buffer, keyframes))),
+        Box::new(move |cc| {
+            Ok(Box::new(ColorEditorApp::new(
+                cc,
+                &preview_buffer,
+                keyframes,
+            )))
+        }),
     )
 }
 

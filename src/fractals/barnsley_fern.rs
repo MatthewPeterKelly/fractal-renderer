@@ -1,5 +1,5 @@
-use crate::core::chaos_game::{chaos_game_render, ColoredPoint};
-use crate::core::file_io::{serialize_to_json_or_panic, FilePrefix};
+use crate::core::chaos_game::{ColoredPoint, chaos_game_render};
+use crate::core::file_io::{FilePrefix, serialize_to_json_or_panic};
 use crate::core::image_utils::{FitImage, ViewRectangle};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;

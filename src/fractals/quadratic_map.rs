@@ -7,8 +7,8 @@ use crate::{
         color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
-            scale_down_parameter_for_speed, ImageSpecification, RenderOptions, Renderable,
-            SpeedOptimizer,
+            ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+            scale_down_parameter_for_speed,
         },
         interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator, LinearInterpolator},
     },

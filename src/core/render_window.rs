@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
 use egui::{Color32, ColorImage};
@@ -9,8 +9,8 @@ use image::Rgb;
 use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
 
 use super::{
-    file_io::{date_time_string, serialize_to_json_or_panic, FilePrefix},
-    image_utils::{create_buffer, write_image_to_file_or_panic, ImageSpecification, Renderable},
+    file_io::{FilePrefix, date_time_string, serialize_to_json_or_panic},
+    image_utils::{ImageSpecification, Renderable, create_buffer, write_image_to_file_or_panic},
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
@@ -292,7 +292,7 @@ mod tests {
             vec![Rgb([70, 80, 90]), Rgb([100, 110, 120])],
             vec![Rgb([130, 140, 150]), Rgb([160, 170, 180])],
         ];
-        let mut image = ColorImage::new([3, 2], Color32::BLACK);
+        let mut image = ColorImage::filled([3, 2], Color32::BLACK);
 
         display_buffer_to_color_image(&display_buffer, &mut image);
 
