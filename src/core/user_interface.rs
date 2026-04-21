@@ -10,6 +10,7 @@ use std::time::Duration;
 use egui::{self, Color32, ColorImage, Frame, Key, Pos2, Rect, Sense};
 
 use crate::core::{
+    eframe_support::wgpu_native_options,
     file_io::FilePrefix,
     image_utils::{ImageSpecification, PixelMapper, Renderable},
     render_window::{PixelGrid, RenderWindow},
@@ -274,11 +275,9 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
     renderer: F,
 ) -> eframe::Result<()> {
     let [res_w, res_h] = image_specification.resolution;
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([res_w as f32, res_h as f32]),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
+    let options = wgpu_native_options(
+        egui::ViewportBuilder::default().with_inner_size([res_w as f32, res_h as f32]),
+    );
 
     eframe::run_native(
         "Fractal Explorer",

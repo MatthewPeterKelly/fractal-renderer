@@ -9,6 +9,7 @@
 use image::Rgb;
 
 use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
+use crate::core::eframe_support::wgpu_native_options;
 use crate::core::interpolation::LinearInterpolator;
 
 /// Fixed width of the editor panel (right-hand side).
@@ -260,11 +261,9 @@ pub fn run_color_editor(
     let initial_w = preview_resolution[0] as f32 + EDITOR_W as f32;
     let initial_h = preview_resolution[1] as f32;
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([initial_w, initial_h]),
-        renderer: eframe::Renderer::Wgpu,
-        ..Default::default()
-    };
+    let options = wgpu_native_options(
+        egui::ViewportBuilder::default().with_inner_size([initial_w, initial_h]),
+    );
 
     eframe::run_native(
         "Color Map Editor",
