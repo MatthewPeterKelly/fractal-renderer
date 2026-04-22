@@ -329,9 +329,9 @@ mod tests {
     use approx::assert_relative_eq;
     use more_asserts::{assert_ge, assert_le};
 
-    use rand::rngs::StdRng;
     use rand::Rng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     #[test]
     fn test_interactive_frame_rate_policy_steady_state_convergence_nominal() {

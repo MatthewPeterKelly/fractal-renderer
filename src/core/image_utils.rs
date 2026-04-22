@@ -10,7 +10,7 @@ use std::{
 
 use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
 
-use super::file_io::{serialize_to_json_or_panic, FilePrefix};
+use super::file_io::{FilePrefix, serialize_to_json_or_panic};
 use super::stopwatch::Stopwatch;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

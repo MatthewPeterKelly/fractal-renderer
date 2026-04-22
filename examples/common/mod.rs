@@ -8,7 +8,7 @@ use fractal_renderer::{
     core::{
         color_map_editor_ui::run_color_editor,
         file_io::FilePrefix,
-        image_utils::{create_buffer, Renderable},
+        image_utils::{Renderable, create_buffer},
     },
     fractals::{common::FractalParams, quadratic_map::QuadraticMap},
 };

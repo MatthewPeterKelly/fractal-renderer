@@ -2,10 +2,10 @@
 //! of the histogram generation for the Mandelbrot set.
 //! This in practice will exercise both the histogram and mandelbrot
 //! core evaluation.
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use fractal_renderer::fractals::{
     mandelbrot::MandelbrotParams,
-    quadratic_map::{create_empty_histogram, QuadraticMapParams},
+    quadratic_map::{QuadraticMapParams, create_empty_histogram},
     utilities::populate_histogram,
 };
 

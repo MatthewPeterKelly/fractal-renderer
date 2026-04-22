@@ -1,7 +1,7 @@
 use crate::core::{
     image_utils::{
-        scale_down_parameter_for_speed, scale_up_parameter_for_speed, ImageSpecification,
-        RenderOptions, Renderable, SpeedOptimizer,
+        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed, scale_up_parameter_for_speed,
     },
     interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
     ode_solvers::rk4_simulate,

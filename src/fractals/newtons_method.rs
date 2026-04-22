@@ -8,8 +8,8 @@ use crate::{
         file_io::FilePrefix,
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
-            self, scale_down_parameter_for_speed, scale_up_parameter_for_speed, ImageSpecification,
-            RenderOptions, Renderable, SpeedOptimizer,
+            self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+            scale_down_parameter_for_speed, scale_up_parameter_for_speed,
         },
         interpolation::{ClampedLogInterpolator, Interpolator, LinearInterpolator},
         user_interface,

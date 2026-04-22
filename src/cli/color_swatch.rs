@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{
-        with_uniform_spacing, ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper,
+        ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, with_uniform_spacing,
     },
-    file_io::{serialize_to_json_or_panic, FilePrefix},
+    file_io::{FilePrefix, serialize_to_json_or_panic},
     image_utils::write_image_to_file_or_panic,
     interpolation::{LinearInterpolator, StepInterpolator},
     stopwatch::Stopwatch,
