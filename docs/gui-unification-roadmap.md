@@ -179,91 +179,194 @@ upgrades within the eframe family are unconstrained.
 
 ## 5. Data Model
 
-Two paired enums underpin the entire roadmap. The pairing is structural: each
-`UnifiedColorMap` variant has exactly one matching `CachedField` variant, and
-every fractal type fixes the variant pair it uses.
+Three concrete color-map shapes serve the three explorable fractal families.
+Their pairing with per-pixel field types is enforced **at compile time** via
+associated types on a `ColorMapKind` trait — there is no runtime tuple-match
+on the hot path, no `_ => panic!` arm, and no possibility of constructing a
+mismatched `(field, color_map)` pair from a `Renderable` impl. Validation
+happens once, at JSON deserialization; everything downstream is statically
+typed.
 
-### 5.1 `UnifiedColorMap`
+### 5.1 Per-variant concrete types
+
+Each color-map shape is its own struct:
 
 ```rust
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum UnifiedColorMap {
-    /// Two flat colors. Every pixel belongs to one of two classes; no
-    /// gradient information. Used by the driven-damped pendulum.
-    ForegroundBackground {
-        foreground: [u8; 3],
-        background: [u8; 3],
-    },
+pub struct ForegroundBackground {
+    pub foreground: [u8; 3],
+    pub background: [u8; 3],
+}
 
-    /// One flat background plus one gradient. The flat color is for points
-    /// that don't produce a graded output (e.g. inside the Mandelbrot set);
-    /// the gradient is sampled by a normalized scalar (smooth escape count).
-    /// Used by Mandelbrot and Julia.
-    BackgroundWithColorMap {
-        background: [u8; 3],
-        color_map: Vec<ColorMapKeyFrame>,
-    },
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BackgroundWithColorMap {
+    pub background: [u8; 3],
+    pub color_map: Vec<ColorMapKeyFrame>,
+}
 
-    /// One flat color plus one gradient per attractor. The flat covers
-    /// "did-not-converge" points; each attractor gets its own gradient
-    /// sampled by a smooth iteration count. Used by Newton's method.
-    MultiColorMap {
-        cyclic_attractor: [u8; 3],
-        color_maps: Vec<Vec<ColorMapKeyFrame>>,
-    },
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MultiColorMap {
+    pub cyclic_attractor: [u8; 3],
+    pub color_maps: Vec<Vec<ColorMapKeyFrame>>,
 }
 ```
 
-Variant names are descriptive (what the structure is), not fractal-named.
-Newton's `boundary_set_color_rgb` is intentionally absent: it is dead code in
-the renderer ([src/fractals/newtons_method.rs:416-428](../src/fractals/newtons_method.rs#L416-L428)
+Each per-pixel field shape is its own type alias:
+
+```rust
+pub type BinaryBasinField           = Vec<Vec<Option<i32>>>;
+pub type SmoothScalarField          = Vec<Vec<Option<f32>>>;
+pub type SmoothScalarWithIndexField = Vec<Vec<Option<(f32, usize)>>>;
+```
+
+Names are descriptive (what the structure *is*), not fractal-named.
+Newton's `boundary_set_color_rgb` is intentionally absent from `MultiColorMap`:
+it is dead code in the renderer ([src/fractals/newtons_method.rs:416-428](../src/fractals/newtons_method.rs#L416-L428)
 never reads it) and exists today only to define the "in-set" endpoint of the
 `GrayscaleSpec` shorthand, which Phase 1 drops.
 
-### 5.2 `CachedField`
+### 5.2 The `ColorMapKind` trait pairs them
 
 ```rust
-pub enum CachedField {
-    /// Per-pixel basin index. Used by the driven-damped pendulum.
-    BinaryBasin(Vec<Vec<Option<i32>>>),
+/// Pairs a color-map type with its matching per-pixel field type and
+/// defines how to colorize a field through the map.
+///
+/// Implementations are concrete structs; dispatch is monomorphized.
+/// There is no runtime variant matching on the colorize hot path.
+pub trait ColorMapKind: Clone + Send + Sync + 'static {
+    /// The per-pixel scalar this map consumes. Fixed at compile time
+    /// per concrete `ColorMapKind` impl.
+    type Field;
 
-    /// Per-pixel smooth escape count. Used by Mandelbrot and Julia.
-    SmoothScalar(Vec<Vec<Option<f32>>>),
+    /// Walk `field` and write colorized pixels into `out`. Pure pixel-level
+    /// work — no fractal computation, no allocation on the hot path.
+    fn colorize_into(&self, field: &Self::Field, out: &mut egui::ColorImage);
+}
 
-    /// Per-pixel (smooth iteration count, attractor index). Used by
-    /// Newton's method.
-    SmoothScalarWithIndex(Vec<Vec<Option<(f32, usize)>>>),
+impl ColorMapKind for ForegroundBackground {
+    type Field = BinaryBasinField;
+    fn colorize_into(&self, field: &Self::Field, out: &mut egui::ColorImage) {
+        // Some(0) → foreground; Some(_) or None → background.
+    }
+}
+
+impl ColorMapKind for BackgroundWithColorMap {
+    type Field = SmoothScalarField;
+    fn colorize_into(&self, field: &Self::Field, out: &mut egui::ColorImage) {
+        // None → background; Some(f) → color_map.lookup(f).
+    }
+}
+
+impl ColorMapKind for MultiColorMap {
+    type Field = SmoothScalarWithIndexField;
+    fn colorize_into(&self, field: &Self::Field, out: &mut egui::ColorImage) {
+        // None → cyclic_attractor; Some((f, k)) → color_maps[k].lookup(f).
+    }
 }
 ```
 
-### 5.3 Pairing table
+`Renderable` then carries the pairing as associated types:
 
-| `UnifiedColorMap` variant | `CachedField` variant      | Fractal                  | Colorization rule                                                                  |
-| ------------------------- | -------------------------- | ------------------------ | ---------------------------------------------------------------------------------- |
-| `ForegroundBackground`    | `BinaryBasin`              | DDP                      | `Some(0)` → `foreground`; `Some(_)` or `None` → `background`                       |
-| `BackgroundWithColorMap`  | `SmoothScalar`             | Mandelbrot, Julia        | `None` → `background`; `Some(f)` → `color_map.lookup(f)`                           |
-| `MultiColorMap`           | `SmoothScalarWithIndex`    | Newton's method          | `None` → `cyclic_attractor`; `Some((f, k))` → `color_maps[k].lookup(f)`            |
+```rust
+pub trait Renderable: Sync + Send + SpeedOptimizer {
+    type Params: Serialize + Debug;
+    type ColorMap: ColorMapKind;
 
-The free function `colorize(field: &CachedField, map: &UnifiedColorMap) ->
-ColorImage` matches on the `(field, map)` tuple. Mismatched variants
-(`BinaryBasin` × `BackgroundWithColorMap`, etc.) panic with a clear "wiring
-bug" message — by construction this case never arises from valid params files,
-since each fractal's `Renderable` impl returns the correct `CachedField`
-variant and embeds the matching `UnifiedColorMap` variant.
+    fn compute_field(&self) -> <Self::ColorMap as ColorMapKind>::Field;
+    fn color_map(&self) -> &Self::ColorMap;
+    fn color_map_mut(&mut self) -> &mut Self::ColorMap;  // added in Phase 6
 
-### 5.4 Why the typed enum (vs a `Vec<LabeledGradient>` flat list)
+    // Default render impl — fully monomorphized, statically dispatched:
+    fn render_to_color_image(&self, out: &mut egui::ColorImage) {
+        let field = self.compute_field();
+        self.color_map().colorize_into(&field, out);
+    }
+    // ... other existing methods unchanged.
+}
+```
 
-Considered earlier and rejected:
+The hot path is generic over `F: Renderable`. Dispatch happens once, at the
+top of [src/cli/explore.rs](../src/cli/explore.rs) where `match
+fractal_params { … }` selects the concrete `F` to instantiate. From there
+inward, every call site is monomorphized: `compute_field` returns the
+concrete `Field` type, `color_map()` returns the concrete `ColorMap` type,
+`colorize_into` is a static method call on the concrete impl. The compiler
+enforces the pairing.
 
-- A flat `Vec<LabeledGradient>` would require positional conventions
-  ("entry 0 is always background, entries 1..N are gradients") that are easy
-  to drift between editor and renderer, and the editor would still need a
-  "is this a flat color or a gradient?" discriminator per entry, plus a
-  per-fractal label lookup table.
-- The typed enum gives compiler-enforced exhaustiveness, role-as-data
-  (no positional contract), no round-trip conversion at the editor/renderer
-  boundary, and small editor dispatch (one match arm per variant, ~25 LoC,
-  with shared `show_swatch` / `show_gradient_editor` widget helpers).
+### 5.3 Per-fractal pairings
+
+| Concrete `ColorMap` type   | Concrete `Field` type            | Fractal                  | Colorization rule                                                       |
+| -------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `ForegroundBackground`     | `BinaryBasinField`               | DDP                      | `Some(0)` → `foreground`; `Some(_)` or `None` → `background`            |
+| `BackgroundWithColorMap`   | `SmoothScalarField`              | Mandelbrot, Julia        | `None` → `background`; `Some(f)` → `color_map.lookup(f)`                |
+| `MultiColorMap`            | `SmoothScalarWithIndexField`     | Newton's method          | `None` → `cyclic_attractor`; `Some((f, k))` → `color_maps[k].lookup(f)` |
+
+Each fractal's params struct embeds its concrete `ColorMap` type directly
+(e.g. `MandelbrotParams` carries `pub color: BackgroundWithColorMap`).
+serde-derived `Deserialize` rejects the wrong shape at JSON load time with
+a structured error — there is no in-memory invariant left to violate.
+
+### 5.4 `UnifiedColorMap` and `CachedField` as boundary types only
+
+For places that genuinely need to handle all three shapes uniformly — e.g. a
+diagnostic dump that walks any fractal's color map, or a future cross-fractal
+inspection tool — the three concrete types share an upcast enum:
+
+```rust
+#[derive(Debug, Clone)]
+pub enum UnifiedColorMap {
+    ForegroundBackground(ForegroundBackground),
+    BackgroundWithColorMap(BackgroundWithColorMap),
+    MultiColorMap(MultiColorMap),
+}
+
+impl From<ForegroundBackground> for UnifiedColorMap { /* … */ }
+impl From<BackgroundWithColorMap> for UnifiedColorMap { /* … */ }
+impl From<MultiColorMap> for UnifiedColorMap { /* … */ }
+
+#[derive(Debug)]
+pub enum CachedField {
+    BinaryBasin(BinaryBasinField),
+    SmoothScalar(SmoothScalarField),
+    SmoothScalarWithIndex(SmoothScalarWithIndexField),
+}
+```
+
+These enums are **not** used on the colorize hot path, **not** used by the
+editor (which is generic over the concrete `ColorMap` type — see §6 Phase 4),
+and **not** used as the JSON wire format (each fractal's params embeds the
+concrete struct directly). They exist only as an opt-in upcast for code that
+truly needs polymorphism over color-map shape. If no such caller materializes,
+they can be dropped in a later cleanup.
+
+### 5.5 Why static typing all the way down
+
+The earlier-considered design used a single `UnifiedColorMap` enum + a single
+`CachedField` enum + a free `colorize(field, map) -> ColorImage` function
+that matched on the tuple. That approach had a runtime invariant — "the
+caller passed compatible variants" — backed only by a `_ => panic!` arm. The
+hot path paid the cost of a tuple match per render, and a bug in any
+`Renderable` impl would surface as a runtime panic instead of a compile
+error.
+
+The trait-based design described above:
+
+- **Eliminates the panic path.** Mismatched pairings are unrepresentable.
+- **Eliminates the tuple match.** The compiler monomorphizes `colorize_into`
+  to the concrete impl per fractal type.
+- **Pushes all validation to JSON deserialization.** A malformed params file
+  fails to parse with a structured error; there is no later place where the
+  invariant can be violated.
+- **Keeps the editor static too** (Phase 4): the editor widget is generic
+  over the concrete `ColorMap` type, with per-variant `show_editor`
+  implementations colocated with each variant's data.
+
+A flat `Vec<LabeledGradient>` representation was also considered and
+rejected: it would require positional conventions ("entry 0 is always
+background, entries 1..N are gradients") that drift between editor and
+renderer, and would still need a "flat vs gradient" discriminator per entry
+plus a per-fractal label lookup. The trait-based design has none of these
+problems.
 
 ---
 
@@ -271,23 +374,28 @@ Considered earlier and rejected:
 
 ### Phase 1 — Color-map data unification
 
-**Goal:** every fractal type embeds `UnifiedColorMap` directly in its params
-struct. JSON schema migrates accordingly. No GUI work.
+**Goal:** introduce the per-variant concrete color-map structs and embed each
+fractal type's matching struct directly in its params. JSON schema migrates
+accordingly. No GUI work, no trait changes (Phase 2 handles trait wiring).
 
 **Files touched:**
 
-- [src/core/color_map.rs](../src/core/color_map.rs) — define `UnifiedColorMap`.
+- [src/core/color_map.rs](../src/core/color_map.rs) — define
+  `ForegroundBackground`, `BackgroundWithColorMap`, `MultiColorMap` concrete
+  structs (per §5.1). Optionally define the `UnifiedColorMap` boundary-only
+  enum and `From` impls (per §5.4); skip if no caller materializes for them
+  in this phase.
 - [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs) — replace
-  `ColorMapParams.keyframes` and `background_color_rgb` with `color:
-  UnifiedColorMap` (constrained to `BackgroundWithColorMap`). The other
-  `ColorMapParams` fields (`lookup_table_count`, `histogram_bin_count`,
-  `histogram_sample_count`) are not color data and stay on `QuadraticMapParams`
-  directly (or move into a sibling struct — implementer's choice).
+  `ColorMapParams.keyframes` and `background_color_rgb` with `pub color:
+  BackgroundWithColorMap`. The other `ColorMapParams` fields
+  (`lookup_table_count`, `histogram_bin_count`, `histogram_sample_count`) are
+  not color data and stay on `QuadraticMapParams` directly (or move into a
+  sibling struct — implementer's choice).
 - [src/fractals/mandelbrot.rs](../src/fractals/mandelbrot.rs),
   [src/fractals/julia.rs](../src/fractals/julia.rs) — automatic via the
   `QuadraticMapParams` trait change.
 - [src/fractals/driven_damped_pendulum.rs](../src/fractals/driven_damped_pendulum.rs)
-  — add `color: UnifiedColorMap` field with
+  — add `pub color: ForegroundBackground` field with
   `#[serde(default = "ddp_default_color")]`. Default is
   `ForegroundBackground { foreground: [255,255,255], background: [0,0,0] }`,
   matching the previously hard-coded values. Replace the literal
@@ -295,12 +403,11 @@ struct. JSON schema migrates accordingly. No GUI work.
   field.
 - [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs) —
   replace `boundary_set_color_rgb`, `cyclic_attractor_color_rgb`, and
-  `color_map_spec` in `CommonParams` with a single `color: UnifiedColorMap`
-  field (constrained to `MultiColorMap`). **Drop `GrayscaleSpec` and
-  `GrayscaleKeyframeSpec` entirely**, including the `to_color_map_vec`
-  expansion logic. The `ColorMapSpec` enum can be removed; if its other
-  variant `FullColorSpec` is kept around as an alias type, that's fine, but
-  the simpler path is to delete it too.
+  `color_map_spec` in `CommonParams` with a single `pub color: MultiColorMap`
+  field. **Drop `GrayscaleSpec` and `GrayscaleKeyframeSpec` entirely**,
+  including the `to_color_map_vec` expansion logic. The `ColorMapSpec` enum
+  is removed (its `FullColorSpec` variant becomes redundant once
+  `MultiColorMap` is the embedded type).
 - Every JSON file under [examples/](../examples/), [benches/](../benches/),
   and [tests/param_files/](../tests/param_files/) that references a fractal
   whose schema changed. The
@@ -315,56 +422,66 @@ struct. JSON schema migrates accordingly. No GUI work.
 must remain unchanged (color computation is logically identical, only the
 schema moved).
 
-**Variant slack:** each fractal's params struct holds `color: UnifiedColorMap`
-typed as the full enum, not a refinement to one variant. Construction-time
-validation (or a `match` in the renderer that panics on the wrong variant)
-catches misuse. The slack is acceptable in exchange for not needing per-fractal
-narrow types.
+**Static-typing invariant:** each fractal embeds its concrete color-map
+struct directly. There is no enum wrapper at the params level and no runtime
+"is this the right variant" check. Wrong-shape JSON fails serde
+deserialization with a structured error before any fractal object is
+constructed; once construction succeeds, the type is permanently fixed.
 
 ### Phase 2 — Compute / color split
 
 **Goal:** factor `Renderable` so the per-pixel scalar computation is separated
-from colorization. No observable behavior change; pixel hashes unchanged.
+from colorization, with the pairing enforced by associated types (per §5).
+No observable behavior change; pixel hashes unchanged.
 
 **Files touched:**
 
+- [src/core/color_map.rs](../src/core/color_map.rs) — define the
+  `ColorMapKind` trait and implement it for each of the three concrete
+  color-map structs. Each impl provides its own `colorize_into` — no free
+  function, no tuple match.
 - [src/core/image_utils.rs](../src/core/image_utils.rs) — extend `Renderable`
-  trait. Add `CachedField` enum. Add `colorize(field, map)` and
-  `colorize_into(field, map, &mut buffer)` free functions.
+  with associated types `ColorMap: ColorMapKind` and methods
+  `compute_field`, `color_map`. Provide a default `render_to_color_image`
+  that chains the two.
 - [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs),
   [src/fractals/driven_damped_pendulum.rs](../src/fractals/driven_damped_pendulum.rs),
   [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs) —
-  implement `compute_field()`; default `render_to_buffer` to
-  `compute_field()` then `colorize_into(...)`. Where today's renderer does
-  histogram/CDF setup that depends on the field but not the keyframes
-  (e.g. [src/fractals/quadratic_map.rs:225](../src/fractals/quadratic_map.rs#L225)),
-  that work happens at the `compute_field` boundary so the per-fractal
-  prep cost is paid once per compute, not once per re-colorize.
+  implement the new associated types and methods. Each fractal binds
+  `type ColorMap` to the concrete struct it embedded in Phase 1
+  (`BackgroundWithColorMap`, `ForegroundBackground`, `MultiColorMap`).
+  Where today's renderer does histogram/CDF setup that depends on the field
+  but not the keyframes (e.g. [src/fractals/quadratic_map.rs:225](../src/fractals/quadratic_map.rs#L225)),
+  that work happens at the `compute_field` boundary so the per-fractal prep
+  cost is paid once per compute, not once per re-colorize.
 
 **Sketch:**
 
 ```rust
 pub trait Renderable: Sync + Send + SpeedOptimizer {
     type Params: Serialize + Debug;
+    type ColorMap: ColorMapKind;
 
-    fn compute_field(&self) -> CachedField;
-    fn color_map(&self) -> &UnifiedColorMap;
+    fn compute_field(&self) -> <Self::ColorMap as ColorMapKind>::Field;
+    fn color_map(&self) -> &Self::ColorMap;
     // color_map_mut added in Phase 6, not here.
 
     // Existing methods unchanged: image_specification, render_options,
     // set_image_specification, write_diagnostics, params, render_point.
 
-    // Default impl rewires through compute + colorize:
-    fn render_to_buffer(&self, buffer: &mut Vec<Vec<Rgb<u8>>>) {
+    // Default impl — fully monomorphized, statically dispatched:
+    fn render_to_color_image(&self, out: &mut egui::ColorImage) {
         let field = self.compute_field();
-        colorize_into(&field, self.color_map(), buffer);
+        self.color_map().colorize_into(&field, out);
     }
 }
 ```
 
-**Unit tests added:** `colorize` correctness for each `(CachedField,
-UnifiedColorMap)` pairing, including edge cases (empty `color_maps` for
-`MultiColorMap`, all-`None` field for each variant, single-keyframe gradients).
+**Unit tests added** (§10.1): `colorize_into` correctness per
+`ColorMapKind` impl, including all-`None` fields, single-keyframe gradients,
+and (for `MultiColorMap`) coverage of every entry in `color_maps`. Tests are
+written against the concrete struct types directly — no tuple-match logic to
+exercise, no panic paths to defend.
 
 **Verification:** pixel-hash regression tests must pass unchanged. `cargo
 bench --no-run` to confirm benchmarks still compile; `cargo bench` on the
@@ -405,19 +522,31 @@ on every panel — matches current explore mode and avoids border artifacts
 ### Phase 4 — Color editor panel
 
 **Goal:** add the right-side color editor panel to `FractalApp`. Editor
-displays the loaded `UnifiedColorMap` and allows local mutation of a
-**cached copy**. The fractal preview is not affected by edits — that's
-Phase 6.
+displays the loaded color map and allows local mutation of a **cached
+copy**. The fractal preview is not affected by edits — that's Phase 6.
 
 **Files touched:**
 
-- `src/core/interactive/editor.rs` — new; per-variant editor widgets,
-  shared helpers (`show_swatch`, `show_gradient_editor`), tab strip for
-  `MultiColorMap`.
-- `src/core/interactive/app.rs` — extend layout: `SidePanel::right` for the
-  editor, `CentralPanel` for the preview. `FractalApp` gains
-  `editor_color_map: UnifiedColorMap` and editor selection state (selected
-  keyframe index, active Newton tab).
+- `src/core/interactive/editor.rs` — new. Defines a `ColorMapEditor`
+  trait (extends `ColorMapKind`) with per-variant `show_editor`
+  implementations on each concrete struct. The trait method takes
+  `&mut self` plus `&mut egui::Ui` and returns whether anything changed:
+  ```rust
+  pub trait ColorMapEditor: ColorMapKind {
+      fn show_editor(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> bool;
+  }
+  ```
+  Shared widget helpers (`show_swatch`, `show_gradient_segment`, fraction
+  renormalization) live as free functions used by all three impls.
+  `MultiColorMap`'s impl renders the tab strip and routes the active
+  tab's gradient through the same shared helpers.
+- `src/core/interactive/app.rs` — extend layout: `SidePanel::right` for
+  the editor, `CentralPanel` for the preview. `FractalApp<F>` gains
+  `editor_color_map: F::ColorMap` (a clone of the renderer's typed color
+  map — concrete, not enum) and a small `EditorState` for selection
+  (selected keyframe index, active Newton tab). Calls
+  `self.editor_color_map.show_editor(ui, &mut self.editor_state)` in the
+  panel — fully monomorphized, zero runtime variant matching.
 
 **Layout:**
 
@@ -446,11 +575,11 @@ Phase 6.
 
 Detailed widget spec is in §7.
 
-**Local-cache lifecycle:** `editor_color_map` is initialized at startup as a
-clone of the renderer's `UnifiedColorMap`. All editor widgets mutate only this
-cache. The renderer continues to use its own (immutable, in this phase) map.
-Edits do not survive window close (no save-back to disk; Space-as-save in
-Phase 5 captures the cache to a fresh timestamped JSON).
+**Local-cache lifecycle:** `editor_color_map: F::ColorMap` is initialized at
+startup as a clone of `renderer.color_map()`. All editor widgets mutate only
+this cache. The renderer continues to use its own (immutable, in this phase)
+color map. Edits do not survive window close (no save-back to disk;
+Space-as-save in Phase 5 captures the cache to a fresh timestamped JSON).
 
 ### Phase 5 — CLI + cleanup + extended Space-as-save
 
@@ -498,33 +627,37 @@ the exact GUI state including colors.
 **Goal:** color edits in the editor panel cause the fractal preview to
 re-colorize live (target: <1 frame latency at 1080p).
 
-**Approach:** the `CachedField` produced by `compute_field` does not depend
-on the color map, so we cache it after each compute and re-colorize from it
-on every color edit. Re-colorize is pure pixel-level work (no fractal math)
-and is fast enough to run on demand.
+**Approach:** `compute_field` produces an `<F::ColorMap as ColorMapKind>::Field`
+that does not depend on the color map, so we cache it after each compute and
+re-colorize from it on every color edit. Re-colorize is pure pixel-level work
+(no fractal math) and is fast enough to run on demand.
 
 **Files touched:**
 
 - [src/core/image_utils.rs](../src/core/image_utils.rs) — add
-  `color_map_mut(&mut self) -> &mut UnifiedColorMap` to `Renderable`.
+  `color_map_mut(&mut self) -> &mut Self::ColorMap` to `Renderable`.
 - [src/core/render_window.rs](../src/core/render_window.rs) — extend
-  `PixelGrid` to:
-  - Cache the most recent `CachedField` after each compute (alongside the
-    existing `display_buffer`).
+  `PixelGrid<F>` to:
+  - Cache the most recent field as `Arc<Mutex<Option<<F::ColorMap as ColorMapKind>::Field>>>`
+    after each compute (alongside the existing `display_buffer`). The type
+    is fixed by `F` at construction; no enum unwrap on the hot path.
   - Add an `Arc<AtomicBool>` `color_dirty` flag.
   - In `update()`, if `color_dirty` is set and no compute is in flight,
     spawn a background task that just re-colorizes the cached field into
-    `display_buffer` (skipping `compute_field`).
+    `display_buffer` via `renderer.color_map().colorize_into(...)`
+    (skipping `compute_field`).
 - `src/core/interactive/app.rs` — wire editor edits: when the editor mutates
   a keyframe / fraction / flat color, write the change into
   `renderer.color_map_mut()`, set `color_dirty`, call `ctx.request_repaint()`.
-- `src/core/interactive/editor.rs` — return an "edited" boolean from each
-  editor function so the app knows when to set `color_dirty`.
+- `src/core/interactive/editor.rs` — `show_editor` already returns whether
+  anything changed (per Phase 4); the app uses that boolean to gate
+  `color_dirty`.
 
-**Editor cache transition:** the separate `editor_color_map` from Phase 4
-becomes redundant. The editor now mutates `renderer.color_map_mut()` directly.
-The app retains only editor *selection* state (selected keyframe index, active
-Newton tab) — the data lives on the renderer.
+**Editor cache transition:** the separate `editor_color_map: F::ColorMap` from
+Phase 4 becomes redundant. The editor now mutates `renderer.color_map_mut()`
+directly (still typed as `&mut F::ColorMap`, statically dispatched). The app
+retains only editor *selection* state (selected keyframe index, active Newton
+tab) — the data lives on the renderer.
 
 **Adaptive quality regulator interaction:** color edits trigger only
 re-colorize, not re-compute, so the regulator's compute-quality scaling is not
@@ -664,16 +797,17 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
    `speed_optimization_level = 0.0`. The field will be computed at full
    user-specified quality, not whatever degraded state interactive use had
    pushed it to.
-3. **Sync color map.** Push the editor's current `UnifiedColorMap` (which in
-   Phase 6 *is* the renderer's map; in Phase 5 was a separate cache) into the
-   renderer's params for serialization.
+3. **Sync color map.** Push the editor's current color map (which in Phase 6
+   *is* `renderer.color_map_mut()`; in Phase 5 was a separate
+   `editor_color_map: F::ColorMap` cache) into the renderer's params for
+   serialization.
 4. **Render to GUI.** Background thread runs `compute_field` (full quality)
-   followed by `colorize` (with synced map) and swaps the result into the
-   preview texture. The save flow blocks (overlay still up) until the render
-   is complete.
+   followed by `color_map().colorize_into(...)` and swaps the result into
+   the preview texture. The save flow blocks (overlay still up) until the
+   render is complete.
 5. **Save params to disk.** Serialize the now-synced `FractalParams`
-   (including embedded `UnifiedColorMap` and the current view-control's
-   `image_specification`) to `<prefix>_<datetime>.json`. The
+   (including the embedded concrete color-map struct and the current
+   view-control's `image_specification`) to `<prefix>_<datetime>.json`. The
    filename pattern matches today's
    [src/core/render_window.rs:255-261](../src/core/render_window.rs#L255-L261).
 6. **Save image to disk.** Write the just-rendered buffer to
@@ -728,12 +862,23 @@ regulator self-tunes from observed compute time, so the choice doesn't change
 the architecture, only the UX feel of "how aggressively does quality bounce
 back up after the user stops dragging a slider."
 
-### 9.4 BarnsleyFern and Serpinsky
+### 9.4 Static-dispatch invariant
+
+The renderer hot path is fully monomorphized over `F: Renderable`. Every
+`compute_field` call returns the concrete `<F::ColorMap as ColorMapKind>::Field`
+type known at compile time; every `colorize_into` call dispatches to the
+concrete `ColorMapKind` impl for that fractal. There is no enum match, no
+`dyn Renderable`, no runtime variant check on the colorize hot path. The
+only runtime dispatch in the system is the single
+`match fractal_params { … }` in [src/cli/explore.rs](../src/cli/explore.rs)
+that selects which concrete `F` to instantiate at startup.
+
+### 9.5 BarnsleyFern and Serpinsky
 
 Continue to panic in `cli::explore::explore_fractal` with "Parameter type does
 not yet implement RenderWindow." Out of scope for this entire roadmap. Their
-params structs are not migrated to `UnifiedColorMap` (Phase 1) and they do not
-implement `compute_field` (Phase 2).
+params structs are not migrated (Phase 1) and they do not implement the
+`Renderable` associated types `ColorMap` / `Field` (Phase 2).
 
 ---
 
@@ -745,13 +890,15 @@ but may be added later if a particular bug class becomes recurring.
 
 ### 10.1 What to unit-test (mandatory)
 
-- `colorize(field, map)` correctness for every `(CachedField, UnifiedColorMap)`
-  pairing, including:
-  - All-`None` field for each variant.
+- `ColorMapKind::colorize_into` correctness, with one test module per
+  concrete impl (`ForegroundBackground`, `BackgroundWithColorMap`,
+  `MultiColorMap`):
+  - All-`None` field.
   - Single-keyframe gradients.
   - Boundary keyframe values (0.0 and 1.0).
-  - `MultiColorMap` with empty `color_maps` (must error or panic with a
-    clear message — not silently produce garbage).
+  - `MultiColorMap` with empty `color_maps`: rejected at deserialization
+    or at construction with a structured error; not reachable on the
+    colorize hot path. (No runtime panic in `colorize_into`.)
 - Fraction renormalization: edit one fraction in a 4-keyframe gradient,
   assert the others scale proportionally and the resulting positions match
   expectations. Edge cases: edit to ε, edit to 1−ε, edit to 0 (clamped),
@@ -760,13 +907,18 @@ but may be added later if a particular bug class becomes recurring.
   expected midpoint position and the expected interpolated color.
 - Keyframe deletion: removing the second keyframe in a 3-keyframe gradient
   preserves positions 0.0 and 1.0 of the anchors and removes the middle one.
-- `UnifiedColorMap` serde round-trips for every variant.
-- `CachedField` construction for each fractal: a small synthetic
-  `ImageSpecification` produces the expected variant with the expected size
-  and the expected entries at known points.
+- serde round-trips for each concrete color-map struct (and, if implemented,
+  the boundary-only `UnifiedColorMap` enum).
+- `compute_field` shape correctness for each fractal: a small synthetic
+  `ImageSpecification` produces a field of the expected concrete type, with
+  the expected size, and the expected values at known points.
 - DDP `#[serde(default)]` shim: an existing pre-Phase-1 DDP JSON
   (re-created in a test fixture) still parses and produces the
   hard-coded white/black colors.
+- Negative serde tests: a JSON with a Mandelbrot params payload but a
+  `MultiColorMap`-shaped color field fails to parse with a structured serde
+  error. (Verifies that mismatched shapes are caught at the JSON boundary,
+  not at runtime.)
 
 ### 10.2 What to manually smoke-test (mandatory each phase)
 
@@ -791,12 +943,17 @@ WSL2/XWayland, native Linux if available.
 | ------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------- |
 | JSON migration misses a file                                        | 1     | `tests/example_parameter_validation_tests.rs` glob covers all JSONs; CI catches missed migrations.        |
 | Schema migration changes pixel hashes                               | 1     | Pixel-hash regression tests gate the PR; if hashes change, the migration changed semantics — bug.         |
-| C0b refactor breaks pixel hashes                                    | 2     | Pure refactor; pixel-hash tests are the gate.                                                             |
-| `colorize` too slow at 4K to be live                                | 6     | Benchmark over representative `SmoothScalar` field at 4K early in Phase 6. Falls back to Phase 7 work.    |
+| Compute/color split breaks pixel hashes                             | 2     | Pure refactor; pixel-hash tests are the gate.                                                             |
+| `colorize_into` too slow at 4K to be live                           | 6     | Benchmark over a representative `SmoothScalarField` at 4K early in Phase 6. Falls back to Phase 7 work.   |
 | Newton tab count drifts from `color_maps.len()`                     | 4, 6  | Tab strip is a pure view of `color_maps.iter().enumerate()`; no separately stored count.                  |
-| Variant mismatch (e.g. Mandelbrot params with `MultiColorMap`)      | 1     | Renderer panics with clear message at construction. Authoring-time error, never reachable from valid use. |
 | Editor state desync after `MultiColorMap` tab switch                | 4, 6  | Selection state resets on tab change (specified in §7.2).                                                 |
 | Adaptive regulator behaves badly during color editing               | 6, 7  | Regulator self-tunes; if behavior is wrong, Phase 7 adjusts whether color edits feed `user_interaction`.  |
+
+Variant-mismatch is intentionally not on this list: the typed-pairing design
+(§5) makes it unrepresentable. The only way for a wrong-shape color map to
+reach the renderer is via malformed JSON, which fails serde deserialization
+before any fractal object is constructed. The `_ => panic!` arm that an
+earlier design relied on does not exist.
 
 ---
 
@@ -849,12 +1006,12 @@ these automatically when committing via Claude Code.
 These do not block any phase but should be decided as the relevant phase
 lands.
 
-1. **Variant slack at the type level.** Each fractal stores
-   `color: UnifiedColorMap` as the full enum but only ever uses one variant.
-   If this becomes painful in practice (e.g. lots of `match` arms doing
-   `_ => panic!`), consider introducing typed wrappers at the params level
-   (`BackgroundWithColorMap` as its own struct that `Into<UnifiedColorMap>`).
-   Default: live with the slack; revisit if it bites.
+1. **Whether to keep the `UnifiedColorMap` / `CachedField` boundary enums
+   at all.** Per §5.4 they exist only as opt-in upcasts for diagnostic /
+   cross-fractal tooling. If no caller in this roadmap needs them, drop them
+   — the per-variant concrete structs and `ColorMapKind` trait alone are
+   sufficient. Recommendation: skip in Phase 1; introduce later only if a
+   real caller appears.
 2. **Active Newton tab on switch.** When the active tab changes, reset
    keyframe selection. Recommended.
 3. **Reuse of `paint_gradient_bar`.** The current
@@ -864,9 +1021,10 @@ lands.
 4. **Color edits → adaptive regulator?** Whether to feed color edits into
    `user_interaction = true`. Defer to Phase 7 measurement.
 5. **DDP basin coloring richness.** Today DDP collapses all non-zero basins
-   into one "background" bucket. Future work could expose per-basin colors,
-   which would require extending `UnifiedColorMap` with a richer DDP variant
-   (or adopting `MultiColorMap` for DDP). Out of scope for this roadmap.
+   into one "background" bucket. Future work could expose per-basin colors;
+   the cleanest path is probably to add a fourth `ColorMapKind` impl
+   (e.g. `IndexedBasins`) paired with `BinaryBasinField` rather than
+   stretching `ForegroundBackground`. Out of scope for this roadmap.
 
 ---
 
