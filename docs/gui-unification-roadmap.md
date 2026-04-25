@@ -63,10 +63,15 @@ egui = "0.34"
 
 ### Two independent eframe apps share no infrastructure
 
-| Mode         | File                                                                                           | Status                                                       |
-| ------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Explore      | [src/core/user_interface.rs](../src/core/user_interface.rs)                                    | `eframe::App`; preview-only; full pan/zoom/save behavior     |
-| Color editor | [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)                          | `eframe::App`; demo widgets only — does not affect renderer  |
+**Explore**
+
+- **File:** [src/core/user_interface.rs](../src/core/user_interface.rs)
+- **Status:** `eframe::App`; preview-only; full pan/zoom/save behavior
+
+**Color editor**
+
+- **File:** [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)
+- **Status:** `eframe::App`; demo widgets only — does not affect renderer
 
 Both apps share [src/core/eframe_support.rs](../src/core/eframe_support.rs) for
 `wgpu` setup, but everything else is duplicated.
@@ -86,27 +91,32 @@ implement RenderWindow" — they are intentionally out of scope for `explore`.
 The three explorable fractal families today use structurally different color
 representations:
 
-| Fractal              | Representation                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| Mandelbrot, Julia    | `ColorMapParams` = 1 gradient + 1 flat background ([src/fractals/quadratic_map.rs:19](../src/fractals/quadratic_map.rs#L19)) |
-| Driven-damped pendulum | No color params at all — hard-coded white/black in `render_point` ([src/fractals/driven_damped_pendulum.rs:38-44](../src/fractals/driven_damped_pendulum.rs#L38-L44)) |
-| Newton's method      | `CommonParams` with `boundary_set_color_rgb` + `cyclic_attractor_color_rgb` + `ColorMapSpec` enum (FullColorSpec or GrayscaleSpec) ([src/fractals/newtons_method.rs:204-266](../src/fractals/newtons_method.rs#L204-L266)) |
+**Mandelbrot, Julia**
 
-Unifying these is Phase 1.
+- **Representation:** `ColorMapParams` = 1 gradient + 1 flat background ([src/fractals/quadratic_map.rs:19](../src/fractals/quadratic_map.rs#L19))
+
+**Driven-damped pendulum**
+
+- **Representation:** No color params at all — hard-coded white/black in `render_point` ([src/fractals/driven_damped_pendulum.rs:38-44](../src/fractals/driven_damped_pendulum.rs#L38-L44))
+
+**Newton's method**
+
+- **Representation:** `CommonParams` with `boundary_set_color_rgb` + `cyclic_attractor_color_rgb` + `ColorMapSpec` enum (FullColorSpec or GrayscaleSpec) ([src/fractals/newtons_method.rs:204-266](../src/fractals/newtons_method.rs#L204-L266))
+  Unifying these is Phase 1.
 
 ---
 
 ## 3. Phase Roadmap Summary
 
-| Phase | Title                          | Blast radius                                          |
-| ----- | ------------------------------ | ----------------------------------------------------- |
-| 1     | Color-map data unification     | All fractal params + every example/test JSON file     |
-| 2     | Compute / color split          | `Renderable` trait + each fractal's render pipeline   |
-| 3     | Unified `FractalApp` shell     | New `src/core/interactive/` module; preview only      |
-| 4     | Color editor panel             | Editor widget + layout wiring                         |
-| 5     | CLI + cleanup + Space-as-save  | Delete legacy modules; extend snapshot behavior       |
-| 6     | Live color sync                | `PixelGrid` extended with re-colorize-only path       |
-| 7     | Polish                         | Contents TBD post-Phase-6 measurement                 |
+| Phase | Title                         | Blast radius                                        |
+| ----- | ----------------------------- | --------------------------------------------------- |
+| 1     | Color-map data unification    | All fractal params + every example/test JSON file   |
+| 2     | Compute / color split         | `Renderable` trait + each fractal's render pipeline |
+| 3     | Unified `FractalApp` shell    | New `src/core/interactive/` module; preview only    |
+| 4     | Color editor panel            | Editor widget + layout wiring                       |
+| 5     | CLI + cleanup + Space-as-save | Delete legacy modules; extend snapshot behavior     |
+| 6     | Live color sync               | `PixelGrid` extended with re-colorize-only path     |
+| 7     | Polish                        | Contents TBD post-Phase-6 measurement               |
 
 Phases 1 and 2 are independent pre-work — either order works, but Phase 1 is
 recommended first so Phase 2's `colorize` function can target `UnifiedColorMap`
@@ -219,7 +229,7 @@ pub type SmoothScalarField          = Vec<Vec<Option<f32>>>;
 pub type SmoothScalarWithIndexField = Vec<Vec<Option<(f32, usize)>>>;
 ```
 
-Names are descriptive (what the structure *is*), not fractal-named.
+Names are descriptive (what the structure _is_), not fractal-named.
 Newton's `boundary_set_color_rgb` is intentionally absent from `MultiColorMap`:
 it is dead code in the renderer ([src/fractals/newtons_method.rs:416-428](../src/fractals/newtons_method.rs#L416-L428)
 never reads it) and exists today only to define the "in-set" endpoint of the
@@ -295,11 +305,23 @@ enforces the pairing.
 
 ### 5.3 Per-fractal pairings
 
-| Concrete `ColorMap` type   | Concrete `Field` type            | Fractal                  | Colorization rule                                                       |
-| -------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
-| `ForegroundBackground`     | `BinaryBasinField`               | DDP                      | `Some(0)` → `foreground`; `Some(_)` or `None` → `background`            |
-| `BackgroundWithColorMap`   | `SmoothScalarField`              | Mandelbrot, Julia        | `None` → `background`; `Some(f)` → `color_map.lookup(f)`                |
-| `MultiColorMap`            | `SmoothScalarWithIndexField`     | Newton's method          | `None` → `cyclic_attractor`; `Some((f, k))` → `color_maps[k].lookup(f)` |
+**ForegroundBackground**
+
+- **Concrete Field type:** `BinaryBasinField`
+- **Fractal:** DDP
+- **Colorization rule:** `Some(0)` → `foreground`; `Some(_)` or `None` → `background`
+
+**BackgroundWithColorMap**
+
+- **Concrete Field type:** `SmoothScalarField`
+- **Fractal:** Mandelbrot, Julia
+- **Colorization rule:** `None` → `background`; `Some(f)` → `color_map.lookup(f)`
+
+**MultiColorMap**
+
+- **Concrete Field type:** `SmoothScalarWithIndexField`
+- **Fractal:** Newton's method
+- **Colorization rule:** `None` → `cyclic_attractor`; `Some((f, k))` → `color_maps[k].lookup(f)`
 
 Each fractal's params struct embeds its concrete `ColorMap` type directly
 (e.g. `MandelbrotParams` carries `pub color: BackgroundWithColorMap`).
@@ -387,7 +409,7 @@ accordingly. No GUI work, no trait changes (Phase 2 handles trait wiring).
   in this phase.
 - [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs) — replace
   `ColorMapParams.keyframes` and `background_color_rgb` with `pub color:
-  BackgroundWithColorMap`. The other `ColorMapParams` fields
+BackgroundWithColorMap`. The other `ColorMapParams` fields
   (`lookup_table_count`, `histogram_bin_count`, `histogram_sample_count`) are
   not color data and stay on `QuadraticMapParams` directly (or move into a
   sibling struct — implementer's choice).
@@ -517,7 +539,8 @@ on every panel — matches current explore mode and avoids border artifacts
 (§4.1).
 
 **Verification:** manual smoke-test all four fractal types on Windows native
-+ WSL.
+
+- WSL.
 
 ### Phase 4 — Color editor panel
 
@@ -569,7 +592,9 @@ copy**. The fractal preview is not affected by edits — that's Phase 6.
 │                                             │ ───────────────────  │
 │                                             │ [gradient bar]       │
 │                                             │ ───────────────────  │
+│                                             │                      │
 │                                             │ [color picker]       │
+│                                             │                      │
 └─────────────────────────────────────────────┴──────────────────────┘
 ```
 
@@ -656,7 +681,7 @@ re-colorize from it on every color edit. Re-colorize is pure pixel-level work
 **Editor cache transition:** the separate `editor_color_map: F::ColorMap` from
 Phase 4 becomes redundant. The editor now mutates `renderer.color_map_mut()`
 directly (still typed as `&mut F::ColorMap`, statically dispatched). The app
-retains only editor *selection* state (selected keyframe index, active Newton
+retains only editor _selection_ state (selected keyframe index, active Newton
 tab) — the data lives on the renderer.
 
 **Adaptive quality regulator interaction:** color edits trigger only
@@ -690,6 +715,7 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
 ## 7. Color Editor Widget Spec
 
 ### 7.1 Single-gradient editor (used by `BackgroundWithColorMap` and each
+
 `MultiColorMap` tab)
 
 **Read-only displays:**
@@ -702,7 +728,7 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
 **Mutable handles:**
 
 - Between each pair of adjacent keyframes: a `+` button and a `DragValue`
-  showing the *fraction* of the gradient occupied by that segment (the
+  showing the _fraction_ of the gradient occupied by that segment (the
   difference between the two adjacent keyframe positions).
 - Inline color picker (egui's `color_picker_color32`), permanently visible
   at the bottom of the panel.
@@ -724,7 +750,7 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
   user edits the new keyframe). The `+` button does not appear before the
   first keyframe or after the last.
 - **Edit a fraction `DragValue`** → that fraction adopts the new value; the
-  *other* fractions are scaled proportionally so the sum stays 1.0; the
+  _other_ fractions are scaled proportionally so the sum stays 1.0; the
   keyframe positions are recomputed from the resulting fractions. Each
   fraction is clamped to `[ε, 1.0]` (with `ε ≈ 0.005`) to prevent any
   segment from collapsing to zero width.
@@ -742,18 +768,18 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
 
 ### 7.3 Application keys (interactive mode)
 
-| Key                | Behavior                                                                         |
-| ------------------ | -------------------------------------------------------------------------------- |
-| Arrow keys         | Pan view (existing).                                                             |
-| W / S              | Zoom in / out (existing).                                                        |
-| A / D (with no W/S)| Fast zoom in / out (existing).                                                   |
-| R                  | Reset to initial view (existing).                                                |
-| Mouse left-click   | Recenter view on clicked point in the fractal preview (existing).                |
-| Space              | Save snapshot — see §8.                                                          |
-| Q                  | Exit application.                                                                |
-| Ctrl+C             | Exit application (terminal default).                                             |
-| Esc                | Clear keyframe selection. **No-op when no keyframe is selected.** Does not exit. |
-| Delete             | Remove selected keyframe (no-op for first/last).                                 |
+| Key                 | Behavior                                                                         |
+| ------------------- | -------------------------------------------------------------------------------- |
+| Arrow keys          | Pan view (existing).                                                             |
+| W / S               | Zoom in / out (existing).                                                        |
+| A / D (with no W/S) | Fast zoom in / out (existing).                                                   |
+| R                   | Reset to initial view (existing).                                                |
+| Mouse left-click    | Recenter view on clicked point in the fractal preview (existing).                |
+| Space               | Save snapshot — see §8.                                                          |
+| Q                   | Exit application.                                                                |
+| Ctrl+C              | Exit application (terminal default).                                             |
+| Esc                 | Clear keyframe selection. **No-op when no keyframe is selected.** Does not exit. |
+| Delete              | Remove selected keyframe (no-op for first/last).                                 |
 
 The Esc-as-quit binding present in today's [src/core/user_interface.rs:216](../src/core/user_interface.rs#L216)
 must be removed.
@@ -798,7 +824,7 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
    user-specified quality, not whatever degraded state interactive use had
    pushed it to.
 3. **Sync color map.** Push the editor's current color map (which in Phase 6
-   *is* `renderer.color_map_mut()`; in Phase 5 was a separate
+   _is_ `renderer.color_map_mut()`; in Phase 5 was a separate
    `editor_color_map: F::ColorMap` cache) into the renderer's params for
    serialization.
 4. **Render to GUI.** Background thread runs `compute_field` (full quality)
@@ -817,7 +843,7 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
 ### 8.3 Restorability invariant
 
 Calling `cargo run -- explore <saved.json>` on the file produced by step 5
-must restore the GUI to *exactly* the state it was in when Space was pressed:
+must restore the GUI to _exactly_ the state it was in when Space was pressed:
 the same view bounds, the same color map (including any edits), the same
 render quality, the same fractal type. The pixel hash of the rendered preview
 should match the saved PNG.
@@ -845,12 +871,12 @@ what's written to disk, and what re-loads next time.
 
 ### 9.2 Render trigger matrix
 
-| Event                          | What runs                                  | Quality           |
-| ------------------------------ | ------------------------------------------ | ----------------- |
-| Pan / zoom / click             | `compute_field` + `colorize`               | Adaptive          |
-| Color edit (Phase 6+)          | `colorize` only (uses cached field)        | Full              |
-| Space pressed                  | `compute_field` + `colorize`               | Forced to full    |
-| Idle (no interaction)          | Adaptive regulator may trigger upgrade     | Climbing → full   |
+| Event                 | What runs                              | Quality         |
+| --------------------- | -------------------------------------- | --------------- |
+| Pan / zoom / click    | `compute_field` + `colorize`           | Adaptive        |
+| Color edit (Phase 6+) | `colorize` only (uses cached field)    | Full            |
+| Space pressed         | `compute_field` + `colorize`           | Forced to full  |
+| Idle (no interaction) | Adaptive regulator may trigger upgrade | Climbing → full |
 
 ### 9.3 Adaptive regulator
 
@@ -939,21 +965,45 @@ WSL2/XWayland, native Linux if available.
 
 ## 11. Risks & De-risk
 
-| Risk                                                                | Phase | Mitigation                                                                                                |
-| ------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------- |
-| JSON migration misses a file                                        | 1     | `tests/example_parameter_validation_tests.rs` glob covers all JSONs; CI catches missed migrations.        |
-| Schema migration changes pixel hashes                               | 1     | Pixel-hash regression tests gate the PR; if hashes change, the migration changed semantics — bug.         |
-| Compute/color split breaks pixel hashes                             | 2     | Pure refactor; pixel-hash tests are the gate.                                                             |
-| `colorize_into` too slow at 4K to be live                           | 6     | Benchmark over a representative `SmoothScalarField` at 4K early in Phase 6. Falls back to Phase 7 work.   |
-| Newton tab count drifts from `color_maps.len()`                     | 4, 6  | Tab strip is a pure view of `color_maps.iter().enumerate()`; no separately stored count.                  |
-| Editor state desync after `MultiColorMap` tab switch                | 4, 6  | Selection state resets on tab change (specified in §7.2).                                                 |
-| Adaptive regulator behaves badly during color editing               | 6, 7  | Regulator self-tunes; if behavior is wrong, Phase 7 adjusts whether color edits feed `user_interaction`.  |
+**JSON migration misses a file**
+
+- **Phase:** 1
+- **Mitigation:** `tests/example_parameter_validation_tests.rs` glob covers all JSONs; CI catches missed migrations.
+
+**Schema migration changes pixel hashes**
+
+- **Phase:** 1
+- **Mitigation:** Pixel-hash regression tests gate the PR; if hashes change, the migration changed semantics — bug.
+
+**Compute/color split breaks pixel hashes**
+
+- **Phase:** 2
+- **Mitigation:** Pure refactor; pixel-hash tests are the gate.
+
+**`colorize_into` too slow at 4K to be live**
+
+- **Phase:** 6
+- **Mitigation:** Benchmark over a representative `SmoothScalarField` at 4K early in Phase 6. Falls back to Phase 7 work.
+
+**Newton tab count drifts from `color_maps.len()`**
+
+- **Phase:** 4, 6
+- **Mitigation:** Tab strip is a pure view of `color_maps.iter().enumerate()`; no separately stored count.
+
+**Editor state desync after `MultiColorMap` tab switch**
+
+- **Phase:** 4, 6
+- **Mitigation:** Selection state resets on tab change (specified in §7.2).
+
+**Adaptive regulator behaves badly during color editing**
+
+- **Phase:** 6, 7
+- **Mitigation:** Regulator self-tunes; if behavior is wrong, Phase 7 adjusts whether color edits feed `user_interaction`.
 
 Variant-mismatch is intentionally not on this list: the typed-pairing design
 (§5) makes it unrepresentable. The only way for a wrong-shape color map to
 reach the renderer is via malformed JSON, which fails serde deserialization
-before any fractal object is constructed. The `_ => panic!` arm that an
-earlier design relied on does not exist.
+before any fractal object is constructed.
 
 ---
 
