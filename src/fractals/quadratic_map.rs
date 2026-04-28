@@ -4,7 +4,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
-        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        color_map::{BackgroundWithColorMap, ColorMap, ColorMapLookUpTable, ColorMapper},
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
             ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
@@ -15,12 +15,19 @@ use crate::{
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
 
+/// Parameter block for the colorization step of escape-time fractals
+/// (Mandelbrot, Julia). The `color` field holds the user-facing palette;
+/// the remaining fields tune the histogram-based normalization and the
+/// pre-baked lookup table.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
-    pub keyframes: Vec<ColorMapKeyFrame>,
+    /// Background color and gradient keyframes for escaped pixels.
+    pub color: BackgroundWithColorMap,
+    /// Number of entries in the precomputed color lookup table.
     pub lookup_table_count: usize,
-    pub background_color_rgb: [u8; 3],
+    /// Number of bins used by the histogram that drives gradient normalization.
     pub histogram_bin_count: usize,
+    /// Number of samples drawn from the image when populating the histogram.
     pub histogram_sample_count: usize,
 }
 
@@ -203,8 +210,10 @@ pub struct QuadraticMap<T: QuadraticMapParams> {
 
 impl<T: QuadraticMapParams> QuadraticMap<T> {
     pub fn new(fractal_params: T) -> QuadraticMap<T> {
-        let inner_color_map =
-            ColorMap::new(&fractal_params.color_map().keyframes, LinearInterpolator {});
+        let inner_color_map = ColorMap::new(
+            &fractal_params.color_map().color.color_map,
+            LinearInterpolator {},
+        );
         let histogram = create_empty_histogram(&fractal_params);
         let mut quadratic_map = QuadraticMap {
             cdf: CumulativeDistributionFunction::new(&histogram),
@@ -214,7 +223,7 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
                 fractal_params.color_map().lookup_table_count,
             ),
             inner_color_map,
-            background_color: Rgb(fractal_params.color_map().background_color_rgb),
+            background_color: Rgb(fractal_params.color_map().color.background),
             fractal_params: fractal_params.clone(),
         };
         quadratic_map.update_color_map();
