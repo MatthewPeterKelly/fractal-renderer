@@ -79,7 +79,9 @@ Both apps share [src/core/eframe_support.rs](../src/core/eframe_support.rs) for
 ### CLI
 
 [src/cli/args.rs](../src/cli/args.rs) defines three subcommands: `Render`,
-`Explore`, `ColorSwatch`. The `Explore` subcommand dispatches in
+`Explore`, `ColorSwatch`. This roadmap focuses primarily on modifications to
+`Explore`, while preserving functionality of `Render`. The `ColorSwatch` mode
+will be removed. The `Explore` subcommand dispatches in
 [src/cli/explore.rs](../src/cli/explore.rs) on the `FractalParams` variant:
 Mandelbrot/Julia/DDP go through generic `PixelGrid<F>`; Newton has its own
 explore path in [src/fractals/newtons_method.rs:461](../src/fractals/newtons_method.rs#L461).
@@ -408,8 +410,8 @@ accordingly. No GUI work, no trait changes (Phase 2 handles trait wiring).
   enum and `From` impls (per §5.4); skip if no caller materializes for them
   in this phase.
 - [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs) — replace
-  `ColorMapParams.keyframes` and `background_color_rgb` with `pub color:
-BackgroundWithColorMap`. The other `ColorMapParams` fields
+  `ColorMapParams.keyframes` and `background_color_rgb` with `pub color: BackgroundWithColorMap`.
+  The other `ColorMapParams` fields
   (`lookup_table_count`, `histogram_bin_count`, `histogram_sample_count`) are
   not color data and stay on `QuadraticMapParams` directly (or move into a
   sibling struct — implementer's choice).
@@ -538,9 +540,7 @@ in tree at this phase to keep diffs reviewable; it gets deleted in Phase 5.
 on every panel — matches current explore mode and avoids border artifacts
 (§4.1).
 
-**Verification:** manual smoke-test all four fractal types on Windows native
-
-- WSL.
+**Verification:** manual smoke-test all four fractal types on various platforms.
 
 ### Phase 4 — Color editor panel
 
@@ -694,9 +694,9 @@ compute time, so neither choice is structurally wrong.
 
 **Verification:** manual interactive testing — drag fraction sliders, click
 keyframe colors, verify the preview updates within a frame or two. Benchmark
-`colorize` over a representative `SmoothScalar` field at 1920×1080 and 4K to
-confirm it stays under one frame at 60Hz; if not, Phase 7 must include
-optimization or downscaling for the live path.
+`colorize` over a representative `SmoothScalar` field at 1920×1080 to
+confirm it stays under one frame at 24Hz; if not, Phase 7 must include
+tweaks to the adaptive quality scaling to make the UI feel smooth.
 
 ### Phase 7 — Polish
 
@@ -752,7 +752,7 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
 - **Edit a fraction `DragValue`** → that fraction adopts the new value; the
   _other_ fractions are scaled proportionally so the sum stays 1.0; the
   keyframe positions are recomputed from the resulting fractions. Each
-  fraction is clamped to `[ε, 1.0]` (with `ε ≈ 0.005`) to prevent any
+  fraction is clamped to `[ε, 1.0]` (with `ε ≈ 0.001`) to prevent any
   segment from collapsing to zero width.
 
 ### 7.2 Per-variant layout
@@ -773,7 +773,7 @@ Contents to be defined post-Phase-6 measurement. Likely candidates:
 | Arrow keys          | Pan view (existing).                                                             |
 | W / S               | Zoom in / out (existing).                                                        |
 | A / D (with no W/S) | Fast zoom in / out (existing).                                                   |
-| R                   | Reset to initial view (existing).                                                |
+| R                   | Reset to initial view (existing) and color map (new)                             |
 | Mouse left-click    | Recenter view on clicked point in the fractal preview (existing).                |
 | Space               | Save snapshot — see §8.                                                          |
 | Q                   | Exit application.                                                                |
@@ -799,7 +799,7 @@ must be removed.
 
 Pressing Space initiates a deliberate "publish this exact state" action.
 Unlike today's fire-and-forget snapshot, the new flow is gated on a
-full-quality render and locks input until complete.
+full-quality render and locks input (with user feedback) until complete.
 
 ### 8.1 State machine
 
@@ -822,7 +822,8 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
    `AdaptiveOptimizationRegulator` so the next render uses
    `speed_optimization_level = 0.0`. The field will be computed at full
    user-specified quality, not whatever degraded state interactive use had
-   pushed it to.
+   pushed it to. Consider caching the current value of the quality so that it
+   can immediately be restored on the next user interaction to enable quick response.
 3. **Sync color map.** Push the editor's current color map (which in Phase 6
    _is_ `renderer.color_map_mut()`; in Phase 5 was a separate
    `editor_color_map: F::ColorMap` cache) into the renderer's params for
@@ -845,7 +846,7 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
 Calling `cargo run -- explore <saved.json>` on the file produced by step 5
 must restore the GUI to _exactly_ the state it was in when Space was pressed:
 the same view bounds, the same color map (including any edits), the same
-render quality, the same fractal type. The pixel hash of the rendered preview
+render quality parameters, the same fractal type. The pixel hash of the rendered preview
 should match the saved PNG.
 
 ### 8.4 Comparison to current behavior
@@ -874,7 +875,7 @@ what's written to disk, and what re-loads next time.
 | Event                 | What runs                              | Quality         |
 | --------------------- | -------------------------------------- | --------------- |
 | Pan / zoom / click    | `compute_field` + `colorize`           | Adaptive        |
-| Color edit (Phase 6+) | `colorize` only (uses cached field)    | Full            |
+| Color edit (Phase 6+) | `colorize` only (uses cached field)    | (Cached Field)  |
 | Space pressed         | `compute_field` + `colorize`           | Forced to full  |
 | Idle (no interaction) | Adaptive regulator may trigger upgrade | Climbing → full |
 
@@ -949,7 +950,7 @@ but may be added later if a particular bug class becomes recurring.
 ### 10.2 What to manually smoke-test (mandatory each phase)
 
 Per the per-phase PR checklist (§12). Same matrix as today: Windows native,
-WSL2/XWayland, native Linux if available.
+WSL2/XWayland, native Linux, mac.
 
 ### 10.3 What to leave for later
 
@@ -980,10 +981,10 @@ WSL2/XWayland, native Linux if available.
 - **Phase:** 2
 - **Mitigation:** Pure refactor; pixel-hash tests are the gate.
 
-**`colorize_into` too slow at 4K to be live**
+**`colorize_into` too slow at 2k to be live**
 
 - **Phase:** 6
-- **Mitigation:** Benchmark over a representative `SmoothScalarField` at 4K early in Phase 6. Falls back to Phase 7 work.
+- **Mitigation:** Benchmark over a representative `SmoothScalarField` at 2K early in Phase 6. Falls back to Phase 7 work.
 
 **Newton tab count drifts from `color_maps.len()`**
 
@@ -1030,8 +1031,7 @@ these automatically when committing via Claude Code.
 - Commits: conventional (`feat:`, `fix:`, `perf:`, `refactor:`, `test:`,
   `docs:`, `chore:`) or imperative short titles.
 - One logical change per commit.
-- Include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` for
-  AI-assisted commits.
+- Include attribution for AI-assisted commits.
 - Never push or open PRs without explicit user confirmation.
 
 ### 12.3 Per-phase PR checklist
@@ -1040,9 +1040,7 @@ these automatically when committing via Claude Code.
 - [ ] Unit tests added for new pure-logic pieces (per §10.1).
 - [ ] Pixel-hash regression tests pass unchanged where applicable
       (Phases 1, 2 especially).
-- [ ] Manual smoke-test on Windows native.
-- [ ] Manual smoke-test on WSL.
-- [ ] Manual smoke-test on native Linux (if available).
+- [ ] Manual smoke-test on various platforms (WSL, windows, mac, linux).
 - [ ] If a hot path changed: `cargo bench` comparison before/after.
 - [ ] If JSON schema changed: every example JSON re-loads and produces the
       same image hash (or a documented and intended pixel difference).
