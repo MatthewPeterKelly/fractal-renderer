@@ -12,6 +12,10 @@
     "render_options": {
       "downsample_stride": 1,
       "subpixel_antialiasing": 1
+    },
+    "color": {
+      "foreground": [255, 255, 255],
+      "background": [0, 0, 0]
     }
   }
 }
