@@ -8,5 +8,11 @@
 **/*.rs.bk
 Cargo.lock
 
+# Node / Prettier tooling:
+node_modules/
+
 # Editor:
 .vscode/**/*
+# ...except shared workspace settings that should be checked in:
+!.vscode/settings.json
+!.vscode/extensions.json

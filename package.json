@@ -1,0 +1,15 @@
+{
+  "name": "fractal-renderer-tooling",
+  "private": true,
+  "description": "Dev tooling (Prettier) for JSON and Markdown formatting. Not a JS package.",
+  "scripts": {
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "3.8.3"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

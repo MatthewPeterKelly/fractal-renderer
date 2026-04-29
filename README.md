@@ -141,7 +141,7 @@ Refer to [`CONTRIBUTING.md`](./CONTRIBUTING.md) file if you are interested in co
 
 This project is covered by the MIT [LICENSE](./LICENSE).
 
-JSON and Markdown formatting via [prettier](https://prettier.io/). Rust code is formatted and linted with the standard tooling.
+JSON and Markdown formatting via [Prettier](https://prettier.io/) (requires Node ≥14). Run `npm install` once to install it, then `npm run fmt` to auto-format or `npm run fmt:check` to verify. Rust code is formatted and linted with the standard tooling (`cargo fmt`, `cargo clippy`).
 
 ## Acknowledgements
 
