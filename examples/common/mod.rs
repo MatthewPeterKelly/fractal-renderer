@@ -71,7 +71,7 @@ pub fn color_editor_example_from_string(example_name: &str) {
     // Early prototype. Eventually this will support the same set of fractal types as `explore`.
     let (keyframes, preview_buffer, resolution) = match fractal_params {
         FractalParams::Mandelbrot(params) => {
-            let kf = params.color_map.keyframes.clone();
+            let kf = params.color_map.color.color_map.clone();
             let resolution = params.image_specification.resolution;
             let renderer = QuadraticMap::new((*params).clone());
             let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &resolution);

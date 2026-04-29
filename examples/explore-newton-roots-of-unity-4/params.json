@@ -7,27 +7,71 @@
         "width": 5.0
       },
       "max_iteration_count": 250,
-      "convergence_tolerance": 1e-6,
+      "convergence_tolerance": 1e-06,
       "render_options": {
         "downsample_stride": 1,
         "subpixel_antialiasing": 2
       },
-      "boundary_set_color_rgb": [0, 0, 0],
-      "cyclic_attractor_color_rgb": [255, 255, 255],
-      "color_map_spec": {
-        "GrayscaleSpec": {
-          "root_colors_rgb": [
-            [18, 83, 53],
-            [170, 30, 78],
-            [30, 95, 175],
-            [228, 173, 55]
+      "color": {
+        "cyclic_attractor": [255, 255, 255],
+        "color_maps": [
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [9, 42, 27]
+            },
+            {
+              "query": 0.92,
+              "rgb_raw": [5, 21, 13]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [0, 0, 0]
+            }
           ],
-          "grayscale_keyframes": [
-            { "query": 0.0, "value": 0.5 },
-            { "query": 0.92, "value": 0.75 },
-            { "query": 1.0, "value": 1.0 }
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [85, 15, 39]
+            },
+            {
+              "query": 0.92,
+              "rgb_raw": [43, 8, 20]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [0, 0, 0]
+            }
+          ],
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [15, 48, 88]
+            },
+            {
+              "query": 0.92,
+              "rgb_raw": [8, 24, 44]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [0, 0, 0]
+            }
+          ],
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [114, 87, 28]
+            },
+            {
+              "query": 0.92,
+              "rgb_raw": [57, 43, 14]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [0, 0, 0]
+            }
           ]
-        }
+        ]
       },
       "lookup_table_count": 512,
       "histogram_bin_count": 512,

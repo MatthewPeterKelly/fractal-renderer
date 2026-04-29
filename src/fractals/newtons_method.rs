@@ -4,14 +4,14 @@ use std::{f64::consts::PI, fmt::Debug, sync::Arc};
 
 use crate::{
     core::{
-        color_map::{ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper},
+        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, MultiColorMap},
         file_io::FilePrefix,
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
             self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
             scale_down_parameter_for_speed, scale_up_parameter_for_speed,
         },
-        interpolation::{ClampedLogInterpolator, Interpolator, LinearInterpolator},
+        interpolation::{ClampedLogInterpolator, LinearInterpolator},
         user_interface,
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
@@ -183,85 +183,25 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
     None
 }
 
-// Used to interpolate between two color values based on the iterations
-// required for the Newton-Raphson method to converge to a root.
-// Query values of 0 map to `iteration_limits[0]` and values of 1 map to
-// `max_iteration_count`. The `value` of zero corresponds to the common
-// background color, while a `value` of one corresponds to the foreground
-// color associated with the root that the iteration converges to.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-pub struct GrayscaleMapKeyFrame {
-    pub query: f32,
-    pub value: f32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GrayscaleKeyframeSpec {
-    pub root_colors_rgb: Vec<[u8; 3]>,
-    pub grayscale_keyframes: Vec<GrayscaleMapKeyFrame>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ColorMapSpec {
-    FullColorSpec(Vec<Vec<ColorMapKeyFrame>>),
-    GrayscaleSpec(GrayscaleKeyframeSpec),
-}
-
-impl ColorMapSpec {
-    pub fn to_color_map_vec(
-        &self,
-        boundary_set_color_rgb: [u8; 3],
-    ) -> Vec<ColorMap<LinearInterpolator>> {
-        match self {
-            ColorMapSpec::GrayscaleSpec(spec) => spec
-                .root_colors_rgb
-                .iter()
-                .map(|root_color| {
-                    let keyframes: Vec<ColorMapKeyFrame> = spec
-                        .grayscale_keyframes
-                        .iter()
-                        .map(|keyframe| {
-                            let mut rgb = [0u8; 3];
-                            for i in 0..3 {
-                                let color = LinearInterpolator.interpolate(
-                                    keyframe.value,
-                                    root_color[i] as f32,
-                                    boundary_set_color_rgb[i] as f32,
-                                );
-                                rgb[i] = color.clamp(0.0, 255.0).round() as u8;
-                            }
-                            ColorMapKeyFrame {
-                                query: keyframe.query,
-                                rgb_raw: rgb,
-                            }
-                        })
-                        .collect();
-
-                    ColorMap::new(&keyframes, LinearInterpolator)
-                })
-                .collect(),
-
-            ColorMapSpec::FullColorSpec(spec) => spec
-                .iter()
-                .map(|keyframes| ColorMap::new(keyframes, LinearInterpolator))
-                .collect(),
-        }
-    }
-}
-
 /// These parameters are common to all Newton's method fractals, and are not
 /// generic over the specific system being solved.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommonParams {
+    /// Image dimensions and viewport.
     pub image_specification: ImageSpecification,
+    /// Maximum number of Newton-Raphson iterations before giving up.
     pub max_iteration_count: u32,
+    /// Tolerance used to detect convergence to a root.
     pub convergence_tolerance: f64,
+    /// Rendering options (anti-aliasing, downsampling, etc.).
     pub render_options: RenderOptions,
-    pub boundary_set_color_rgb: [u8; 3],
-    pub cyclic_attractor_color_rgb: [u8; 3], // color for "did not converge"
-    pub color_map_spec: ColorMapSpec,        // defines color map for each root
+    /// Per-root gradients plus the cyclic-attractor (non-converged) color.
+    pub color: MultiColorMap,
+    /// Number of entries in each precomputed color lookup table.
     pub lookup_table_count: usize,
+    /// Number of bins in the shared histogram used to normalize gradients.
     pub histogram_bin_count: usize,
+    /// Number of samples drawn from the image when populating the histogram.
     pub histogram_sample_count: usize,
 }
 
@@ -292,18 +232,21 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     pub fn new(params: CommonParams, system: F) -> Self {
-        let inner_color_maps = params
-            .color_map_spec
-            .to_color_map_vec(params.boundary_set_color_rgb);
+        let inner_color_maps: Vec<ColorMap<LinearInterpolator>> = params
+            .color
+            .color_maps
+            .iter()
+            .map(|kfs| ColorMap::new(kfs, LinearInterpolator))
+            .collect();
+
+        if inner_color_maps.is_empty() {
+            panic!("color.color_maps must define at least one color map");
+        }
 
         let color_maps: Vec<ColorMapLookUpTable> = inner_color_maps
             .iter()
             .map(|cm| ColorMapLookUpTable::from_color_map(cm, params.lookup_table_count))
             .collect();
-
-        if color_maps.is_empty() {
-            panic!("color_map_spec must define at least one color map");
-        }
 
         let histogram = Histogram::new(
             params.histogram_bin_count,
@@ -418,7 +361,7 @@ where
             match self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1])) {
                 Some(res) => res,
                 None => {
-                    return image::Rgb(self.params.cyclic_attractor_color_rgb);
+                    return image::Rgb(self.params.color.cyclic_attractor);
                 }
             };
 

@@ -1,4 +1,5 @@
 use crate::core::{
+    color_map::ForegroundBackground,
     image_utils::{
         ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed, scale_up_parameter_for_speed,
@@ -7,6 +8,16 @@ use crate::core::{
     ode_solvers::rk4_simulate,
 };
 use serde::{Deserialize, Serialize};
+
+/// Default color pair for DDP: white foreground / black background.
+/// Matches the previously hard-coded values, so JSON files written before
+/// the `color` field existed continue to render identically.
+fn ddp_default_color() -> ForegroundBackground {
+    ForegroundBackground {
+        foreground: [255, 255, 255],
+        background: [0, 0, 0],
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DrivenDampedPendulumParams {
@@ -19,6 +30,9 @@ pub struct DrivenDampedPendulumParams {
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
+    /// Foreground (zeroth-basin) and background (other) colors.
+    #[serde(default = "ddp_default_color")]
+    pub color: ForegroundBackground,
 }
 
 impl Renderable for DrivenDampedPendulumParams {
@@ -32,14 +46,12 @@ impl Renderable for DrivenDampedPendulumParams {
             self.n_steps_per_period,
             self.periodic_state_error_tolerance,
         );
-        // We color the pixel white if it is in the zeroth basin of attraction.
-        // Otherwise, color it black. Alternative coloring schemes could be:
-        // - color each basin a different color.
-        // - grayscale based on angular distance traveled to reach stable orbit
+        // Pixels in the zeroth basin of attraction take the foreground color;
+        // everything else (including non-converged) takes the background.
         if result == Some(0) {
-            image::Rgb([255, 255, 255])
+            image::Rgb(self.color.foreground)
         } else {
-            image::Rgb([0, 0, 0])
+            image::Rgb(self.color.background)
         }
     }
 
@@ -190,4 +202,35 @@ pub fn compute_basin_of_attraction(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A pre-Phase-1 DDP params JSON has no `color` field. The
+    /// `#[serde(default)]` shim must fill it with white-foreground /
+    /// black-background — matching the previously hard-coded values — so
+    /// existing files render identically.
+    #[test]
+    fn parses_legacy_json_without_color_field_with_default_white_black() {
+        let json = r#"{
+            "image_specification": {
+                "resolution": [400, 200],
+                "center": [0, 0],
+                "width": 14
+            },
+            "time_phase": 0,
+            "n_max_period": 50,
+            "n_steps_per_period": 12,
+            "periodic_state_error_tolerance": 0.05,
+            "render_options": {
+                "downsample_stride": 1,
+                "subpixel_antialiasing": 1
+            }
+        }"#;
+        let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.color.foreground, [255, 255, 255]);
+        assert_eq!(parsed.color.background, [0, 0, 0]);
+    }
 }
