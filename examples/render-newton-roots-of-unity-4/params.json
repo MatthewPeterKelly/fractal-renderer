@@ -7,7 +7,7 @@
         "width": 5.0
       },
       "max_iteration_count": 500,
-      "convergence_tolerance": 1e-08,
+      "convergence_tolerance": 1e-8,
       "render_options": {
         "downsample_stride": 1,
         "subpixel_antialiasing": 4

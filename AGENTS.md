@@ -59,23 +59,27 @@ examples/             # JSON parameter files for each fractal variant
 Every commit must pass all of these — run them locally in this order:
 
 ```bash
-cargo fmt                    # Fix formatting (CI checks with --check)
+cargo fmt                    # Fix Rust formatting (CI checks with --check)
 cargo clippy -- -D warnings  # Zero warnings
 cargo test                   # All unit and integration tests
 cargo bench --no-run         # Benchmarks must compile
+npm run fmt:check            # Prettier formatting for JSON and Markdown
 ```
+
+JSON and Markdown are formatted with [Prettier](https://prettier.io/). Run `npm install` once to set it up, then `npm run fmt` to auto-format and `npm run fmt:check` to verify. Requires Node ≥14.
 
 ## Workflow
 
 ### Before Committing
 
-1. `cargo fmt` — format all files.
+1. `cargo fmt` — format all Rust files.
 2. `cargo clippy -- -D warnings` — fix all warnings before committing.
 3. `cargo test` — verify correctness.
 4. `cargo bench --no-run` — verify benchmarks compile.
-5. If you modified a hot path: `cargo bench` to check for regressions.
+5. `npm run fmt:check` — verify JSON/Markdown formatting (use `npm run fmt` to fix).
+6. If you modified a hot path: `cargo bench` to check for regressions.
 
-When running inside Claude Code, steps 1–4 are enforced automatically by pre-commit hooks in `.claude/settings.json` before any `git commit` executes.
+When running inside Claude Code, steps 1–5 are enforced automatically by pre-commit hooks in `.claude/settings.json` before any `git commit` executes.
 
 ### Adding a New Fractal
 

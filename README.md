@@ -141,7 +141,7 @@ Refer to [`CONTRIBUTING.md`](./CONTRIBUTING.md) file if you are interested in co
 
 This project is covered by the MIT [LICENSE](./LICENSE).
 
-JSON and Markdown formatting via [prettier](https://prettier.io/). Rust code is formatted and linted with the standard tooling.
+JSON and Markdown formatting uses [Prettier](https://prettier.io/). Run `npm install` once to install it, then `npm run fmt` to auto-format or `npm run fmt:check` to verify. Use a current Node.js release with a recent npm version compatible with the committed `package-lock.json`; if `npm install` fails on an older setup, upgrade npm (or Node.js, which bundles npm). Rust code is formatted and linted with the standard tooling (`cargo fmt`, `cargo clippy`).
 
 ## Acknowledgements
 

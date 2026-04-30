@@ -1,0 +1,11 @@
+# Build artifacts
+target/
+out/
+node_modules/
+
+# Auto-generated lockfiles
+Cargo.lock
+package-lock.json
+
+# Licenses (preserve original formatting)
+LICENSE
