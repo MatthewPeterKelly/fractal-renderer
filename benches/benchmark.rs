@@ -21,7 +21,7 @@ pub fn run_quadratic_map_histogram_benchmark(c: &mut Criterion, path: &str) {
             populate_histogram(
                 &|point: &[f64; 2]| mandelbrot_params.normalized_log_escape_count(point),
                 mandelbrot_params.image_specification(),
-                mandelbrot_params.color_map().histogram_sample_count as u32,
+                mandelbrot_params.color_map_params().histogram_sample_count as u32,
                 histogram.clone(),
             );
             black_box(&histogram);

@@ -8,7 +8,7 @@ use crate::{
         file_io::FilePrefix,
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
-            self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+            self, ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
             scale_down_parameter_for_speed, scale_up_parameter_for_speed,
         },
         interpolation::{ClampedLogInterpolator, LinearInterpolator},
@@ -16,6 +16,7 @@ use crate::{
     },
     fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
 };
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 // Its often more efficient to compute both the value of a complex function
 // and its derivative (slope) at the same time.
@@ -343,6 +344,8 @@ where
     F: ComplexFunctionWithSlope + Sync + Send,
 {
     type Params = CommonParams;
+    type ColorMap = MultiColorMap;
+
     fn image_specification(&self) -> &ImageSpecification {
         &self.params.image_specification
     }
@@ -378,6 +381,86 @@ where
 
     fn params(&self) -> &Self::Params {
         &self.params
+    }
+
+    fn color_map(&self) -> &Self::ColorMap {
+        &self.params.color
+    }
+
+    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<(f32, u32)>>>) {
+        debug_assert!(
+            sampling_level >= 0,
+            "Phase 2.1 supports only sampling_level >= 0"
+        );
+        let n = (sampling_level.max(0) + 1) as usize;
+        let spec = &self.params.image_specification;
+        let pixel_map = PixelMapper::new(spec);
+        let pixel_width = spec.width / spec.resolution[0] as f64;
+        let pixel_height = spec.height() / spec.resolution[1] as f64;
+        let step = 1.0 / n as f64;
+        let n_color_maps = self.color_maps.len() as u32;
+
+        field.par_iter_mut().enumerate().for_each(|(idx, col)| {
+            let px = (idx / n) as u32;
+            let i = idx % n;
+            let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
+            for (idy, cell) in col.iter_mut().enumerate() {
+                let py = (idy / n) as u32;
+                let j = idy % n;
+                let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
+                *cell = self
+                    .newton_rhapson_iteration_sequence(Complex64::new(re, im))
+                    .map(|res| {
+                        let k = (self.system.root_index(res.soln) as u32) % n_color_maps.max(1);
+                        (res.smooth_iteration_count, k)
+                    });
+            }
+        });
+    }
+
+    fn populate_histogram(
+        &self,
+        _sampling_level: i32,
+        _field: &[Vec<Option<(f32, u32)>>],
+        histogram: &Histogram,
+    ) {
+        // Phase 2.1: continue sampling on a sub-sample grid (matches the
+        // legacy histogram source); 2.3 switches this to a full-field walk.
+        let sample_count = self.params.histogram_sample_count as u32;
+        let hist_image_spec = self
+            .params
+            .image_specification
+            .scale_to_total_pixel_count(sample_count);
+        let pixel_mapper = PixelMapper::new(&hist_image_spec);
+        use rayon::iter::IntoParallelIterator;
+        (0..hist_image_spec.resolution[0])
+            .into_par_iter()
+            .for_each(|i| {
+                let x = pixel_mapper.width.map(i);
+                for j in 0..hist_image_spec.resolution[1] {
+                    let y = pixel_mapper.height.map(j);
+                    if let Some(result) =
+                        self.newton_rhapson_iteration_sequence(Complex64::new(x, y))
+                    {
+                        // Legacy histogram source: integer iteration_count.
+                        // 2.3 switches this to a full-field walk over smooth values.
+                        histogram.insert(result.iteration_count as f32);
+                    }
+                }
+            });
+    }
+
+    fn normalize_field(
+        &self,
+        _sampling_level: i32,
+        cdf: &CumulativeDistributionFunction,
+        field: &mut Vec<Vec<Option<(f32, u32)>>>,
+    ) {
+        field.par_iter_mut().for_each(|col| {
+            for (s, _k) in col.iter_mut().flatten() {
+                *s = cdf.percentile(*s);
+            }
+        });
     }
 }
 

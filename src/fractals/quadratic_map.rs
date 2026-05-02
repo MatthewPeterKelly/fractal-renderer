@@ -1,4 +1,5 @@
 use image::Rgb;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 
@@ -7,7 +8,7 @@ use crate::{
         color_map::{BackgroundWithColorMap, ColorMap, ColorMapLookUpTable, ColorMapper},
         histogram::{CumulativeDistributionFunction, Histogram},
         image_utils::{
-            ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+            ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
             scale_down_parameter_for_speed,
         },
         interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator, LinearInterpolator},
@@ -174,8 +175,9 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn convergence_params_mut(&mut self) -> &mut ConvergenceParams;
 
     /// Access the color map parameters.
-    fn color_map(&self) -> &ColorMapParams;
-    fn color_map_mut(&mut self) -> &mut ColorMapParams;
+    fn color_map_params(&self) -> &ColorMapParams;
+    /// Mutable access to the color map parameters.
+    fn color_map_params_mut(&mut self) -> &mut ColorMapParams;
 
     /// Access to the rendering options:
     fn render_options(&self) -> &RenderOptions;
@@ -187,7 +189,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 
 pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
     Histogram::new(
-        params.color_map().histogram_bin_count,
+        params.color_map_params().histogram_bin_count,
         QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
     )
     .into()
@@ -211,7 +213,7 @@ pub struct QuadraticMap<T: QuadraticMapParams> {
 impl<T: QuadraticMapParams> QuadraticMap<T> {
     pub fn new(fractal_params: T) -> QuadraticMap<T> {
         let inner_color_map = ColorMap::new(
-            &fractal_params.color_map().color.color_map,
+            &fractal_params.color_map_params().color.color_map,
             LinearInterpolator {},
         );
         let histogram = create_empty_histogram(&fractal_params);
@@ -220,10 +222,10 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
             histogram,
             color_map: ColorMapLookUpTable::from_color_map(
                 &inner_color_map,
-                fractal_params.color_map().lookup_table_count,
+                fractal_params.color_map_params().lookup_table_count,
             ),
             inner_color_map,
-            background_color: Rgb(fractal_params.color_map().color.background),
+            background_color: Rgb(fractal_params.color_map_params().color.background),
             fractal_params: fractal_params.clone(),
         };
         quadratic_map.update_color_map();
@@ -235,7 +237,9 @@ impl<T: QuadraticMapParams> QuadraticMap<T> {
         populate_histogram(
             &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
             self.fractal_params.image_specification(),
-            self.fractal_params.color_map().histogram_sample_count as u32,
+            self.fractal_params
+                .color_map_params()
+                .histogram_sample_count as u32,
             self.histogram.clone(),
         );
         self.cdf.reset(&self.histogram);
@@ -256,14 +260,19 @@ where
 
     fn reference_cache(&self) -> Self::ReferenceCache {
         ParamsReferenceCache {
-            histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
+            histogram_sample_count: self
+                .fractal_params
+                .color_map_params()
+                .histogram_sample_count,
             max_iter_count: self.fractal_params.convergence_params().max_iter_count,
             render_options: *self.fractal_params.render_options(),
         }
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.fractal_params.color_map_mut().histogram_sample_count = scale_down_parameter_for_speed(
+        self.fractal_params
+            .color_map_params_mut()
+            .histogram_sample_count = scale_down_parameter_for_speed(
             1024.0,
             cache.histogram_sample_count as f64,
             level,
@@ -287,6 +296,7 @@ where
     T: QuadraticMapParams + Sync + Send,
 {
     type Params = T;
+    type ColorMap = BackgroundWithColorMap;
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
         self.fractal_params
@@ -322,4 +332,97 @@ where
     fn render_options(&self) -> &RenderOptions {
         self.fractal_params.render_options()
     }
+
+    fn color_map(&self) -> &Self::ColorMap {
+        &self.fractal_params.color_map_params().color
+    }
+
+    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<f32>>>) {
+        compute_raw_field_quadratic(
+            self.fractal_params.image_specification(),
+            sampling_level,
+            field,
+            |point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
+        );
+    }
+
+    fn populate_histogram(
+        &self,
+        _sampling_level: i32,
+        _field: &[Vec<Option<f32>>],
+        histogram: &Histogram,
+    ) {
+        // Phase 2.1: continue sampling on a sub-sample grid (matches the
+        // legacy histogram source). Phase 2.3 switches this to a full-field
+        // walk via the populated `field` cells.
+        let sample_count = self
+            .fractal_params
+            .color_map_params()
+            .histogram_sample_count as u32;
+        let hist_image_spec = self
+            .fractal_params
+            .image_specification()
+            .scale_to_total_pixel_count(sample_count);
+        let pixel_mapper = PixelMapper::new(&hist_image_spec);
+        use rayon::iter::IntoParallelIterator;
+        (0..hist_image_spec.resolution[0])
+            .into_par_iter()
+            .for_each(|i| {
+                let x = pixel_mapper.width.map(i);
+                for j in 0..hist_image_spec.resolution[1] {
+                    let y = pixel_mapper.height.map(j);
+                    if let Some(value) = self.fractal_params.normalized_log_escape_count(&[x, y]) {
+                        histogram.insert(value);
+                    }
+                }
+            });
+    }
+
+    fn normalize_field(
+        &self,
+        _sampling_level: i32,
+        cdf: &CumulativeDistributionFunction,
+        field: &mut Vec<Vec<Option<f32>>>,
+    ) {
+        field.par_iter_mut().for_each(|col| {
+            for v in col.iter_mut().flatten() {
+                *v = cdf.percentile(*v);
+            }
+        });
+    }
+}
+
+/// Walks every cell of `field`, computing the raw escape count at each
+/// (sub)pixel anchor. The block of `(n+1)²` cells at output pixel `(px, py)`
+/// is addressed as `field[(n+1)·px + i][(n+1)·py + j]`.
+#[allow(dead_code)] // Phase 2.2 wires this in via the new pipeline.
+fn compute_raw_field_quadratic<F>(
+    image_specification: &ImageSpecification,
+    sampling_level: i32,
+    field: &mut Vec<Vec<Option<f32>>>,
+    escape_count: F,
+) where
+    F: Fn(&[f64; 2]) -> Option<f32> + Sync,
+{
+    debug_assert!(
+        sampling_level >= 0,
+        "Phase 2.1 supports only sampling_level >= 0 (negative block-fill mode lands in 2.2)"
+    );
+    let n = (sampling_level.max(0) + 1) as usize;
+    let pixel_map = PixelMapper::new(image_specification);
+    let pixel_width = image_specification.width / image_specification.resolution[0] as f64;
+    let pixel_height = image_specification.height() / image_specification.resolution[1] as f64;
+    let step = 1.0 / n as f64;
+
+    field.par_iter_mut().enumerate().for_each(|(idx, col)| {
+        let px = (idx / n) as u32;
+        let i = idx % n;
+        let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
+        for (idy, cell) in col.iter_mut().enumerate() {
+            let py = (idy / n) as u32;
+            let j = idy % n;
+            let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
+            *cell = escape_count(&[re, im]);
+        }
+    });
 }

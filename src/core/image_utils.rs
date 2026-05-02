@@ -8,6 +8,8 @@ use std::{
     path::PathBuf,
 };
 
+use crate::core::color_map::ColorMapKind;
+use crate::core::histogram::{CumulativeDistributionFunction, Histogram};
 use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
 
 use super::file_io::{FilePrefix, serialize_to_json_or_panic};
@@ -275,6 +277,10 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
     /// The type of parameters that describe the renderable object.
     type Params: Serialize + Debug;
 
+    /// Statically-paired color-map shape and per-(sub)pixel cell type. Drives
+    /// the field buffer's element type and the colorize hot path.
+    type ColorMap: ColorMapKind;
+
     /// Evaluates the pixel color at a specified point in the fractal.
     fn render_point(&self, point: &[f64; 2]) -> Rgb<u8>;
 
@@ -306,6 +312,48 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
             buffer,
         );
     }
+
+    // The following methods drive the new `RenderingPipeline` introduced in
+    // Phase 2.1. They are unused inside the lib until 2.2 wires the pipeline
+    // into the production runtime, so they trigger `dead_code` here.
+    /// (a) Fill the preallocated `field` buffer with raw, un-normalized
+    /// values. `sampling_level >= 0` populates every cell; the `(n+1)²`
+    /// cells in the block at output pixel `(px, py)` are addressed as
+    /// `field[(n+1)·px + i][(n+1)·py + j]` for `i, j ∈ 0..(n+1)`.
+    #[allow(dead_code)]
+    fn compute_raw_field(
+        &self,
+        sampling_level: i32,
+        field: &mut Vec<Vec<<Self::ColorMap as ColorMapKind>::Cell>>,
+    );
+
+    /// (b) Walk the populated cells of `field` and insert each value into
+    /// `histogram`. The pipeline calls `histogram.reset()` first; impls
+    /// should not reset. Default impl is a no-op (used by fractals that
+    /// don't normalize, e.g. DDP).
+    #[allow(dead_code)]
+    fn populate_histogram(
+        &self,
+        _sampling_level: i32,
+        _field: &[Vec<<Self::ColorMap as ColorMapKind>::Cell>],
+        _histogram: &Histogram,
+    ) {
+    }
+
+    /// (c) Replace each populated cell's raw value with its CDF percentile,
+    /// in place. Default impl is a no-op (DDP).
+    #[allow(dead_code)]
+    fn normalize_field(
+        &self,
+        _sampling_level: i32,
+        _cdf: &CumulativeDistributionFunction,
+        _field: &mut Vec<Vec<<Self::ColorMap as ColorMapKind>::Cell>>,
+    ) {
+    }
+
+    /// Reference to the concrete color-map data driving colorization.
+    #[allow(dead_code)]
+    fn color_map(&self) -> &Self::ColorMap;
 }
 
 pub fn render<T: Renderable>(
