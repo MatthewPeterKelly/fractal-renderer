@@ -1,20 +1,18 @@
 use num::complex::Complex64;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use std::{f64::consts::PI, fmt::Debug, sync::Arc};
+use std::{f64::consts::PI, fmt::Debug};
 
-use crate::{
-    core::{
-        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, MultiColorMap},
-        file_io::FilePrefix,
-        histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{
-            self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
-            scale_down_parameter_for_speed, scale_up_parameter_for_speed,
-        },
-        interpolation::{ClampedLogInterpolator, LinearInterpolator},
-        user_interface,
+use crate::core::{
+    color_map::MultiColorMap,
+    file_io::FilePrefix,
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{
+        self, ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed, scale_up_parameter_for_speed,
     },
-    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
+    interpolation::ClampedLogInterpolator,
+    user_interface,
 };
 
 // Its often more efficient to compute both the value of a complex function
@@ -119,11 +117,16 @@ impl ComplexFunctionWithSlope for CoshMinusOneParams {
     }
 }
 
+/// Result of running a Newton-Rhapson iteration sequence to convergence.
 pub struct NewtonRhapsonResult {
     /// The point to which the Newton-Rhapson iteration sequence converge.
     pub soln: Complex64,
 
-    /// Number of iterations taken to converge. In range `[0, max_iteration_count]` inclusive.
+    /// Number of iterations taken to converge. In range
+    /// `[0, max_iteration_count]` inclusive. Currently unread (the smooth
+    /// count drives both colorize and the histogram); kept on the result
+    /// type as it costs nothing and may be useful for future diagnostics.
+    #[allow(dead_code)]
     pub iteration_count: u32,
 
     /// A smooth iteration count, used for rendering. It is computed based on the quadratic
@@ -185,6 +188,9 @@ pub fn newton_rhapson_iteration_sequence<F: ComplexFunctionWithSlope>(
 
 /// These parameters are common to all Newton's method fractals, and are not
 /// generic over the specific system being solved.
+///
+/// Phase 2.3 dropped `histogram_sample_count`; the histogram is now built
+/// from a full walk of the populated field cells.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommonParams {
     /// Image dimensions and viewport.
@@ -201,8 +207,6 @@ pub struct CommonParams {
     pub lookup_table_count: usize,
     /// Number of bins in the shared histogram used to normalize gradients.
     pub histogram_bin_count: usize,
-    /// Number of samples drawn from the image when populating the histogram.
-    pub histogram_sample_count: usize,
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
@@ -215,54 +219,25 @@ pub struct NewtonsMethodParams {
     pub system: SystemType,
 }
 
-// The `NewtonsMethodRenderable` struct encapsulates the parameters and system
-// using generics to improve performance of the rendering engine. This is analgous
-// to `QuadraticMap`.
+/// Newtype wrapper that carries Newton's-method parameters plus the
+/// concrete root system. Histogram, CDF, and color caches now live in the
+/// rendering pipeline, not here.
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
+    /// User-facing parameters.
     pub params: CommonParams,
+    /// Concrete system (e.g. roots-of-unity, cosh-minus-one).
     pub system: F,
-    // Histogram and CDF are shared by all root color maps, and are used to normalize the image.
-    pub histogram: Arc<Histogram>,
-    pub cdf: CumulativeDistributionFunction,
-    // One color map and lookup table per root. The lookup table is generated from the color map
-    // and the shared CDF once per render, which speeds up the rendering a bit.
-    pub inner_color_maps: Vec<ColorMap<LinearInterpolator>>,
-    pub color_maps: Vec<ColorMapLookUpTable>,
 }
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
+    /// Construct a Newton renderer. Asserts there is at least one
+    /// gradient (the colorize cache assumes `color_maps` is non-empty).
     pub fn new(params: CommonParams, system: F) -> Self {
-        let inner_color_maps: Vec<ColorMap<LinearInterpolator>> = params
-            .color
-            .color_maps
-            .iter()
-            .map(|kfs| ColorMap::new(kfs, LinearInterpolator))
-            .collect();
-
-        if inner_color_maps.is_empty() {
-            panic!("color.color_maps must define at least one color map");
-        }
-
-        let color_maps: Vec<ColorMapLookUpTable> = inner_color_maps
-            .iter()
-            .map(|cm| ColorMapLookUpTable::from_color_map(cm, params.lookup_table_count))
-            .collect();
-
-        let histogram = Histogram::new(
-            params.histogram_bin_count,
-            params.max_iteration_count as f32,
+        assert!(
+            !params.color.color_maps.is_empty(),
+            "color.color_maps must define at least one color map"
         );
-
-        let mut renderable = Self {
-            system,
-            cdf: CumulativeDistributionFunction::new(&histogram),
-            histogram: histogram.into(),
-            color_maps,
-            inner_color_maps,
-            params,
-        };
-        renderable.update_color_map();
-        renderable
+        Self { params, system }
     }
 
     fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> Option<NewtonRhapsonResult> {
@@ -272,26 +247,6 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             self.params.convergence_tolerance,
             self.params.max_iteration_count,
         )
-    }
-
-    fn update_color_map(&mut self) {
-        // This histogram uses data shared from all roots, so we do not need the `_soln` value in the below
-        // closure. Then we update all color maps based on the shared CDF, which is generated from the histogram.
-        populate_histogram(
-            &|point: &[f64; 2]| {
-                self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]))
-                    .map(|result| result.iteration_count as f32)
-            },
-            &self.params.image_specification,
-            self.params.histogram_bin_count as u32,
-            self.histogram.clone(),
-        );
-        self.cdf.reset(&self.histogram);
-
-        for (color_table, inner_map) in self.color_maps.iter_mut().zip(self.inner_color_maps.iter())
-        {
-            reset_color_map_lookup_table_from_cdf(color_table, &self.cdf, inner_map);
-        }
     }
 }
 
@@ -328,13 +283,6 @@ where
             level,
             ClampedLogInterpolator,
         );
-
-        self.params.histogram_sample_count = scale_down_parameter_for_speed(
-            600.0,
-            cache.histogram_sample_count as f64,
-            level,
-            ClampedLogInterpolator,
-        ) as usize;
     }
 }
 
@@ -343,6 +291,8 @@ where
     F: ComplexFunctionWithSlope + Sync + Send,
 {
     type Params = CommonParams;
+    type ColorMap = MultiColorMap;
+
     fn image_specification(&self) -> &ImageSpecification {
         &self.params.image_specification
     }
@@ -353,31 +303,189 @@ where
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
         self.params.image_specification = image_specification;
-        self.update_color_map();
     }
 
-    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let result =
-            match self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1])) {
-                Some(res) => res,
-                None => {
-                    return image::Rgb(self.params.color.cyclic_attractor);
-                }
-            };
-
-        // Use the solution to select the correct color map for this point:
-        let color_map_index = self.system.root_index(result.soln) % self.color_maps.len();
-        self.color_maps[color_map_index].compute_pixel(result.smooth_iteration_count)
-    }
-
-    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        self.histogram.display(writer)?;
-        self.cdf.display(writer)?;
-        std::io::Result::Ok(())
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
         &self.params
+    }
+
+    fn color_map(&self) -> &Self::ColorMap {
+        &self.params.color
+    }
+
+    fn histogram_bin_count(&self) -> usize {
+        self.params.histogram_bin_count
+    }
+
+    fn histogram_max_value(&self) -> f32 {
+        self.params.max_iteration_count as f32
+    }
+
+    fn lookup_table_count(&self) -> usize {
+        self.params.lookup_table_count
+    }
+
+    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<(f32, u32)>>>) {
+        let spec = &self.params.image_specification;
+        let n_max_plus_1 = field.len() / spec.resolution[0] as usize;
+        let pixel_map = PixelMapper::new(spec);
+        let pixel_width = spec.width / spec.resolution[0] as f64;
+        let pixel_height = spec.height() / spec.resolution[1] as f64;
+        let n_color_maps = self.params.color.color_maps.len() as u32;
+
+        let evaluate = |re: f64, im: f64| -> Option<(f32, u32)> {
+            self.newton_rhapson_iteration_sequence(Complex64::new(re, im))
+                .map(|res| {
+                    let k = (self.system.root_index(res.soln) as u32) % n_color_maps.max(1);
+                    (res.smooth_iteration_count, k)
+                })
+        };
+
+        if sampling_level >= 0 {
+            let n = sampling_level as usize + 1;
+            let step = 1.0 / n as f64;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                let i = outer_x % n_max_plus_1;
+                if i >= n {
+                    return;
+                }
+                let px = (outer_x / n_max_plus_1) as u32;
+                let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    let j = outer_y % n_max_plus_1;
+                    if j >= n {
+                        continue;
+                    }
+                    let py = (outer_y / n_max_plus_1) as u32;
+                    let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
+                    *cell = evaluate(re, im);
+                }
+            });
+        } else {
+            let block_size = (-sampling_level) as usize + 1;
+            let stride = n_max_plus_1 * block_size;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                if outer_x % stride != 0 {
+                    return;
+                }
+                let block_x = outer_x / stride;
+                let px = (block_x * block_size) as u32;
+                let re = pixel_map.width.map(px);
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    if outer_y % stride != 0 {
+                        continue;
+                    }
+                    let block_y = outer_y / stride;
+                    let py = (block_y * block_size) as u32;
+                    let im = pixel_map.height.map(py);
+                    *cell = evaluate(re, im);
+                }
+            });
+        }
+    }
+
+    fn populate_histogram(
+        &self,
+        sampling_level: i32,
+        field: &[Vec<Option<(f32, u32)>>],
+        histogram: &Histogram,
+    ) {
+        let n_max_plus_1 = field.len() / self.params.image_specification.resolution[0] as usize;
+        walk_populated_newton_cells(sampling_level, n_max_plus_1, field, |smooth, _root| {
+            histogram.insert(smooth);
+        });
+    }
+
+    fn normalize_field(
+        &self,
+        sampling_level: i32,
+        cdf: &CumulativeDistributionFunction,
+        field: &mut Vec<Vec<Option<(f32, u32)>>>,
+    ) {
+        let n_max_plus_1 = field.len() / self.params.image_specification.resolution[0] as usize;
+        if sampling_level >= 0 {
+            let n = sampling_level as usize + 1;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                let i = outer_x % n_max_plus_1;
+                if i >= n {
+                    return;
+                }
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    let j = outer_y % n_max_plus_1;
+                    if j >= n {
+                        continue;
+                    }
+                    if let Some((s, _k)) = cell {
+                        *s = cdf.percentile(*s);
+                    }
+                }
+            });
+        } else {
+            let block_size = (-sampling_level) as usize + 1;
+            let stride = n_max_plus_1 * block_size;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                if outer_x % stride != 0 {
+                    return;
+                }
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    if outer_y % stride != 0 {
+                        continue;
+                    }
+                    if let Some((s, _k)) = cell {
+                        *s = cdf.percentile(*s);
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// Read-only walk over the cells `compute_raw_field` populates for Newton.
+/// Calls `f(smooth_iter, root_index)` once per `Some` cell.
+fn walk_populated_newton_cells<F: Fn(f32, u32) + Sync>(
+    sampling_level: i32,
+    n_max_plus_1: usize,
+    field: &[Vec<Option<(f32, u32)>>],
+    f: F,
+) {
+    use rayon::iter::IntoParallelRefIterator;
+    if sampling_level >= 0 {
+        let n = sampling_level as usize + 1;
+        field.par_iter().enumerate().for_each(|(outer_x, col)| {
+            let i = outer_x % n_max_plus_1;
+            if i >= n {
+                return;
+            }
+            for (outer_y, cell) in col.iter().enumerate() {
+                let j = outer_y % n_max_plus_1;
+                if j >= n {
+                    continue;
+                }
+                if let Some((s, k)) = cell {
+                    f(*s, *k);
+                }
+            }
+        });
+    } else {
+        let block_size = (-sampling_level) as usize + 1;
+        let stride = n_max_plus_1 * block_size;
+        field.par_iter().enumerate().for_each(|(outer_x, col)| {
+            if outer_x % stride != 0 {
+                return;
+            }
+            for (outer_y, cell) in col.iter().enumerate() {
+                if outer_y % stride != 0 {
+                    continue;
+                }
+                if let Some((s, k)) = cell {
+                    f(*s, *k);
+                }
+            }
+        });
     }
 }
 

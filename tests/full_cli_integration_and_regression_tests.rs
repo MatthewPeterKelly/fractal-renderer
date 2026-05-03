@@ -73,21 +73,30 @@ mod tests {
     #[test]
     fn regression_test_cli_render_pipeline() {
         let test_cases = vec![
+            // Hashes regenerated in Phase 2.3 when `populate_histogram`
+            // switched from a sub-sample grid to a full-field walk over
+            // the populated cells (the histogram now reflects the same
+            // points the colorize pass reads, instead of an independent
+            // grid sized by the dropped `histogram_sample_count` field).
+            // (2.2 already shifted these once: the new color cache is
+            // indexed over `[0, 1]` with the CDF applied per cell rather
+            // than over `[cdf.min_data, cdf.max_data]` with the CDF baked
+            // in, and block-fill is nearest-neighbor instead of bilinear.)
             (
                 "mandelbrot/default_regression_test",
-                "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
+                "e731341fb865701eb19ac82123bd66d0c27695b2c6bdfed91b6030e155751283",
             ),
             (
                 "mandelbrot/anti_aliasing_regression_test",
-                "fd1bb5829792e963a41e80ced4f576529698a9087140a6da1c328439e05c8f07",
+                "fb6e39949295146f3d49d80fdeaa2e6d6125473ad217345f2e7c0b6eeb1540cf",
             ),
             (
                 "mandelbrot/downsample_interpolation_regression_test",
-                "a314629edf95c6d745f32251bc4600b643be79086820a4ceb48100c17dbf1ac4",
+                "721e538c36b9cc78d62503f263cf51aaf89b1dc7b37ac0c5ae5085b97a1f65d5",
             ),
             (
                 "julia/default_regression_test",
-                "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
+                "69b3b390da75b5bd8f6eeca7afac86cf41864582e2b4514c8f003dd29aef9d11",
             ),
             (
                 "barnsley_fern/default_regression_test",

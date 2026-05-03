@@ -40,7 +40,6 @@
     "histogram_sample_count": 20000
   },
   "render_options": {
-    "downsample_stride": 1,
-    "subpixel_antialiasing": 2
+    "sampling_level": 2
   }
 }

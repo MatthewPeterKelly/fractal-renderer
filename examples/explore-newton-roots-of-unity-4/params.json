@@ -9,8 +9,7 @@
       "max_iteration_count": 250,
       "convergence_tolerance": 1e-6,
       "render_options": {
-        "downsample_stride": 1,
-        "subpixel_antialiasing": 2
+        "sampling_level": 2
       },
       "color": {
         "cyclic_attractor": [255, 255, 255],
