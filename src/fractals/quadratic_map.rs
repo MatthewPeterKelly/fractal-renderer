@@ -1,19 +1,17 @@
-use image::Rgb;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
-use crate::{
-    core::{
-        color_map::{BackgroundWithColorMap, ColorMap, ColorMapLookUpTable, ColorMapper},
-        histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{
-            ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
-            scale_down_parameter_for_speed,
-        },
-        interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator, LinearInterpolator},
+use crate::core::{
+    color_map::BackgroundWithColorMap,
+    histogram::{CumulativeDistributionFunction, Histogram},
+    image_utils::{
+        ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed,
     },
-    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
+    interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
 };
 
 /// Parameter block for the colorization step of escape-time fractals
@@ -187,68 +185,30 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
-    Histogram::new(
-        params.color_map_params().histogram_bin_count,
-        QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
-    )
-    .into()
-}
-
+/// Reference cache used by `SpeedOptimizer` to interpolate runtime
+/// parameters back toward the user's specified values.
 pub struct ParamsReferenceCache {
+    /// User-specified `histogram_sample_count`.
     pub histogram_sample_count: usize,
+    /// User-specified `max_iter_count`.
     pub max_iter_count: u32,
+    /// User-specified render options (including `sampling_level`).
     pub render_options: RenderOptions,
 }
 
+/// Newtype wrapper that carries the fractal parameters and implements
+/// `Renderable` for the rendering pipeline. Histogram, CDF, and color
+/// caches now live in the pipeline, not here.
 pub struct QuadraticMap<T: QuadraticMapParams> {
+    /// User-facing parameters that drive convergence, color, and rendering.
     pub fractal_params: T,
-    pub histogram: Arc<Histogram>,
-    pub cdf: CumulativeDistributionFunction,
-    pub color_map: ColorMapLookUpTable,
-    pub inner_color_map: ColorMap<LinearInterpolator>,
-    pub background_color: Rgb<u8>,
 }
 
 impl<T: QuadraticMapParams> QuadraticMap<T> {
+    /// Construct a `QuadraticMap` from its parameters. Allocation-free
+    /// after this call (the pipeline owns the actual buffers).
     pub fn new(fractal_params: T) -> QuadraticMap<T> {
-        let inner_color_map = ColorMap::new(
-            &fractal_params.color_map_params().color.color_map,
-            LinearInterpolator {},
-        );
-        let histogram = create_empty_histogram(&fractal_params);
-        let mut quadratic_map = QuadraticMap {
-            cdf: CumulativeDistributionFunction::new(&histogram),
-            histogram,
-            color_map: ColorMapLookUpTable::from_color_map(
-                &inner_color_map,
-                fractal_params.color_map_params().lookup_table_count,
-            ),
-            inner_color_map,
-            background_color: Rgb(fractal_params.color_map_params().color.background),
-            fractal_params: fractal_params.clone(),
-        };
-        quadratic_map.update_color_map();
-        quadratic_map
-    }
-
-    // MPK:  this too. We should be able to share this logic with newtons method.
-    fn update_color_map(&mut self) {
-        populate_histogram(
-            &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
-            self.fractal_params.image_specification(),
-            self.fractal_params
-                .color_map_params()
-                .histogram_sample_count as u32,
-            self.histogram.clone(),
-        );
-        self.cdf.reset(&self.histogram);
-
-        reset_color_map_lookup_table_from_cdf(
-            &mut self.color_map,
-            &self.cdf,
-            &self.inner_color_map,
-        );
+        QuadraticMap { fractal_params }
     }
 }
 
@@ -301,28 +261,14 @@ where
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
         self.fractal_params
             .set_image_specification(image_specification);
-        self.update_color_map();
     }
 
-    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        self.histogram.display(writer)?;
-        self.cdf.display(writer)?;
-        std::io::Result::Ok(())
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
         &self.fractal_params
-    }
-
-    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8> {
-        let maybe_escape_count = self
-            .fractal_params
-            .normalized_log_escape_count(&[point[0], point[1]]);
-        if let Some(value) = maybe_escape_count {
-            self.color_map.compute_pixel(value)
-        } else {
-            self.background_color
-        }
     }
 
     fn image_specification(&self) -> &ImageSpecification {
@@ -337,13 +283,26 @@ where
         &self.fractal_params.color_map_params().color
     }
 
+    fn histogram_bin_count(&self) -> usize {
+        self.fractal_params.color_map_params().histogram_bin_count
+    }
+
+    fn histogram_max_value(&self) -> f32 {
+        QuadraticMapSequence::log_iter_count(
+            self.fractal_params.convergence_params().max_iter_count as f32,
+        )
+    }
+
+    fn lookup_table_count(&self) -> usize {
+        self.fractal_params.color_map_params().lookup_table_count
+    }
+
     fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<f32>>>) {
-        compute_raw_field_quadratic(
-            self.fractal_params.image_specification(),
-            sampling_level,
-            field,
-            |point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
-        );
+        let spec = *self.fractal_params.image_specification();
+        let n_max_plus_1 = field.len() / spec.resolution[0] as usize;
+        compute_raw_field_quadratic(&spec, n_max_plus_1, sampling_level, field, |p| {
+            self.fractal_params.normalized_log_escape_count(p)
+        });
     }
 
     fn populate_histogram(
@@ -352,9 +311,9 @@ where
         _field: &[Vec<Option<f32>>],
         histogram: &Histogram,
     ) {
-        // Phase 2.1: continue sampling on a sub-sample grid (matches the
-        // legacy histogram source). Phase 2.3 switches this to a full-field
-        // walk via the populated `field` cells.
+        // Phase 2.2 keeps the legacy sub-sample-grid histogram source so
+        // that pixel hashes track previous behavior; Phase 2.3 switches
+        // this to a full-field walk over the populated cells.
         let sample_count = self
             .fractal_params
             .color_map_params()
@@ -364,7 +323,6 @@ where
             .image_specification()
             .scale_to_total_pixel_count(sample_count);
         let pixel_mapper = PixelMapper::new(&hist_image_spec);
-        use rayon::iter::IntoParallelIterator;
         (0..hist_image_spec.resolution[0])
             .into_par_iter()
             .for_each(|i| {
@@ -380,49 +338,125 @@ where
 
     fn normalize_field(
         &self,
-        _sampling_level: i32,
+        sampling_level: i32,
         cdf: &CumulativeDistributionFunction,
         field: &mut Vec<Vec<Option<f32>>>,
     ) {
-        field.par_iter_mut().for_each(|col| {
-            for v in col.iter_mut().flatten() {
-                *v = cdf.percentile(*v);
-            }
-        });
+        let spec = *self.fractal_params.image_specification();
+        let n_max_plus_1 = field.len() / spec.resolution[0] as usize;
+        normalize_populated_cells(sampling_level, n_max_plus_1, field, |v| cdf.percentile(*v));
     }
 }
 
-/// Walks every cell of `field`, computing the raw escape count at each
-/// (sub)pixel anchor. The block of `(n+1)²` cells at output pixel `(px, py)`
-/// is addressed as `field[(n+1)·px + i][(n+1)·py + j]`.
-#[allow(dead_code)] // Phase 2.2 wires this in via the new pipeline.
+/// Populate the cells of `field` reachable at the requested `sampling_level`.
+///
+/// - **Positive `sampling_level = r`**: each output pixel block (`n_max_plus_1²`
+///   cells) gets the first `(r+1)²` cells populated, evaluated at subpixel
+///   positions `(i / (r+1), j / (r+1))` of the pixel for `i, j ∈ 0..(r+1)`.
+///   At `r == n_max_plus_1 - 1` this fills the whole field; at `r == 0` only
+///   one cell per block is touched.
+/// - **`sampling_level == 0`**: same as above with `r = 0` (one cell per
+///   block).
+/// - **Negative `sampling_level = -m`**: block-fill. Each `(m+1) × (m+1)`
+///   output-pixel block uses one shared evaluation, stored at the top-left
+///   field cell of the leftmost output pixel of the block.
 fn compute_raw_field_quadratic<F>(
     image_specification: &ImageSpecification,
+    n_max_plus_1: usize,
     sampling_level: i32,
     field: &mut Vec<Vec<Option<f32>>>,
     escape_count: F,
 ) where
     F: Fn(&[f64; 2]) -> Option<f32> + Sync,
 {
-    debug_assert!(
-        sampling_level >= 0,
-        "Phase 2.1 supports only sampling_level >= 0 (negative block-fill mode lands in 2.2)"
-    );
-    let n = (sampling_level.max(0) + 1) as usize;
     let pixel_map = PixelMapper::new(image_specification);
     let pixel_width = image_specification.width / image_specification.resolution[0] as f64;
     let pixel_height = image_specification.height() / image_specification.resolution[1] as f64;
-    let step = 1.0 / n as f64;
 
-    field.par_iter_mut().enumerate().for_each(|(idx, col)| {
-        let px = (idx / n) as u32;
-        let i = idx % n;
-        let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
-        for (idy, cell) in col.iter_mut().enumerate() {
-            let py = (idy / n) as u32;
-            let j = idy % n;
-            let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
-            *cell = escape_count(&[re, im]);
-        }
-    });
+    if sampling_level >= 0 {
+        let n = sampling_level as usize + 1;
+        let step = 1.0 / n as f64;
+        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+            let i = outer_x % n_max_plus_1;
+            if i >= n {
+                return;
+            }
+            let px = (outer_x / n_max_plus_1) as u32;
+            let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
+            for (outer_y, cell) in col.iter_mut().enumerate() {
+                let j = outer_y % n_max_plus_1;
+                if j >= n {
+                    continue;
+                }
+                let py = (outer_y / n_max_plus_1) as u32;
+                let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
+                *cell = escape_count(&[re, im]);
+            }
+        });
+    } else {
+        let block_size = (-sampling_level) as usize + 1;
+        let stride = n_max_plus_1 * block_size;
+        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+            if outer_x % stride != 0 {
+                return;
+            }
+            let block_x = outer_x / stride;
+            let px = (block_x * block_size) as u32;
+            let re = pixel_map.width.map(px);
+            for (outer_y, cell) in col.iter_mut().enumerate() {
+                if outer_y % stride != 0 {
+                    continue;
+                }
+                let block_y = outer_y / stride;
+                let py = (block_y * block_size) as u32;
+                let im = pixel_map.height.map(py);
+                *cell = escape_count(&[re, im]);
+            }
+        });
+    }
+}
+
+/// Walk the same set of populated cells `compute_raw_field_quadratic`
+/// fills, applying `f` to each `Some` value in place. Used by
+/// `normalize_field` to rewrite raw escape counts as CDF percentiles.
+fn normalize_populated_cells<F: Fn(&f32) -> f32 + Sync>(
+    sampling_level: i32,
+    n_max_plus_1: usize,
+    field: &mut Vec<Vec<Option<f32>>>,
+    f: F,
+) {
+    if sampling_level >= 0 {
+        let n = sampling_level as usize + 1;
+        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+            let i = outer_x % n_max_plus_1;
+            if i >= n {
+                return;
+            }
+            for (outer_y, cell) in col.iter_mut().enumerate() {
+                let j = outer_y % n_max_plus_1;
+                if j >= n {
+                    continue;
+                }
+                if let Some(v) = cell {
+                    *v = f(v);
+                }
+            }
+        });
+    } else {
+        let block_size = (-sampling_level) as usize + 1;
+        let stride = n_max_plus_1 * block_size;
+        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+            if outer_x % stride != 0 {
+                return;
+            }
+            for (outer_y, cell) in col.iter_mut().enumerate() {
+                if outer_y % stride != 0 {
+                    continue;
+                }
+                if let Some(v) = cell {
+                    *v = f(v);
+                }
+            }
+        });
+    }
 }

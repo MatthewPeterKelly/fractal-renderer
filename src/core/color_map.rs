@@ -180,13 +180,13 @@ impl ColorMapper for ColorMapLookUpTable {
 /// Phase 2 invariant: cells handed to `colorize_cell` for the scalar variants
 /// have already been through `Renderable::normalize_field` (so the inner f32
 /// is a CDF percentile in [0, 1]).
-// `ColorMapKind` is consumed by `RenderingPipeline` (Phase 2.1, parallel to
-// the legacy path). Its methods appear unused inside the lib until Phase 2.2
-// wires the pipeline into the production runtime.
-#[allow(dead_code)]
+/// Consumed by `RenderingPipeline` to colorize the field. All dispatch is
+/// statically monomorphized through the per-variant impl.
 pub trait ColorMapKind: Sized + Sync {
-    /// Per-(sub)pixel value the color map consumes.
-    type Cell: Copy + Send + Sync;
+    /// Per-(sub)pixel value the color map consumes. The `Default + Clone`
+    /// bounds let the pipeline allocate the field buffer once at startup
+    /// (filled with `Default::default()` for unpopulated cells).
+    type Cell: Copy + Default + Send + Sync;
 
     /// Allocation-once cache holding lookup tables and pre-converted
     /// `Color32` flat colors. Mutated in place by `refresh_cache`.
@@ -205,7 +205,6 @@ pub trait ColorMapKind: Sized + Sync {
     fn colorize_cell(cache: &Self::Cache, cell: Self::Cell) -> [u8; 3];
 }
 
-#[allow(dead_code)] // Phase 2.2 wires this in.
 fn color32_to_rgb(c: Color32) -> [u8; 3] {
     [c.r(), c.g(), c.b()]
 }

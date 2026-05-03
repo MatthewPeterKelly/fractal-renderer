@@ -73,21 +73,30 @@ mod tests {
     #[test]
     fn regression_test_cli_render_pipeline() {
         let test_cases = vec![
+            // Hashes regenerated in Phase 2.2 when the runtime switched
+            // from the legacy `Renderable::render_to_buffer` path to
+            // `RenderingPipeline`. The Mandelbrot/Julia hashes shifted by a
+            // small per-pixel amount because the new color-cache lookup
+            // table is indexed over `[0, 1]` (with the CDF applied per cell
+            // in `normalize_field`) rather than over `[cdf.min_data,
+            // cdf.max_data]` with the CDF baked in. The downsample fixture
+            // also shifted because block-fill is nearest-neighbor, not
+            // bilinear interpolation between sparse samples.
             (
                 "mandelbrot/default_regression_test",
-                "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
+                "ec2d9fb318a47985cacac1d9f58652626d3c9bc8ac2abc7443e0dcbf35e90029",
             ),
             (
                 "mandelbrot/anti_aliasing_regression_test",
-                "fd1bb5829792e963a41e80ced4f576529698a9087140a6da1c328439e05c8f07",
+                "5966553632f595ce8c95485abdea32ebc6c579bd506c6ddaa56c9dbc7571ea03",
             ),
             (
                 "mandelbrot/downsample_interpolation_regression_test",
-                "a314629edf95c6d745f32251bc4600b643be79086820a4ceb48100c17dbf1ac4",
+                "ef46807b61427d1335b31e7b962faa6a4897766c6733a810b64a7988a80a9daa",
             ),
             (
                 "julia/default_regression_test",
-                "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
+                "bc3f0c0a1d7637a8c315ba025a06b861507fe8282b72d2372f2affef653e18d6",
             ),
             (
                 "barnsley_fern/default_regression_test",

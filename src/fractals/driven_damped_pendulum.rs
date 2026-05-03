@@ -44,60 +44,6 @@ impl Renderable for DrivenDampedPendulumParams {
         &self.color
     }
 
-    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<i32>>>) {
-        debug_assert!(
-            sampling_level >= 0,
-            "Phase 2.1 supports only sampling_level >= 0"
-        );
-        let n = (sampling_level.max(0) + 1) as usize;
-        let pixel_map = PixelMapper::new(&self.image_specification);
-        let pixel_width =
-            self.image_specification.width / self.image_specification.resolution[0] as f64;
-        let pixel_height =
-            self.image_specification.height() / self.image_specification.resolution[1] as f64;
-        let step = 1.0 / n as f64;
-
-        let time_phase = self.time_phase;
-        let n_max_period = self.n_max_period;
-        let n_steps_per_period = self.n_steps_per_period;
-        let tol = self.periodic_state_error_tolerance;
-
-        field.par_iter_mut().enumerate().for_each(|(idx, col)| {
-            let px = (idx / n) as u32;
-            let i = idx % n;
-            let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
-            for (idy, cell) in col.iter_mut().enumerate() {
-                let py = (idy / n) as u32;
-                let j = idy % n;
-                let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
-                *cell = compute_basin_of_attraction(
-                    &[re, im],
-                    time_phase,
-                    n_max_period,
-                    n_steps_per_period,
-                    tol,
-                );
-            }
-        });
-    }
-
-    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let result = compute_basin_of_attraction(
-            point,
-            self.time_phase,
-            self.n_max_period,
-            self.n_steps_per_period,
-            self.periodic_state_error_tolerance,
-        );
-        // Pixels in the zeroth basin of attraction take the foreground color;
-        // everything else (including non-converged) takes the background.
-        if result == Some(0) {
-            image::Rgb(self.color.foreground)
-        } else {
-            image::Rgb(self.color.background)
-        }
-    }
-
     fn image_specification(&self) -> &ImageSpecification {
         &self.image_specification
     }
@@ -111,20 +57,96 @@ impl Renderable for DrivenDampedPendulumParams {
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
-        std::io::Result::Ok(())
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
         self
     }
 
-    fn render_to_buffer(&self, buffer: &mut Vec<Vec<image::Rgb<u8>>>) {
-        crate::core::image_utils::generate_scalar_image_in_place(
-            self.image_specification(),
-            self.render_options(),
-            |point: &[f64; 2]| self.render_point(point),
-            buffer,
-        );
+    /// DDP doesn't normalize, so the histogram is unused. Return any positive
+    /// bin count to satisfy the pipeline's `Histogram::new` contract.
+    fn histogram_bin_count(&self) -> usize {
+        1
+    }
+
+    /// Likewise, the histogram's max value is irrelevant for DDP.
+    fn histogram_max_value(&self) -> f32 {
+        1.0
+    }
+
+    /// `ForegroundBackground` doesn't hold lookup tables; this value is
+    /// unused.
+    fn lookup_table_count(&self) -> usize {
+        0
+    }
+
+    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<i32>>>) {
+        let n_max_plus_1 = field.len() / self.image_specification.resolution[0] as usize;
+        let pixel_map = PixelMapper::new(&self.image_specification);
+        let pixel_width =
+            self.image_specification.width / self.image_specification.resolution[0] as f64;
+        let pixel_height =
+            self.image_specification.height() / self.image_specification.resolution[1] as f64;
+
+        let time_phase = self.time_phase;
+        let n_max_period = self.n_max_period;
+        let n_steps_per_period = self.n_steps_per_period;
+        let tol = self.periodic_state_error_tolerance;
+
+        if sampling_level >= 0 {
+            let n = sampling_level as usize + 1;
+            let step = 1.0 / n as f64;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                let i = outer_x % n_max_plus_1;
+                if i >= n {
+                    return;
+                }
+                let px = (outer_x / n_max_plus_1) as u32;
+                let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    let j = outer_y % n_max_plus_1;
+                    if j >= n {
+                        continue;
+                    }
+                    let py = (outer_y / n_max_plus_1) as u32;
+                    let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
+                    *cell = compute_basin_of_attraction(
+                        &[re, im],
+                        time_phase,
+                        n_max_period,
+                        n_steps_per_period,
+                        tol,
+                    );
+                }
+            });
+        } else {
+            let block_size = (-sampling_level) as usize + 1;
+            let stride = n_max_plus_1 * block_size;
+            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+                if outer_x % stride != 0 {
+                    return;
+                }
+                let block_x = outer_x / stride;
+                let px = (block_x * block_size) as u32;
+                let re = pixel_map.width.map(px);
+                for (outer_y, cell) in col.iter_mut().enumerate() {
+                    if outer_y % stride != 0 {
+                        continue;
+                    }
+                    let block_y = outer_y / stride;
+                    let py = (block_y * block_size) as u32;
+                    let im = pixel_map.height.map(py);
+                    *cell = compute_basin_of_attraction(
+                        &[re, im],
+                        time_phase,
+                        n_max_period,
+                        n_steps_per_period,
+                        tol,
+                    );
+                }
+            });
+        }
     }
 }
 
@@ -268,8 +290,7 @@ mod tests {
             "n_steps_per_period": 12,
             "periodic_state_error_tolerance": 0.05,
             "render_options": {
-                "downsample_stride": 1,
-                "subpixel_antialiasing": 1
+                "sampling_level": 1
             }
         }"#;
         let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();

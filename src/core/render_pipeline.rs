@@ -31,10 +31,6 @@ use crate::core::image_utils::Renderable;
 
 /// Top-level orchestrator that owns all reusable buffers for one fractal
 /// instance and runs the four-phase pipeline against them on every render.
-///
-/// Phase 2.1 introduces this type alongside the legacy `Renderable::render_to_buffer`
-/// path; the production runtime is wired through it in 2.2.
-#[allow(dead_code)]
 pub struct RenderingPipeline<F: Renderable> {
     /// The fractal whose `Renderable` impl drives compute / histogram /
     /// normalize phases.
@@ -57,7 +53,6 @@ pub struct RenderingPipeline<F: Renderable> {
     n_max_plus_1: usize,
 }
 
-#[allow(dead_code)] // Phase 2.2 wires this into the production runtime.
 impl<F: Renderable> RenderingPipeline<F> {
     /// Construct a pipeline. Allocates all buffers based on the fractal's
     /// current image specification, render options, and color-map params.
@@ -67,10 +62,7 @@ impl<F: Renderable> RenderingPipeline<F> {
         histogram_bin_count: usize,
         histogram_max_value: f32,
         lookup_table_count: usize,
-    ) -> Self
-    where
-        <F::ColorMap as ColorMapKind>::Cell: Default + Clone,
-    {
+    ) -> Self {
         assert!(n_max_plus_1 >= 1, "n_max_plus_1 must be at least 1");
         let spec = fractal.image_specification();
         let outer = (spec.resolution[0] as usize) * n_max_plus_1;
@@ -90,17 +82,13 @@ impl<F: Renderable> RenderingPipeline<F> {
     }
 
     /// Run the full pipeline, writing one output pixel per cell of `out`.
-    /// `sampling_level` is the runtime value (must be `>= 0` and
-    /// `== n_max_plus_1 - 1` in Phase 2.1).
+    /// `sampling_level` is the runtime value driven by the adaptive
+    /// regulator; positive values use the AA subpixel grid, negative
+    /// values trigger block-fill, and `0` is baseline.
     pub fn render(&mut self, out: &mut ColorImage, sampling_level: i32) {
-        assert!(
-            sampling_level >= 0,
-            "Phase 2.1 supports only sampling_level >= 0"
-        );
-        assert_eq!(
-            sampling_level as usize + 1,
-            self.n_max_plus_1,
-            "Phase 2.1 requires runtime sampling_level == n_max"
+        debug_assert!(
+            sampling_level < (self.n_max_plus_1 as i32),
+            "runtime sampling_level cannot exceed the cap baked into the field buffer"
         );
         let spec = *self.fractal.image_specification();
         debug_assert_eq!(
@@ -146,24 +134,31 @@ impl<F: Renderable> RenderingPipeline<F> {
     }
 }
 
-#[allow(dead_code)] // Phase 2.2 wires this into the production runtime.
-fn allocate_field<F>(outer: usize, inner: usize) -> Vec<Vec<<F::ColorMap as ColorMapKind>::Cell>>
-where
-    F: Renderable,
-    <F::ColorMap as ColorMapKind>::Cell: Default + Clone,
-{
+fn allocate_field<F: Renderable>(
+    outer: usize,
+    inner: usize,
+) -> Vec<Vec<<F::ColorMap as ColorMapKind>::Cell>> {
     (0..outer)
         .map(|_| vec![<F::ColorMap as ColorMapKind>::Cell::default(); inner])
         .collect()
 }
 
-/// Walk the row-major output `egui::ColorImage`. For each output pixel
-/// `(px, py)` average the `(n+1)²` `[u8; 3]` results from `colorize_cell`
-/// over the `(n+1) × (n+1)` block at `field[(n+1)·px + i][(n+1)·py + j]`.
+/// Walk the row-major output `egui::ColorImage`, collapsing field cells
+/// into output pixels.
+///
+/// - **Positive `sampling_level = r`**: each output pixel `(px, py)` averages
+///   the `(r+1)²` cells at `field[px·n_max_plus_1 + i][py·n_max_plus_1 + j]`
+///   for `i, j ∈ 0..(r+1)`.
+/// - **`sampling_level == 0`**: one cell per output pixel (the top-left of
+///   each block).
+/// - **Negative `sampling_level = -m`**: block-fill. Every `(m+1) × (m+1)`
+///   output-pixel block reads the top-left field cell of the leftmost
+///   output pixel of the block; all output pixels in the block share one
+///   color. (Nearest-neighbor / zero-order hold; this replaces the legacy
+///   `KeyframeLinearPixelInerpolation` interpolation.)
 ///
 /// Generic over `C: ColorMapKind`; fully monomorphized at the call site.
 /// Per-pixel allocations: zero.
-#[allow(dead_code)] // Phase 2.2 wires this into the production runtime.
 pub fn colorize_collapse<C: ColorMapKind>(
     cache: &C::Cache,
     field: &[Vec<C::Cell>],
@@ -171,42 +166,51 @@ pub fn colorize_collapse<C: ColorMapKind>(
     sampling_level: i32,
     out: &mut ColorImage,
 ) {
-    assert!(
-        sampling_level >= 0,
-        "Phase 2.1 supports only sampling_level >= 0"
-    );
-    let n = (sampling_level as usize) + 1;
-    assert_eq!(
-        n, n_max_plus_1,
-        "Phase 2.1 requires runtime sampling_level == n_max"
-    );
     let width = out.size[0];
 
-    out.pixels
-        .par_chunks_exact_mut(width)
-        .enumerate()
-        .for_each(|(py, row)| {
-            for (px, pixel) in row.iter_mut().enumerate() {
-                let mut sum = [0u32; 3];
-                for i in 0..n {
-                    let cx = px * n + i;
-                    let col = &field[cx];
-                    for j in 0..n {
-                        let cy = py * n + j;
-                        let rgb = C::colorize_cell(cache, col[cy]);
-                        sum[0] += rgb[0] as u32;
-                        sum[1] += rgb[1] as u32;
-                        sum[2] += rgb[2] as u32;
+    if sampling_level >= 0 {
+        let n = sampling_level as usize + 1;
+        let count = (n * n) as u32;
+        out.pixels
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(py, row)| {
+                for (px, pixel) in row.iter_mut().enumerate() {
+                    let mut sum = [0u32; 3];
+                    for i in 0..n {
+                        let cx = px * n_max_plus_1 + i;
+                        let col = &field[cx];
+                        for j in 0..n {
+                            let cy = py * n_max_plus_1 + j;
+                            let rgb = C::colorize_cell(cache, col[cy]);
+                            sum[0] += rgb[0] as u32;
+                            sum[1] += rgb[1] as u32;
+                            sum[2] += rgb[2] as u32;
+                        }
                     }
+                    *pixel = Color32::from_rgb(
+                        (sum[0] / count) as u8,
+                        (sum[1] / count) as u8,
+                        (sum[2] / count) as u8,
+                    );
                 }
-                let count = (n * n) as u32;
-                *pixel = Color32::from_rgb(
-                    (sum[0] / count) as u8,
-                    (sum[1] / count) as u8,
-                    (sum[2] / count) as u8,
-                );
-            }
-        });
+            });
+    } else {
+        let block_size = (-sampling_level) as usize + 1;
+        out.pixels
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(py, row)| {
+                let block_y = py / block_size;
+                let cy = block_y * block_size * n_max_plus_1;
+                for (px, pixel) in row.iter_mut().enumerate() {
+                    let block_x = px / block_size;
+                    let cx = block_x * block_size * n_max_plus_1;
+                    let rgb = C::colorize_cell(cache, field[cx][cy]);
+                    *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                }
+            });
+    }
 }
 
 #[cfg(test)]

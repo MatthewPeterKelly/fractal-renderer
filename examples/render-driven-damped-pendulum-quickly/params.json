@@ -10,8 +10,7 @@
     "n_steps_per_period": 12,
     "periodic_state_error_tolerance": 0.05,
     "render_options": {
-      "downsample_stride": 1,
-      "subpixel_antialiasing": 1
+      "sampling_level": 1
     },
     "color": {
       "foreground": [255, 255, 255],

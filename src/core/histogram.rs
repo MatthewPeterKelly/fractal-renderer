@@ -186,9 +186,8 @@ impl CumulativeDistributionFunction {
         self.offset[bin_index] + data * self.scale[bin_index]
     }
 
-    /**
-     * Print the CDF to the writer for debug
-     */
+    /// Print the CDF to the writer for debug.
+    #[allow(dead_code)] // Diagnostics helper; only called from tests today.
     pub fn display<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(writer, "CDF:")?;
         let n_bins = self.offset.len();
