@@ -45,28 +45,6 @@ impl ImageSpecification {
             width: self.width,
         }
     }
-
-    /**
-     * Returns a new image specification object with the same center and width, but
-     * with a resolution scaled to approximately hit the target number of pixels.
-     * Implemented by rescaling the resolution of each axis and rounding up to the nearest
-     * integer.
-     *
-     * @param: target pixel count in the new image, lower bound.
-     */
-    pub fn scale_to_total_pixel_count(&self, target_pixel_count: u32) -> ImageSpecification {
-        assert!(target_pixel_count > 0);
-        let old_pixel_count = self.resolution[0] * self.resolution[1];
-        let scale = ((target_pixel_count as f64) / (old_pixel_count as f64)).sqrt();
-        ImageSpecification {
-            resolution: [
-                (self.resolution[0] as f64 * scale).ceil() as u32,
-                (self.resolution[1] as f64 * scale).ceil() as u32,
-            ],
-            center: self.center,
-            width: self.width,
-        }
-    }
 }
 
 /**
@@ -633,20 +611,6 @@ mod tests {
         let tol = 1e-6;
         assert_relative_eq!(pixel_map.map(0), x0, epsilon = tol);
         assert_relative_eq!(pixel_map.map(n - 1), x1, epsilon = tol);
-    }
-
-    #[test]
-    fn test_scale_to_total_pixel_count() {
-        let image_spec = ImageSpecification {
-            resolution: [800, 600],
-            center: [0.0, 0.0],
-            width: 1.0,
-        };
-
-        let scaled_spec = image_spec.scale_to_total_pixel_count(32);
-        assert_eq!(scaled_spec.center, image_spec.center);
-        assert_eq!(scaled_spec.width, image_spec.width);
-        assert_eq!(scaled_spec.resolution, [7, 5]);
     }
 
     #[test]

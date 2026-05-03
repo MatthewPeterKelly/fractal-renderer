@@ -73,30 +73,30 @@ mod tests {
     #[test]
     fn regression_test_cli_render_pipeline() {
         let test_cases = vec![
-            // Hashes regenerated in Phase 2.2 when the runtime switched
-            // from the legacy `Renderable::render_to_buffer` path to
-            // `RenderingPipeline`. The Mandelbrot/Julia hashes shifted by a
-            // small per-pixel amount because the new color-cache lookup
-            // table is indexed over `[0, 1]` (with the CDF applied per cell
-            // in `normalize_field`) rather than over `[cdf.min_data,
-            // cdf.max_data]` with the CDF baked in. The downsample fixture
-            // also shifted because block-fill is nearest-neighbor, not
-            // bilinear interpolation between sparse samples.
+            // Hashes regenerated in Phase 2.3 when `populate_histogram`
+            // switched from a sub-sample grid to a full-field walk over
+            // the populated cells (the histogram now reflects the same
+            // points the colorize pass reads, instead of an independent
+            // grid sized by the dropped `histogram_sample_count` field).
+            // (2.2 already shifted these once: the new color cache is
+            // indexed over `[0, 1]` with the CDF applied per cell rather
+            // than over `[cdf.min_data, cdf.max_data]` with the CDF baked
+            // in, and block-fill is nearest-neighbor instead of bilinear.)
             (
                 "mandelbrot/default_regression_test",
-                "ec2d9fb318a47985cacac1d9f58652626d3c9bc8ac2abc7443e0dcbf35e90029",
+                "e731341fb865701eb19ac82123bd66d0c27695b2c6bdfed91b6030e155751283",
             ),
             (
                 "mandelbrot/anti_aliasing_regression_test",
-                "5966553632f595ce8c95485abdea32ebc6c579bd506c6ddaa56c9dbc7571ea03",
+                "fb6e39949295146f3d49d80fdeaa2e6d6125473ad217345f2e7c0b6eeb1540cf",
             ),
             (
                 "mandelbrot/downsample_interpolation_regression_test",
-                "ef46807b61427d1335b31e7b962faa6a4897766c6733a810b64a7988a80a9daa",
+                "721e538c36b9cc78d62503f263cf51aaf89b1dc7b37ac0c5ae5085b97a1f65d5",
             ),
             (
                 "julia/default_regression_test",
-                "bc3f0c0a1d7637a8c315ba025a06b861507fe8282b72d2372f2affef653e18d6",
+                "69b3b390da75b5bd8f6eeca7afac86cf41864582e2b4514c8f003dd29aef9d11",
             ),
             (
                 "barnsley_fern/default_regression_test",

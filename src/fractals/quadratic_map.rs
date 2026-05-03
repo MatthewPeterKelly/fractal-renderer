@@ -1,6 +1,4 @@
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
-};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -11,13 +9,18 @@ use crate::core::{
         ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed,
     },
-    interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
+    interpolation::ClampedLinearInterpolator,
 };
 
 /// Parameter block for the colorization step of escape-time fractals
 /// (Mandelbrot, Julia). The `color` field holds the user-facing palette;
 /// the remaining fields tune the histogram-based normalization and the
 /// pre-baked lookup table.
+///
+/// Phase 2.3 dropped `histogram_sample_count`; the histogram is now built
+/// from a full walk of the populated field cells. Older JSON files that
+/// still carry the field will deserialize via `#[serde(default)]` and
+/// the value is ignored.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
     /// Background color and gradient keyframes for escaped pixels.
@@ -26,8 +29,6 @@ pub struct ColorMapParams {
     pub lookup_table_count: usize,
     /// Number of bins used by the histogram that drives gradient normalization.
     pub histogram_bin_count: usize,
-    /// Number of samples drawn from the image when populating the histogram.
-    pub histogram_sample_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -174,7 +175,10 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 
     /// Access the color map parameters.
     fn color_map_params(&self) -> &ColorMapParams;
-    /// Mutable access to the color map parameters.
+    /// Mutable access to the color map parameters. Currently unused inside
+    /// the lib (the speed optimizer no longer touches the color cache);
+    /// kept on the trait for Phase 6 live keyframe edits.
+    #[allow(dead_code)]
     fn color_map_params_mut(&mut self) -> &mut ColorMapParams;
 
     /// Access to the rendering options:
@@ -188,8 +192,6 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 /// Reference cache used by `SpeedOptimizer` to interpolate runtime
 /// parameters back toward the user's specified values.
 pub struct ParamsReferenceCache {
-    /// User-specified `histogram_sample_count`.
-    pub histogram_sample_count: usize,
     /// User-specified `max_iter_count`.
     pub max_iter_count: u32,
     /// User-specified render options (including `sampling_level`).
@@ -220,25 +222,12 @@ where
 
     fn reference_cache(&self) -> Self::ReferenceCache {
         ParamsReferenceCache {
-            histogram_sample_count: self
-                .fractal_params
-                .color_map_params()
-                .histogram_sample_count,
             max_iter_count: self.fractal_params.convergence_params().max_iter_count,
             render_options: *self.fractal_params.render_options(),
         }
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.fractal_params
-            .color_map_params_mut()
-            .histogram_sample_count = scale_down_parameter_for_speed(
-            1024.0,
-            cache.histogram_sample_count as f64,
-            level,
-            ClampedLogInterpolator,
-        ) as usize;
-
         self.fractal_params.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
             128.0,
             cache.max_iter_count as f64,
@@ -307,33 +296,15 @@ where
 
     fn populate_histogram(
         &self,
-        _sampling_level: i32,
-        _field: &[Vec<Option<f32>>],
+        sampling_level: i32,
+        field: &[Vec<Option<f32>>],
         histogram: &Histogram,
     ) {
-        // Phase 2.2 keeps the legacy sub-sample-grid histogram source so
-        // that pixel hashes track previous behavior; Phase 2.3 switches
-        // this to a full-field walk over the populated cells.
-        let sample_count = self
-            .fractal_params
-            .color_map_params()
-            .histogram_sample_count as u32;
-        let hist_image_spec = self
-            .fractal_params
-            .image_specification()
-            .scale_to_total_pixel_count(sample_count);
-        let pixel_mapper = PixelMapper::new(&hist_image_spec);
-        (0..hist_image_spec.resolution[0])
-            .into_par_iter()
-            .for_each(|i| {
-                let x = pixel_mapper.width.map(i);
-                for j in 0..hist_image_spec.resolution[1] {
-                    let y = pixel_mapper.height.map(j);
-                    if let Some(value) = self.fractal_params.normalized_log_escape_count(&[x, y]) {
-                        histogram.insert(value);
-                    }
-                }
-            });
+        let n_max_plus_1 =
+            field.len() / self.fractal_params.image_specification().resolution[0] as usize;
+        walk_populated_quadratic_cells(sampling_level, n_max_plus_1, field, |v| {
+            histogram.insert(*v)
+        });
     }
 
     fn normalize_field(
@@ -455,6 +426,52 @@ fn normalize_populated_cells<F: Fn(&f32) -> f32 + Sync>(
                 }
                 if let Some(v) = cell {
                     *v = f(v);
+                }
+            }
+        });
+    }
+}
+
+/// Read-only walk over the same populated cells, calling `f` on each
+/// `Some(&value)`. Used by `populate_histogram` to insert the field's
+/// raw values into the shared histogram.
+fn walk_populated_quadratic_cells<F: Fn(&f32) + Sync>(
+    sampling_level: i32,
+    n_max_plus_1: usize,
+    field: &[Vec<Option<f32>>],
+    f: F,
+) {
+    use rayon::iter::IntoParallelRefIterator;
+    if sampling_level >= 0 {
+        let n = sampling_level as usize + 1;
+        field.par_iter().enumerate().for_each(|(outer_x, col)| {
+            let i = outer_x % n_max_plus_1;
+            if i >= n {
+                return;
+            }
+            for (outer_y, cell) in col.iter().enumerate() {
+                let j = outer_y % n_max_plus_1;
+                if j >= n {
+                    continue;
+                }
+                if let Some(v) = cell {
+                    f(v);
+                }
+            }
+        });
+    } else {
+        let block_size = (-sampling_level) as usize + 1;
+        let stride = n_max_plus_1 * block_size;
+        field.par_iter().enumerate().for_each(|(outer_x, col)| {
+            if outer_x % stride != 0 {
+                return;
+            }
+            for (outer_y, cell) in col.iter().enumerate() {
+                if outer_y % stride != 0 {
+                    continue;
+                }
+                if let Some(v) = cell {
+                    f(v);
                 }
             }
         });
