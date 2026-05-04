@@ -4,6 +4,7 @@ pub mod color_map_editor_ui;
 pub mod controller;
 pub mod dynamical_systems;
 pub mod eframe_support;
+pub mod field_iteration;
 pub mod file_io;
 pub mod histogram;
 pub mod image_utils;
