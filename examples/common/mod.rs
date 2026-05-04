@@ -2,15 +2,18 @@ use std::path::{Path, PathBuf};
 
 // Note:  all of these functions are marked dead_code because they are only used in example binaries.
 
+#[allow(unused_imports)]
+use egui::{Color32, ColorImage};
 #[allow(dead_code)]
 use fractal_renderer::{
     cli::{color_swatch::generate_color_swatch, explore::explore_fractal, render::render_fractal},
     core::{
         color_map_editor_ui::run_color_editor,
         file_io::FilePrefix,
-        image_utils::{Renderable, create_buffer},
+        image_utils::{Renderable, field_upsample_factor},
+        render_pipeline::RenderingPipeline,
     },
-    fractals::{common::FractalParams, quadratic_map::QuadraticMap},
+    fractals::common::FractalParams,
 };
 
 #[allow(dead_code)]
@@ -68,14 +71,38 @@ pub fn color_editor_example_from_string(example_name: &str) {
     let fractal_params: FractalParams =
         parse_params_json_or_panic(example_name, &params_path, &json_text);
 
-    // Early prototype. Eventually this will support the same set of fractal types as `explore`.
+    // Early prototype. Eventually this will support the same set of fractal
+    // types as `explore`. Renders through the new `RenderingPipeline` and
+    // converts the row-major `ColorImage` into the column-major `Vec<Vec<Rgb>>`
+    // shape `run_color_editor` still expects.
     let (keyframes, preview_buffer, resolution) = match fractal_params {
         FractalParams::Mandelbrot(params) => {
-            let kf = params.color_map.color.color_map.clone();
+            // The unified ColorMap stores per-gradient keyframes; Mandelbrot
+            // always has exactly one gradient, so index 0 is safe here.
+            let kf = params.color_map.color.gradients[0].clone();
             let resolution = params.image_specification.resolution;
-            let renderer = QuadraticMap::new((*params).clone());
-            let mut buf = create_buffer(image::Rgb([0u8, 0, 0]), &resolution);
-            renderer.render_to_buffer(&mut buf);
+            let renderer = (*params).clone();
+            let n_max_plus_1 = field_upsample_factor(renderer.render_options().sampling_level);
+            let bin_count = renderer.histogram_bin_count();
+            let hist_max = renderer.histogram_max_value();
+            let lut_count = renderer.lookup_table_count();
+            let sampling_level = renderer.render_options().sampling_level;
+            let mut pipeline =
+                RenderingPipeline::new(renderer, n_max_plus_1, bin_count, hist_max, lut_count);
+            let mut color_image = ColorImage::filled(
+                [resolution[0] as usize, resolution[1] as usize],
+                Color32::BLACK,
+            );
+            pipeline.render(&mut color_image, sampling_level);
+            let width = color_image.size[0];
+            let height = resolution[1] as usize;
+            let mut buf = vec![vec![image::Rgb([0u8, 0, 0]); height]; width];
+            for (x, col) in buf.iter_mut().enumerate() {
+                for (y, cell) in col.iter_mut().enumerate() {
+                    let c = color_image.pixels[y * width + x];
+                    *cell = image::Rgb([c.r(), c.g(), c.b()]);
+                }
+            }
             (kf, buf, resolution)
         }
         _ => panic!(

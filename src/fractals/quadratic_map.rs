@@ -1,18 +1,14 @@
-use image::Rgb;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
-use crate::{
-    core::{
-        color_map::{BackgroundWithColorMap, ColorMap, ColorMapLookUpTable, ColorMapper},
-        histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{
-            ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
-            scale_down_parameter_for_speed,
-        },
-        interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator, LinearInterpolator},
+use crate::core::{
+    color_map::ColorMap,
+    field_iteration::FieldKernel,
+    image_utils::{
+        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed,
     },
-    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
+    interpolation::ClampedLinearInterpolator,
 };
 
 /// Parameter block for the colorization step of escape-time fractals
@@ -21,14 +17,12 @@ use crate::{
 /// pre-baked lookup table.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
-    /// Background color and gradient keyframes for escaped pixels.
-    pub color: BackgroundWithColorMap,
+    /// Flat color (for in-set pixels) and one gradient (for escaped pixels).
+    pub color: ColorMap,
     /// Number of entries in the precomputed color lookup table.
     pub lookup_table_count: usize,
     /// Number of bins used by the histogram that drives gradient normalization.
     pub histogram_bin_count: usize,
-    /// Number of samples drawn from the image when populating the histogram.
-    pub histogram_sample_count: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -162,7 +156,11 @@ impl QuadraticMapSequence {
     }
 }
 
-pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
+/// Trait implemented by Mandelbrot and Julia parameter types. Each
+/// implementation supplies the actual escape-count math; the
+/// `Renderable` / `FieldKernel` impls live as blanket impls below so
+/// the per-fractal types stay parameter-only.
+pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync + Send {
     /// Access the current image specification.
     fn image_specification(&self) -> &ImageSpecification;
 
@@ -174,152 +172,97 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn convergence_params_mut(&mut self) -> &mut ConvergenceParams;
 
     /// Access the color map parameters.
-    fn color_map(&self) -> &ColorMapParams;
-    fn color_map_mut(&mut self) -> &mut ColorMapParams;
+    fn color_map_params(&self) -> &ColorMapParams;
+    /// Mutable access to the color map parameters. Used by the live editor
+    /// flow (Phase 7) to mutate keyframes through the renderer.
+    #[allow(dead_code)]
+    fn color_map_params_mut(&mut self) -> &mut ColorMapParams;
 
     /// Access to the rendering options:
     fn render_options(&self) -> &RenderOptions;
     fn render_options_mut(&mut self) -> &mut RenderOptions;
 
-    // Actually evaluate the fractal.
+    /// Evaluate the smooth log-escape count at the given point.
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
-pub fn create_empty_histogram<T: QuadraticMapParams>(params: &T) -> Arc<Histogram> {
-    Histogram::new(
-        params.color_map().histogram_bin_count,
-        QuadraticMapSequence::log_iter_count(params.convergence_params().max_iter_count as f32),
-    )
-    .into()
-}
-
+/// Reference cache used by `SpeedOptimizer` to interpolate runtime
+/// parameters back toward the user's specified values.
 pub struct ParamsReferenceCache {
-    pub histogram_sample_count: usize,
+    /// User-specified `max_iter_count`.
     pub max_iter_count: u32,
+    /// User-specified render options (including `sampling_level`).
     pub render_options: RenderOptions,
 }
 
-pub struct QuadraticMap<T: QuadraticMapParams> {
-    pub fractal_params: T,
-    pub histogram: Arc<Histogram>,
-    pub cdf: CumulativeDistributionFunction,
-    pub color_map: ColorMapLookUpTable,
-    pub inner_color_map: ColorMap<LinearInterpolator>,
-    pub background_color: Rgb<u8>,
-}
-
-impl<T: QuadraticMapParams> QuadraticMap<T> {
-    pub fn new(fractal_params: T) -> QuadraticMap<T> {
-        let inner_color_map = ColorMap::new(
-            &fractal_params.color_map().color.color_map,
-            LinearInterpolator {},
-        );
-        let histogram = create_empty_histogram(&fractal_params);
-        let mut quadratic_map = QuadraticMap {
-            cdf: CumulativeDistributionFunction::new(&histogram),
-            histogram,
-            color_map: ColorMapLookUpTable::from_color_map(
-                &inner_color_map,
-                fractal_params.color_map().lookup_table_count,
-            ),
-            inner_color_map,
-            background_color: Rgb(fractal_params.color_map().color.background),
-            fractal_params: fractal_params.clone(),
-        };
-        quadratic_map.update_color_map();
-        quadratic_map
-    }
-
-    // MPK:  this too. We should be able to share this logic with newtons method.
-    fn update_color_map(&mut self) {
-        populate_histogram(
-            &|point: &[f64; 2]| self.fractal_params.normalized_log_escape_count(point),
-            self.fractal_params.image_specification(),
-            self.fractal_params.color_map().histogram_sample_count as u32,
-            self.histogram.clone(),
-        );
-        self.cdf.reset(&self.histogram);
-
-        reset_color_map_lookup_table_from_cdf(
-            &mut self.color_map,
-            &self.cdf,
-            &self.inner_color_map,
-        );
-    }
-}
-
-impl<T> SpeedOptimizer for QuadraticMap<T>
-where
-    T: QuadraticMapParams,
-{
+impl<T: QuadraticMapParams> SpeedOptimizer for T {
     type ReferenceCache = ParamsReferenceCache;
 
     fn reference_cache(&self) -> Self::ReferenceCache {
         ParamsReferenceCache {
-            histogram_sample_count: self.fractal_params.color_map().histogram_sample_count,
-            max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            render_options: *self.fractal_params.render_options(),
+            max_iter_count: self.convergence_params().max_iter_count,
+            render_options: *self.render_options(),
         }
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.fractal_params.color_map_mut().histogram_sample_count = scale_down_parameter_for_speed(
-            1024.0,
-            cache.histogram_sample_count as f64,
-            level,
-            ClampedLogInterpolator,
-        ) as usize;
-
-        self.fractal_params.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
+        self.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
             128.0,
             cache.max_iter_count as f64,
             level,
             ClampedLinearInterpolator,
         ) as u32;
-        self.fractal_params
-            .render_options_mut()
+        self.render_options_mut()
             .set_speed_optimization_level(level, &cache.render_options);
     }
 }
 
-impl<T> Renderable for QuadraticMap<T>
-where
-    T: QuadraticMapParams + Sync + Send,
-{
+impl<T: QuadraticMapParams> FieldKernel for T {
+    fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+        self.normalized_log_escape_count(&point).map(|v| (v, 0))
+    }
+}
+
+impl<T: QuadraticMapParams> Renderable for T {
     type Params = T;
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
-        self.fractal_params
-            .set_image_specification(image_specification);
-        self.update_color_map();
+        QuadraticMapParams::set_image_specification(self, image_specification);
     }
 
-    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        self.histogram.display(writer)?;
-        self.cdf.display(writer)?;
-        std::io::Result::Ok(())
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
-        &self.fractal_params
-    }
-
-    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8> {
-        let maybe_escape_count = self
-            .fractal_params
-            .normalized_log_escape_count(&[point[0], point[1]]);
-        if let Some(value) = maybe_escape_count {
-            self.color_map.compute_pixel(value)
-        } else {
-            self.background_color
-        }
+        self
     }
 
     fn image_specification(&self) -> &ImageSpecification {
-        self.fractal_params.image_specification()
+        QuadraticMapParams::image_specification(self)
     }
 
     fn render_options(&self) -> &RenderOptions {
-        self.fractal_params.render_options()
+        QuadraticMapParams::render_options(self)
+    }
+
+    fn color_map(&self) -> &ColorMap {
+        &self.color_map_params().color
+    }
+
+    fn color_map_mut(&mut self) -> &mut ColorMap {
+        &mut self.color_map_params_mut().color
+    }
+
+    fn histogram_bin_count(&self) -> usize {
+        self.color_map_params().histogram_bin_count
+    }
+
+    fn histogram_max_value(&self) -> f32 {
+        QuadraticMapSequence::log_iter_count(self.convergence_params().max_iter_count as f32)
+    }
+
+    fn lookup_table_count(&self) -> usize {
+        self.color_map_params().lookup_table_count
     }
 }

@@ -32,11 +32,11 @@ impl QuadraticMapParams for MandelbrotParams {
         &mut self.convergence_params
     }
 
-    fn color_map(&self) -> &ColorMapParams {
+    fn color_map_params(&self) -> &ColorMapParams {
         &self.color_map
     }
 
-    fn color_map_mut(&mut self) -> &mut ColorMapParams {
+    fn color_map_params_mut(&mut self) -> &mut ColorMapParams {
         &mut self.color_map
     }
 

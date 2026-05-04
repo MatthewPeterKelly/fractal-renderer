@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use crate::{
     core::{file_io::FilePrefix, user_interface},
-    fractals::{common::FractalParams, newtons_method, quadratic_map::QuadraticMap},
+    fractals::{common::FractalParams, newtons_method},
 };
 
 /**
@@ -20,7 +20,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
             user_interface::explore(
                 file_prefix,
                 inner_params.image_specification,
-                QuadraticMap::new(*inner_params.clone()),
+                (**inner_params).clone(),
             )
         }
 
@@ -29,7 +29,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
             user_interface::explore(
                 file_prefix,
                 inner_params.image_specification,
-                QuadraticMap::new(*inner_params.clone()),
+                (**inner_params).clone(),
             )
         }
 

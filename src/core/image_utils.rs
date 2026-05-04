@@ -1,14 +1,15 @@
-use image::Rgb;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use egui::{Color32, ColorImage};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::{
     io::{self, Write},
     path::PathBuf,
 };
 
-use crate::core::interpolation::{ClampedLinearInterpolator, Interpolator};
+use crate::core::color_map::ColorMap;
+use crate::core::field_iteration::FieldKernel;
+use crate::core::interpolation::Interpolator;
+use crate::core::render_pipeline::RenderingPipeline;
 
 use super::file_io::{FilePrefix, serialize_to_json_or_panic};
 use super::stopwatch::Stopwatch;
@@ -30,36 +31,9 @@ impl ImageSpecification {
         self.width * (self.resolution[1] as f64) / (self.resolution[0] as f64)
     }
 
-    /**
-     * Used for anti-aliasing the image calculations. Computes a vector of offsets to be
-     * applied within a single pixel, generating a dense grid of samples within that pixel.
-     */
-    pub fn subpixel_offset_vector(&self, subpixel_antialiasing: u32) -> Vec<[f64; 2]> {
-        let n = subpixel_antialiasing + 1;
-        let mut offsets = Vec::with_capacity((n * n) as usize);
-        let step = 1.0 / n as f64;
-
-        let pixel_width = self.width / (self.resolution[0] as f64);
-        let pixel_height = self.height() / (self.resolution[1] as f64);
-
-        for i in 0..n {
-            let alpha_i = step * (i as f64); // [0.0, 1.0)
-            let x = alpha_i * pixel_width;
-
-            for j in 0..n {
-                let alpha_j = step * (j as f64); // [0.0, 1.0)
-                let y = alpha_j * pixel_height;
-                offsets.push([x, y]);
-            }
-        }
-
-        offsets
-    }
-
-    /**
-     * Returns a new image specification object with the same center and width, but
-     * with resolution scaled by `subpixel_count`. Used for some antialiasing operations.
-     */
+    /// Returns a new image specification object with the same center and
+    /// width, but with the resolution scaled by `subpixel_count`. Used by
+    /// `chaos_game` for its anti-aliasing mask.
     pub fn upsample(&self, subpixel_count: u32) -> ImageSpecification {
         assert!(subpixel_count > 0);
         ImageSpecification {
@@ -71,32 +45,6 @@ impl ImageSpecification {
             width: self.width,
         }
     }
-
-    /**
-     * Returns a new image specification object with the same center and width, but
-     * with a resolution scaled to approximately hit the target number of pixels.
-     * Implemented by rescaling the resolution of each axis and rounding up to the nearest
-     * integer.
-     *
-     * @param: target pixel count in the new image, lower bound.
-     */
-    pub fn scale_to_total_pixel_count(&self, target_pixel_count: u32) -> ImageSpecification {
-        assert!(target_pixel_count > 0);
-        let old_pixel_count = self.resolution[0] * self.resolution[1];
-        let scale = ((target_pixel_count as f64) / (old_pixel_count as f64)).sqrt();
-        ImageSpecification {
-            resolution: [
-                (self.resolution[0] as f64 * scale).ceil() as u32,
-                (self.resolution[1] as f64 * scale).ceil() as u32,
-            ],
-            center: self.center,
-            width: self.width,
-        }
-    }
-}
-
-pub fn create_buffer<T: Clone>(value: T, resolution: &[u32; 2]) -> Vec<Vec<T>> {
-    vec![vec![value; resolution[1] as usize]; resolution[0] as usize]
 }
 
 /**
@@ -212,32 +160,27 @@ where
     interpolator.interpolate(level, cached_value, upper_bound)
 }
 
-/// Parameters shared by multiple fractal types that control how the fractal is rendered
-/// to the screen.
+/// Parameters shared by multiple fractal types that control how the fractal
+/// is rendered to the screen.
+///
+/// `sampling_level` collapses the legacy `(subpixel_antialiasing,
+/// downsample_stride)` axes into a single signed integer:
+/// - `+n` (`n > 0`): anti-aliasing at `(n+1)²` samples per output pixel.
+/// - `0`: baseline (one sample per output pixel, no averaging).
+/// - `−n` (`n > 0`): block-fill, one sample per `(n+1)²` output pixels.
+///
+/// The JSON value is the **maximum** the pipeline ever runs at — the field
+/// buffer is sized to accommodate it. The adaptive regulator drives the
+/// runtime value passed to `RenderingPipeline::render`.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RenderOptions {
-    /// If set to a value larger than 1, it indicates that some pixels should be skipped
-    /// to allow for faster rendering. This is a particularly useful feature when trying
-    /// to maintain a rapid frame-rate on larger images. It applies uniformly in both
-    /// dimensions of the image. For example, setting this value to `3` will cause the
-    /// image to be rendered in three-by-three blocks, with only one true "evaluation"
-    /// for that block. For now, this is implemented by a zero-order hold (eg. all nine
-    /// pixels are assigned the same value). Eventually we could use a better interpolation
-    /// routine.
-    pub downsample_stride: usize,
-
-    /// Anti-aliasing when n > 0. Expensive, but huge improvement to image quality.
-    /// The value here indicates the number of times the pixel will be sub-divided along
-    /// each dimension. E.g. one subdivision along each dimension will result in four
-    /// sub-pixels, and thus four rendering evaluations per pixel.
-    /// 0 == no antialiasing
-    /// 2 = some antialiasing (at 9x CPU time)
-    /// 6 = high antialiasing (at cost of 49x CPU time)
-    pub subpixel_antialiasing: u32,
+    /// User-facing sampling level (see struct docs). `0` is baseline.
+    pub sampling_level: i32,
 }
 
-const MAX_DOWNSAMPLE_STRIDE: f64 = 8.0;
-const MIN_DOWNSAMPLE_STRIDE: f64 = 1.0;
+/// Most extreme block-fill the regulator pushes to under load
+/// (`-7` ↔ 8×8 block-fill). Mirrors the legacy `MAX_DOWNSAMPLE_STRIDE`.
+const MIN_RUNTIME_SAMPLING_LEVEL: i32 = -7;
 
 impl SpeedOptimizer for RenderOptions {
     type ReferenceCache = RenderOptions;
@@ -247,104 +190,124 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        // Downsample stride has effective, but hugely reduces image quality and produces large jumps in the
-        // render pipeline duration. It is better to rely on other things like reducing the iteration counts
-        // before falling back to this. To do that, let's modify the level so that is doesn't "turn on"
-        // until it hits some non-zero value.
-        let delayed_activation_level = (level * 2.0) - 1.0;
-        self.downsample_stride = ClampedLinearInterpolator.interpolate(
-            delayed_activation_level,
-            MIN_DOWNSAMPLE_STRIDE,
-            MAX_DOWNSAMPLE_STRIDE,
-        ) as usize;
-
-        // Antialiasing is super expensive, and not too visible while panning around. We should turn it off
-        // really quickly once we need to render faster.
-        let fast_drop_off_level = 5.0 * level;
-        self.subpixel_antialiasing = ClampedLinearInterpolator.interpolate(
-            fast_drop_off_level,
-            cache.subpixel_antialiasing as f64,
-            0.0,
-        ) as u32;
+        // Three-piece curve (chosen to match the *spirit* of the legacy
+        // two-axis behavior — AA drops fast, downsample activates slow):
+        // 1. `[0, 0.2]`: AA quality drops from cached → 0 (baseline).
+        // 2. `[0.2, 0.5]`: hold at baseline.
+        // 3. `[0.5, 1.0]`: block-fill ramps from baseline (or cached, if
+        //    cached is already negative) toward `MIN_RUNTIME_SAMPLING_LEVEL`.
+        let cached = cache.sampling_level as f64;
+        let runtime = if cached > 0.0 {
+            if level <= 0.2 {
+                cached * (1.0 - (level / 0.2))
+            } else if level <= 0.5 {
+                0.0
+            } else {
+                (MIN_RUNTIME_SAMPLING_LEVEL as f64) * ((level - 0.5) / 0.5)
+            }
+        } else if cached <= MIN_RUNTIME_SAMPLING_LEVEL as f64 {
+            // User already at or past the floor; nothing more to drop.
+            cached
+        } else {
+            cached + (MIN_RUNTIME_SAMPLING_LEVEL as f64 - cached) * level
+        };
+        self.sampling_level = runtime.round() as i32;
     }
 }
 
-/// The Renderable trait represents an object that can provide a point render function
-/// and an image specification.
-pub trait Renderable: Sync + Send + SpeedOptimizer {
+/// Drives the five-phase `RenderingPipeline`. Per-(sub)pixel dispatch is
+/// fully monomorphized through `Self: FieldKernel`. AA / block-fill
+/// iteration lives in `core::field_iteration`; the trait surface a
+/// fractal must implement collapses to `FieldKernel::evaluate` plus the
+/// housekeeping methods below.
+pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
     /// The type of parameters that describe the renderable object.
     type Params: Serialize + Debug;
-
-    /// Evaluates the pixel color at a specified point in the fractal.
-    fn render_point(&self, point: &[f64; 2]) -> Rgb<u8>;
 
     /// Access the current image specification for the renderable object.
     fn image_specification(&self) -> &ImageSpecification;
 
-    /// Access to the rendering options:
+    /// Access to the rendering options.
     fn render_options(&self) -> &RenderOptions;
 
-    /// Set the image specification for the renderable object. This may be an
-    /// expensive operation, e.g. for the quadratic map objects this will trigger the
-    /// color map histogram to be recomputed from scratch.
+    /// Set the image specification for the renderable object. May trigger
+    /// recomputation of dependent state in the impl.
     fn set_image_specification(&mut self, image_specification: ImageSpecification);
 
-    /// Write diagnostics information, typically to a log file, for the renderable object.
-    /// This might include, e.g. parameters or a histogram summary.
+    /// Write diagnostics information, typically to a log file, for the
+    /// renderable object. This might include parameters or a histogram
+    /// summary.
     fn write_diagnostics<W: Write>(&self, writer: &mut W) -> io::Result<()>;
 
-    /// @return a reference to the internal parametrs of the renderable object, which
-    /// can then be serialized to a JSON file.
+    /// Reference to the internal parameters of the renderable object, which
+    /// can be serialized to JSON.
     fn params(&self) -> &Self::Params;
 
-    /// Renders into the provided buffer.
-    fn render_to_buffer(&self, buffer: &mut Vec<Vec<Rgb<u8>>>) {
-        generate_scalar_image_in_place(
-            self.image_specification(),
-            self.render_options(),
-            |point: &[f64; 2]| self.render_point(point),
-            buffer,
-        );
-    }
+    /// Histogram capacity in bins per gradient. Each gradient gets its own
+    /// histogram allocated to this size at pipeline construction.
+    fn histogram_bin_count(&self) -> usize;
+
+    /// Maximum scalar value any cell will produce. Used to size each
+    /// histogram bin's range.
+    fn histogram_max_value(&self) -> f32;
+
+    /// LUT resolution per gradient. Each gradient's lookup table is
+    /// allocated to this size at pipeline construction.
+    fn lookup_table_count(&self) -> usize;
+
+    /// Reference to the unified `ColorMap` driving colorization. Length of
+    /// `gradients` is fixed for the session and matches the gradient
+    /// indices that `FieldKernel::evaluate` is allowed to emit.
+    fn color_map(&self) -> &ColorMap;
+
+    /// Mutable access to the color map. Used by Phase 7 live keyframe edits;
+    /// holds no semantic difference from `color_map` today, the editor flow
+    /// just needs a path to mutate keyframes through the renderer.
+    #[allow(dead_code)]
+    fn color_map_mut(&mut self) -> &mut ColorMap;
 }
 
-pub fn render<T: Renderable>(
+/// Render a fractal to a PNG file (and a sibling JSON / diagnostics file).
+/// Drives the new `RenderingPipeline` at the user's full sampling level.
+pub fn render<T: Renderable + 'static>(
     renderable: T,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
 
-    // Create a new ImgBuf to store the render in memory (and eventually write it to a file).
-    let mut imgbuf = image::ImageBuffer::new(
-        renderable.image_specification().resolution[0],
-        renderable.image_specification().resolution[1],
-    );
+    let spec = *renderable.image_specification();
+    let cached_sampling_level = renderable.render_options().sampling_level;
+    let n_max_plus_1 = field_upsample_factor(cached_sampling_level);
+    let histogram_bin_count = renderable.histogram_bin_count();
+    let histogram_max_value = renderable.histogram_max_value();
+    let lookup_table_count = renderable.lookup_table_count();
 
     serialize_to_json_or_panic(
         file_prefix.full_path_with_suffix(".json"),
         renderable.params(),
     );
-
     stopwatch.record_split("basic setup".to_owned());
 
-    let image_specification = *renderable.image_specification();
-    let pixel_renderer = |point: &[f64; 2]| renderable.render_point(point);
-    stopwatch.record_split("build renderer".to_owned());
-
-    let raw_data = generate_scalar_image(
-        &image_specification,
-        renderable.render_options(),
-        pixel_renderer,
-        Rgb([0, 0, 0]),
+    let mut pipeline = RenderingPipeline::new(
+        renderable,
+        n_max_plus_1,
+        histogram_bin_count,
+        histogram_max_value,
+        lookup_table_count,
     );
+    let mut color_image = ColorImage::filled(
+        [spec.resolution[0] as usize, spec.resolution[1] as usize],
+        Color32::BLACK,
+    );
+    pipeline.render(&mut color_image, cached_sampling_level);
+    stopwatch.record_split("render pipeline".to_owned());
 
-    stopwatch.record_split("compute quadratic sequences".to_owned());
-
-    // Apply color to each pixel in the image:
+    let mut imgbuf = image::ImageBuffer::new(spec.resolution[0], spec.resolution[1]);
+    let width = color_image.size[0];
     for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        *pixel = raw_data[x as usize][y as usize];
+        let c = color_image.pixels[(y as usize) * width + (x as usize)];
+        *pixel = image::Rgb([c.r(), c.g(), c.b()]);
     }
-
     stopwatch.record_split("copy into image buffer".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
@@ -353,9 +316,25 @@ pub fn render<T: Renderable>(
 
     let mut diagnostics_file = file_prefix.create_file_with_suffix("_diagnostics.txt");
     stopwatch.display(&mut diagnostics_file)?;
-    renderable.write_diagnostics(&mut diagnostics_file)?;
+    pipeline
+        .fractal()
+        .write_diagnostics(&mut diagnostics_file)?;
 
     Ok(())
+}
+
+/// Compute the `n_max_plus_1` upsample factor for the field buffer based on
+/// the user's cached sampling level.
+///
+/// - Positive cached → `cached + 1` (allocates the AA subpixel grid).
+/// - Zero or negative cached → `1` (no AA grid; block-fill is sparse over
+///   a 1× field).
+pub fn field_upsample_factor(cached_sampling_level: i32) -> usize {
+    if cached_sampling_level > 0 {
+        (cached_sampling_level as usize) + 1
+    } else {
+        1
+    }
 }
 
 /**
@@ -470,24 +449,23 @@ impl PixelMapper {
     }
 }
 
-/**
- * Coordinate of a subpixel within the entire image.
- */
+/// Coordinate of a subpixel within the entire image. Used by `chaos_game`.
 pub struct SubpixelIndex {
+    /// Output pixel containing the sample.
     pub pixel: [u32; 2],
+    /// Subpixel offset within that pixel.
     pub subpixel: [u32; 2],
 }
 
-/**
- * Used for antialiasing calculations. Splits a query into a pixel index and a
- * subpixel index.
- */
+/// Splits a query into a pixel index and a subpixel index. Used by
+/// `chaos_game` for its antialiasing mask.
 pub struct UpsampledPixelMapper {
     pixel_mapper: PixelMapper,
     subpixel_count: u32,
 }
 
 impl UpsampledPixelMapper {
+    /// Construct an upsampled pixel mapper.
     pub fn new(
         image_specification: &ImageSpecification,
         subpixel_count: u32,
@@ -498,6 +476,7 @@ impl UpsampledPixelMapper {
         }
     }
 
+    /// Map a point in fractal space to a pixel + subpixel index.
     pub fn inverse_map(&self, point: &[f64; 2]) -> SubpixelIndex {
         let [x_raw, y_raw] = self.pixel_mapper.inverse_map(point);
         SubpixelIndex {
@@ -507,21 +486,20 @@ impl UpsampledPixelMapper {
     }
 }
 
-/**
- * Used to store a bitmask for a square grid, with a maximum
- * bin count of 8 per size. The mask is stored in the bits of
- * a u64 integer as a space optimization.
- */
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Bitmask for a square subpixel grid (max 8 per side). Used by `chaos_game`
+/// to track which subpixels of an output pixel were hit.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct SubpixelGridMask {
     bitmask: u64,
 }
 
 impl SubpixelGridMask {
+    /// Empty mask.
     pub fn new() -> SubpixelGridMask {
         SubpixelGridMask { bitmask: 0 }
     }
 
+    /// Mark subpixel `coordinate` (in `[0, count_per_side)`²) as hit.
     pub fn insert(&mut self, count_per_side: u32, coordinate: [u32; 2]) {
         let [x, y] = coordinate;
         assert!(x < count_per_side);
@@ -530,307 +508,10 @@ impl SubpixelGridMask {
         self.bitmask |= 1 << index;
     }
 
+    /// Number of subpixels marked.
     pub fn count_ones(&self) -> u32 {
         self.bitmask.count_ones()
     }
-}
-
-impl Default for SubpixelGridMask {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub trait PixelRenderLambda: Fn(&[f64; 2]) -> Rgb<u8> + Sync {}
-
-impl<T> PixelRenderLambda for T where T: Fn(&[f64; 2]) -> Rgb<u8> + Sync {}
-
-/**
- * Given image size parameters and a mapping into "regular" space used by the fractal,
- * iterate over each pixel, using a lambda function to compute the "value" of the fractal image
- * at each pixel location.
- *
- * This is used as the core implementation for pixel-based fractals, such as the Mandelbrot set and
- * the Driven-Damped Pendulum attractor.
- *
- * @param pixel_renderer:  maps from a point in the image (regular space, not pixels) to a scalar
- * value which can then later be plugged into a color map by the rendering pipeline.
- */
-pub fn generate_scalar_image<F: PixelRenderLambda>(
-    spec: &ImageSpecification,
-    render_options: &RenderOptions,
-    pixel_renderer: F,
-    default_element: Rgb<u8>,
-) -> Vec<Vec<Rgb<u8>>> {
-    let mut raw_data: Vec<Vec<_>> = create_buffer(default_element, &spec.resolution);
-    generate_scalar_image_in_place(spec, render_options, pixel_renderer, &mut raw_data);
-    raw_data
-}
-
-/// Data structure to cache the details needed to do linear keyframe interpolation on
-/// image (pixel) data. The expensive render calculation will be performed to compute
-/// the value of pixels where `index % downsample_stride == 0` (ahead of time). Then
-/// this function will read those points (and only those points) from the data view to
-/// determine what the pixel value at intermediate points should be. The linear interpolation
-/// is implemented with integer math, as it is very fast.
-struct KeyframeLinearPixelInerpolation {
-    downsample_stride: usize,
-    num_complete_chunks: usize,
-    terminal_reference_index: usize,
-}
-
-impl KeyframeLinearPixelInerpolation {
-    fn new(data_length: usize, downsample_stride: usize) -> KeyframeLinearPixelInerpolation {
-        // Number of complete "chunks" of data
-        let num_chunks = data_length / downsample_stride;
-
-        // Number of "leftover" elements at the end:
-        let remainder = data_length % downsample_stride;
-
-        // How many complete "interpolation blocks" can we process?
-        let num_complete_chunks = if remainder == 0 {
-            num_chunks - 1
-        } else {
-            num_chunks
-        };
-        let terminal_reference_index = num_complete_chunks * downsample_stride;
-
-        KeyframeLinearPixelInerpolation {
-            downsample_stride,
-            num_complete_chunks,
-            terminal_reference_index,
-        }
-    }
-
-    /// Performs interpolation between keyframes to figure out the RGB value at the
-    /// specified index. Uses a generic instead of a flat vector so that it can work
-    /// for both a vector (inner image data) and across several vectors (outer image
-    /// data) with a single algorithm.
-    fn interpolate<'a, F>(&self, data_view: F, query_index: usize) -> Rgb<u8>
-    where
-        F: Fn(usize) -> &'a Rgb<u8>,
-    {
-        let chunk_index = query_index / self.downsample_stride;
-
-        if chunk_index < self.num_complete_chunks {
-            // We know the data at these indices
-            let low_ref_idx = chunk_index * self.downsample_stride;
-            let upp_ref_idx = low_ref_idx + self.downsample_stride;
-            let local_idx = query_index - low_ref_idx;
-
-            // Iterate through interior points and set them:
-            Self::pixel_interpolate(
-                data_view(low_ref_idx),
-                data_view(upp_ref_idx),
-                local_idx,
-                self.downsample_stride,
-            )
-        } else {
-            *data_view(self.terminal_reference_index)
-        }
-    }
-
-    fn pixel_interpolate(low: &Rgb<u8>, upp: &Rgb<u8>, index: usize, distance: usize) -> Rgb<u8> {
-        let delta = distance - index;
-        Rgb([
-            (((low[0] as usize) * delta + (upp[0] as usize) * index) / distance) as u8,
-            (((low[1] as usize) * delta + (upp[1] as usize) * index) / distance) as u8,
-            (((low[2] as usize) * delta + (upp[2] as usize) * index) / distance) as u8,
-        ])
-    }
-}
-
-/// Note: the generic `E` here can represent either an individual pixel or an entire
-/// vector of pixels.
-fn fill_skipped_entries<E: Clone>(downsample_stride: usize, data: &mut [E]) {
-    for i in 0..data.len() {
-        let offset = i % downsample_stride;
-        if offset != 0 {
-            data[i] = data[i - offset].clone();
-        }
-    }
-}
-
-fn render_single_row_within_image<F: PixelRenderLambda>(
-    pixel_map_height: &LinearPixelMap,
-    column_query_value: f64,
-    downsample_stride: usize,
-    pixel_renderer: &F,
-    row: &mut [Rgb<u8>],
-) {
-    row.iter_mut()
-        .enumerate()
-        .step_by(downsample_stride)
-        .for_each(|(y, elem)| {
-            let im = pixel_map_height.map(y as u32);
-            *elem = pixel_renderer(&[column_query_value, im]);
-        });
-    if downsample_stride > 1 {
-        fill_skipped_entries(downsample_stride, row);
-    }
-}
-
-fn wrap_renderer_with_antialiasing<F: PixelRenderLambda>(
-    subpixel_antialiasing: u32,
-    image_specification: &ImageSpecification,
-    pixel_renderer: F,
-) -> impl PixelRenderLambda {
-    let subpixel_samples =
-        Arc::new(image_specification.subpixel_offset_vector(subpixel_antialiasing));
-
-    move |point: &[f64; 2]| {
-        let mut sum: image::Rgb<u32> = image::Rgb([0, 0, 0]);
-
-        for sample in subpixel_samples.iter() {
-            let result = pixel_renderer(&[point[0] + sample[0], point[1] + sample[1]]);
-            sum[0] += result[0] as u32;
-            sum[1] += result[1] as u32;
-            sum[2] += result[2] as u32;
-        }
-
-        // Scale back to the final totals:
-        let count = subpixel_samples.len() as u32;
-
-        image::Rgb([
-            (sum[0] / count) as u8,
-            (sum[1] / count) as u8,
-            (sum[2] / count) as u8,
-        ])
-    }
-}
-
-/**
- * In-place version of the above function.
- */
-pub fn generate_scalar_image_in_place<F: PixelRenderLambda>(
-    spec: &ImageSpecification,
-    render_options: &RenderOptions,
-    pixel_renderer: F,
-    raw_data: &mut Vec<Vec<Rgb<u8>>>,
-) {
-    assert_eq!(
-        raw_data.len(),
-        spec.resolution[0] as usize,
-        "Outer dimension mismatch"
-    );
-
-    if render_options.subpixel_antialiasing > 0 {
-        render_image_internal(
-            spec,
-            wrap_renderer_with_antialiasing(
-                render_options.subpixel_antialiasing,
-                spec,
-                pixel_renderer,
-            ),
-            raw_data,
-            render_options.downsample_stride,
-        );
-    } else {
-        render_image_internal(
-            spec,
-            pixel_renderer,
-            raw_data,
-            render_options.downsample_stride,
-        );
-    };
-
-    if render_options.downsample_stride > 1 {
-        // This will perform bilinear interpolation over the entire image in two passes.
-        //
-        // PASS ONE:  interpolate between the different "inner data vectors". This pass is
-        //            tricky to parallelize with the borrow checker and not cloning large
-        //            data structures. It could be done with an `unsafe` block, but not worth it.
-        //            Once this pass is complete, then every "inner data vector" will have
-        //            the exact same sparsity pattern (at the start, some inner vectors are empty).
-        //
-        // PASS TWO:  interpolation within each inner data vector, in parallel. This step performs
-        //            more computation that pass one, and it is trivial to parallelize beause each
-        //            element in the inner data vector can be computed locally, without referencing
-        //            the other inner vectors.
-
-        let inner_count = raw_data[0].len();
-        let outer_count = raw_data.len();
-
-        // PASS ONE:
-        for inner_index in (0..inner_count).step_by(render_options.downsample_stride) {
-            let interpolator =
-                KeyframeLinearPixelInerpolation::new(outer_count, render_options.downsample_stride);
-            for outer_index in 0..outer_count {
-                if outer_index % render_options.downsample_stride != 0 {
-                    raw_data[outer_index][inner_index] = {
-                        interpolator.interpolate(
-                            |outer_index: usize| -> &Rgb<u8> {
-                                &raw_data[outer_index][inner_index]
-                            },
-                            outer_index,
-                        )
-                    };
-                }
-            }
-        }
-
-        // PASS TWO:
-        raw_data
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(_, inner_data)| {
-                let interpolator = KeyframeLinearPixelInerpolation::new(
-                    inner_count,
-                    render_options.downsample_stride,
-                );
-                for inner_index in 0..inner_data.len() {
-                    if inner_index % render_options.downsample_stride != 0 {
-                        inner_data[inner_index] = {
-                            interpolator.interpolate(
-                                |idx: usize| -> &Rgb<u8> { &inner_data[idx] },
-                                inner_index,
-                            )
-                        };
-                    }
-                }
-            });
-    }
-}
-
-/// Implements the iteration over the image, rendering each pixel.
-/// If `downsample_stride` is greater than one, then some pixels will be skipped.
-/// These pixels will be filled in by linear interpolation in a following step.
-fn render_image_internal<F: PixelRenderLambda>(
-    spec: &ImageSpecification,
-    pixel_renderer: F,
-    raw_data: &mut Vec<Vec<Rgb<u8>>>,
-    downsample_stride: usize,
-) {
-    let pixel_map_width =
-        LinearPixelMap::new_from_center_and_width(spec.resolution[0], spec.center[0], spec.width);
-
-    let pixel_map_height = LinearPixelMap::new_from_center_and_width(
-        spec.resolution[1],
-        spec.center[1],
-        -spec.height(), // Image coordinates are upside down.
-    );
-
-    // Perform the expensive render operation.
-    // Potentially down-sample in both dimensions based on `downsample_stride`.
-    raw_data
-        .par_iter_mut()
-        .enumerate()
-        .filter(|(i, _)| i % downsample_stride == 0)
-        .for_each(|(x, row)| {
-            let re = pixel_map_width.map(x as u32);
-            assert_eq!(
-                row.len(),
-                spec.resolution[1] as usize,
-                "Inner dimension mismatch"
-            );
-            render_single_row_within_image(
-                &pixel_map_height,
-                re,
-                downsample_stride,
-                &pixel_renderer,
-                row,
-            );
-        });
 }
 
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
@@ -845,10 +526,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::interpolation::ClampedLogInterpolator;
+    use crate::core::interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator};
     use approx::assert_relative_eq;
-    use ordered_float::OrderedFloat;
-    use std::{collections::BTreeSet, iter::FromIterator};
 
     #[test]
     fn test_view_port_from_vertices() {
@@ -868,48 +547,6 @@ mod tests {
     }
 
     #[test]
-    fn test_image_specification_subpixel_offset_vector() {
-        // X:  pixel width:  8.0 / 4 --> 2.0;    offset with n = 4:   [0.0, 0.5, 1.0, 1.5]
-        // Y:  pixel width... exactly the same!  (We derive the image height from the "square pixel" assumption).
-        let image_specification = ImageSpecification {
-            resolution: [4, 8],
-            center: [2.0, 4.0],
-            width: 8.0,
-        };
-
-        {
-            let offset_vector = image_specification.subpixel_offset_vector(3);
-
-            let mut x_offset_data = BTreeSet::new();
-            let mut y_offset_data = BTreeSet::new();
-            for point in offset_vector {
-                x_offset_data.insert(OrderedFloat(point[0]));
-                y_offset_data.insert(OrderedFloat(point[1]));
-            }
-
-            let offset_soln = BTreeSet::from_iter(
-                [
-                    OrderedFloat(0.0),
-                    OrderedFloat(0.5),
-                    OrderedFloat(1.0),
-                    OrderedFloat(1.5),
-                ]
-                .iter()
-                .cloned(),
-            );
-
-            assert_eq!(x_offset_data, offset_soln);
-            assert_eq!(y_offset_data, offset_soln);
-        }
-
-        {
-            let offset_vector = image_specification.subpixel_offset_vector(0);
-            assert_eq!(offset_vector.len(), 1);
-            assert_eq!(offset_vector[0], [0.0, 0.0]);
-        }
-    }
-
-    #[test]
     fn test_image_specification_height() {
         let image_specification = ImageSpecification {
             resolution: [5, 23],
@@ -922,45 +559,6 @@ mod tests {
         let pixel_aspect_ratio =
             (image_specification.resolution[0] as f64) / (image_specification.resolution[1] as f64);
         assert_eq!(aspect_ratio, pixel_aspect_ratio);
-    }
-
-    #[test]
-    fn test_pixel_grid_mask_valid_3() {
-        let mut grid_mask = super::SubpixelGridMask::new();
-
-        assert_eq!(grid_mask.bitmask.count_ones(), 0);
-        let n_grid = 3;
-        grid_mask.insert(n_grid, [0, 0]);
-        assert_eq!(grid_mask.bitmask.count_ones(), 1);
-
-        grid_mask.insert(n_grid, [1, 1]);
-        assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, [1, 1]);
-        assert_eq!(grid_mask.bitmask.count_ones(), 2);
-        grid_mask.insert(n_grid, [2, 1]);
-        assert_eq!(grid_mask.bitmask.count_ones(), 3);
-    }
-
-    #[test]
-    fn test_pixel_grid_mask_valid_8() {
-        let mut grid_mask = super::SubpixelGridMask::new();
-
-        assert_eq!(grid_mask.bitmask.count_ones(), 0);
-        let n_grid = 8;
-
-        for i in 0..n_grid {
-            for j in 0..n_grid {
-                grid_mask.insert(n_grid, [i, j]);
-            }
-        }
-        assert_eq!({ grid_mask.count_ones() }, n_grid * n_grid);
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_pixel_grid_mask_invalid_upp() {
-        let mut grid_mask = super::SubpixelGridMask::new();
-        grid_mask.insert(4, [5, 5]);
     }
 
     #[test]
@@ -987,106 +585,6 @@ mod tests {
         let tol = 1e-6;
         assert_relative_eq!(pixel_map.map(0), x0, epsilon = tol);
         assert_relative_eq!(pixel_map.map(n - 1), x1, epsilon = tol);
-    }
-
-    #[test]
-    fn test_scale_to_total_pixel_count() {
-        let image_spec = ImageSpecification {
-            resolution: [800, 600],
-            center: [0.0, 0.0],
-            width: 1.0,
-        };
-
-        let scaled_spec = image_spec.scale_to_total_pixel_count(32);
-        assert_eq!(scaled_spec.center, image_spec.center);
-        assert_eq!(scaled_spec.width, image_spec.width);
-        assert_eq!(scaled_spec.resolution, [7, 5]);
-    }
-
-    #[test]
-    fn test_linear_pixel_interpolation_stride_2() {
-        let downsample_stride: usize = 2;
-        let data = vec![
-            Rgb([0, 0, 40]),
-            Rgb([0, 0, 0]),
-            Rgb([20, 0, 0]),
-            Rgb([0, 0, 0]),
-        ];
-        {
-            let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
-
-            let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
-
-            // Manually select the correct inputs to pixel interpolate and check that
-            assert_eq!(
-                KeyframeLinearPixelInerpolation::pixel_interpolate(
-                    &data[0],
-                    &data[2],
-                    1,
-                    downsample_stride
-                ),
-                Rgb([10, 0, 20])
-            );
-
-            // Now let the "full vector" machinery figure out the pixels
-            assert_eq!(interpolator.interpolate(data_view, 1), Rgb([10, 0, 20]));
-            assert_eq!(interpolator.interpolate(data_view, 3), Rgb([20, 0, 0]));
-
-            // We don't expect to query at known points, but lets make sure it doesn't break
-            assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 40]));
-            assert_eq!(interpolator.interpolate(data_view, 2), Rgb([20, 0, 0]));
-        }
-        {
-            // Now, let's add more data and try again:
-            let mut data = data;
-            data.push(Rgb([0, 60, 0]));
-
-            let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
-            let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
-
-            // Check the first points again, but now, expect the index 3 to properly interpolate
-            assert_eq!(interpolator.interpolate(data_view, 1), Rgb([10, 0, 20]));
-            assert_eq!(interpolator.interpolate(data_view, 3), Rgb([10, 30, 0]));
-            // Check the keyframes again, as well:
-            assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 40]));
-            assert_eq!(interpolator.interpolate(data_view, 2), Rgb([20, 0, 0]));
-            assert_eq!(interpolator.interpolate(data_view, 4), Rgb([0, 60, 0]));
-        }
-    }
-
-    #[test]
-    fn test_linear_pixel_interpolation_stride_3() {
-        let downsample_stride: usize = 3;
-        let data = [
-            Rgb([0, 0, 33]),
-            Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([90, 60, 0]),
-            Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([81, 140, 15]),
-            Rgb([123, 123, 123]), // dummy data, should never be read
-            Rgb([123, 123, 123]),
-        ];
-
-        let interpolator = KeyframeLinearPixelInerpolation::new(data.len(), downsample_stride);
-
-        let data_view = |index: usize| -> &Rgb<u8> { &data[index] };
-
-        // Check interpolated points
-        assert_eq!(interpolator.interpolate(data_view, 1), Rgb([30, 20, 22]));
-        assert_eq!(interpolator.interpolate(data_view, 2), Rgb([60, 40, 11]));
-        assert_eq!(interpolator.interpolate(data_view, 4), Rgb([87, 86, 5]));
-        assert_eq!(interpolator.interpolate(data_view, 5), Rgb([84, 113, 10]));
-
-        // Check extrapolated points
-        assert_eq!(interpolator.interpolate(data_view, 7), Rgb([81, 140, 15]));
-        assert_eq!(interpolator.interpolate(data_view, 8), Rgb([81, 140, 15]));
-
-        // Check keyframe points
-        assert_eq!(interpolator.interpolate(data_view, 0), Rgb([0, 0, 33]));
-        assert_eq!(interpolator.interpolate(data_view, 3), Rgb([90, 60, 0]));
-        assert_eq!(interpolator.interpolate(data_view, 6), Rgb([81, 140, 15]));
     }
 
     #[test]

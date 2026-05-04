@@ -13,33 +13,33 @@
     },
     "color_map": {
       "color": {
-        "background": [14, 14, 14],
-        "color_map": [
-          {
-            "query": 0.0,
-            "rgb_raw": [0, 0, 0]
-          },
-          {
-            "query": 0.89,
-            "rgb_raw": [0, 0, 0]
-          },
-          {
-            "query": 0.96,
-            "rgb_raw": [0, 50, 230]
-          },
-          {
-            "query": 1.0,
-            "rgb_raw": [230, 245, 255]
-          }
+        "flat_color": [14, 14, 14],
+        "gradients": [
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [0, 0, 0]
+            },
+            {
+              "query": 0.89,
+              "rgb_raw": [0, 0, 0]
+            },
+            {
+              "query": 0.96,
+              "rgb_raw": [0, 50, 230]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [230, 245, 255]
+            }
+          ]
         ]
       },
       "lookup_table_count": 4096,
-      "histogram_bin_count": 64,
-      "histogram_sample_count": 100000
+      "histogram_bin_count": 64
     },
     "render_options": {
-      "downsample_stride": 1,
-      "subpixel_antialiasing": 2
+      "sampling_level": 2
     }
   }
 }

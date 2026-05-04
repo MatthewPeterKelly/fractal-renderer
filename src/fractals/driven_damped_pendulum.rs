@@ -1,5 +1,6 @@
 use crate::core::{
-    color_map::ForegroundBackground,
+    color_map::{ColorMap, ColorMapKeyFrame},
+    field_iteration::FieldKernel,
     image_utils::{
         ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed, scale_up_parameter_for_speed,
@@ -9,13 +10,23 @@ use crate::core::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Default color pair for DDP: white foreground / black background.
-/// Matches the previously hard-coded values, so JSON files written before
-/// the `color` field existed continue to render identically.
-fn ddp_default_color() -> ForegroundBackground {
-    ForegroundBackground {
-        foreground: [255, 255, 255],
-        background: [0, 0, 0],
+/// Default color map for DDP: black flat color (out-of-basin) and a
+/// degenerate single-keyframe-pair white gradient (zeroth-basin).
+/// Matches the previously hard-coded foreground/background, so JSON files
+/// without a `color` field continue to render identically.
+fn ddp_default_color() -> ColorMap {
+    ColorMap {
+        flat_color: [0, 0, 0],
+        gradients: vec![vec![
+            ColorMapKeyFrame {
+                query: 0.0,
+                rgb_raw: [255, 255, 255],
+            },
+            ColorMapKeyFrame {
+                query: 1.0,
+                rgb_raw: [255, 255, 255],
+            },
+        ]],
     }
 }
 
@@ -30,29 +41,41 @@ pub struct DrivenDampedPendulumParams {
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
-    /// Foreground (zeroth-basin) and background (other) colors.
+    /// Flat (out-of-basin) color and a single-gradient (in-basin) palette.
+    /// The gradient is constant-color in the canonical configuration, so
+    /// the histogram / CDF percentile output never affects pixels.
     #[serde(default = "ddp_default_color")]
-    pub color: ForegroundBackground,
+    pub color: ColorMap,
+}
+
+impl FieldKernel for DrivenDampedPendulumParams {
+    /// Map "in zeroth basin" to a `Some((1.0, 0))` cell — value `1.0`
+    /// trivially fills the single histogram bin, and gradient index 0
+    /// routes to DDP's only gradient. Out-of-basin / non-converged → `None`,
+    /// which colorizes through `flat_color`.
+    fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+        match compute_basin_of_attraction(
+            &point,
+            self.time_phase,
+            self.n_max_period,
+            self.n_steps_per_period,
+            self.periodic_state_error_tolerance,
+        ) {
+            Some(0) => Some((1.0, 0)),
+            _ => None,
+        }
+    }
 }
 
 impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
 
-    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let result = compute_basin_of_attraction(
-            point,
-            self.time_phase,
-            self.n_max_period,
-            self.n_steps_per_period,
-            self.periodic_state_error_tolerance,
-        );
-        // Pixels in the zeroth basin of attraction take the foreground color;
-        // everything else (including non-converged) takes the background.
-        if result == Some(0) {
-            image::Rgb(self.color.foreground)
-        } else {
-            image::Rgb(self.color.background)
-        }
+    fn color_map(&self) -> &ColorMap {
+        &self.color
+    }
+
+    fn color_map_mut(&mut self) -> &mut ColorMap {
+        &mut self.color
     }
 
     fn image_specification(&self) -> &ImageSpecification {
@@ -68,20 +91,28 @@ impl Renderable for DrivenDampedPendulumParams {
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
-        std::io::Result::Ok(())
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
         self
     }
 
-    fn render_to_buffer(&self, buffer: &mut Vec<Vec<image::Rgb<u8>>>) {
-        crate::core::image_utils::generate_scalar_image_in_place(
-            self.image_specification(),
-            self.render_options(),
-            |point: &[f64; 2]| self.render_point(point),
-            buffer,
-        );
+    /// DDP's gradient is constant-color, so the histogram output never
+    /// affects pixels — a single bin is sufficient.
+    fn histogram_bin_count(&self) -> usize {
+        1
+    }
+
+    /// Likewise, the histogram's max value is irrelevant for DDP.
+    fn histogram_max_value(&self) -> f32 {
+        1.0
+    }
+
+    /// LUT resolution for the (constant-color) gradient. Small value to
+    /// keep allocation trivial.
+    fn lookup_table_count(&self) -> usize {
+        4
     }
 }
 
@@ -209,9 +240,9 @@ mod tests {
     use super::*;
 
     /// A pre-Phase-1 DDP params JSON has no `color` field. The
-    /// `#[serde(default)]` shim must fill it with white-foreground /
-    /// black-background — matching the previously hard-coded values — so
-    /// existing files render identically.
+    /// `#[serde(default)]` shim must fill it with the degenerate
+    /// white-on-black gradient — matching the previously hard-coded
+    /// values — so existing files render identically.
     #[test]
     fn parses_legacy_json_without_color_field_with_default_white_black() {
         let json = r#"{
@@ -225,12 +256,14 @@ mod tests {
             "n_steps_per_period": 12,
             "periodic_state_error_tolerance": 0.05,
             "render_options": {
-                "downsample_stride": 1,
-                "subpixel_antialiasing": 1
+                "sampling_level": 1
             }
         }"#;
         let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.color.foreground, [255, 255, 255]);
-        assert_eq!(parsed.color.background, [0, 0, 0]);
+        assert_eq!(parsed.color.flat_color, [0, 0, 0]);
+        assert_eq!(parsed.color.gradients.len(), 1);
+        assert_eq!(parsed.color.gradients[0].len(), 2);
+        assert_eq!(parsed.color.gradients[0][0].rgb_raw, [255, 255, 255]);
+        assert_eq!(parsed.color.gradients[0][1].rgb_raw, [255, 255, 255]);
     }
 }

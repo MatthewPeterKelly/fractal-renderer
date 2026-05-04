@@ -1,20 +1,17 @@
 use num::complex::Complex64;
 use serde::{Deserialize, Serialize};
-use std::{f64::consts::PI, fmt::Debug, sync::Arc};
+use std::{f64::consts::PI, fmt::Debug};
 
-use crate::{
-    core::{
-        color_map::{ColorMap, ColorMapLookUpTable, ColorMapper, MultiColorMap},
-        file_io::FilePrefix,
-        histogram::{CumulativeDistributionFunction, Histogram},
-        image_utils::{
-            self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
-            scale_down_parameter_for_speed, scale_up_parameter_for_speed,
-        },
-        interpolation::{ClampedLogInterpolator, LinearInterpolator},
-        user_interface,
+use crate::core::{
+    color_map::ColorMap,
+    field_iteration::FieldKernel,
+    file_io::FilePrefix,
+    image_utils::{
+        self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
+        scale_down_parameter_for_speed, scale_up_parameter_for_speed,
     },
-    fractals::utilities::{populate_histogram, reset_color_map_lookup_table_from_cdf},
+    interpolation::ClampedLogInterpolator,
+    user_interface,
 };
 
 // Its often more efficient to compute both the value of a complex function
@@ -119,11 +116,14 @@ impl ComplexFunctionWithSlope for CoshMinusOneParams {
     }
 }
 
+/// Result of running a Newton-Rhapson iteration sequence to convergence.
 pub struct NewtonRhapsonResult {
     /// The point to which the Newton-Rhapson iteration sequence converge.
     pub soln: Complex64,
 
-    /// Number of iterations taken to converge. In range `[0, max_iteration_count]` inclusive.
+    /// Number of iterations taken to converge. In range
+    /// `[0, max_iteration_count]` inclusive.
+    #[allow(dead_code)]
     pub iteration_count: u32,
 
     /// A smooth iteration count, used for rendering. It is computed based on the quadratic
@@ -195,14 +195,13 @@ pub struct CommonParams {
     pub convergence_tolerance: f64,
     /// Rendering options (anti-aliasing, downsampling, etc.).
     pub render_options: RenderOptions,
-    /// Per-root gradients plus the cyclic-attractor (non-converged) color.
-    pub color: MultiColorMap,
+    /// Per-root gradients plus the cyclic-attractor (non-converged) flat color.
+    pub color: ColorMap,
     /// Number of entries in each precomputed color lookup table.
     pub lookup_table_count: usize,
-    /// Number of bins in the shared histogram used to normalize gradients.
+    /// Number of bins per per-root histogram. Each root gets its own
+    /// histogram and CDF over its own iteration-count distribution.
     pub histogram_bin_count: usize,
-    /// Number of samples drawn from the image when populating the histogram.
-    pub histogram_sample_count: usize,
 }
 
 // The `NewtonsMethodParams` struct encapsulates all parameters needed to
@@ -215,54 +214,25 @@ pub struct NewtonsMethodParams {
     pub system: SystemType,
 }
 
-// The `NewtonsMethodRenderable` struct encapsulates the parameters and system
-// using generics to improve performance of the rendering engine. This is analgous
-// to `QuadraticMap`.
+/// Newtype wrapper that carries Newton's-method parameters plus the
+/// concrete root system. Histogram, CDF, and color caches now live in the
+/// rendering pipeline, not here.
 pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
+    /// User-facing parameters.
     pub params: CommonParams,
+    /// Concrete system (e.g. roots-of-unity, cosh-minus-one).
     pub system: F,
-    // Histogram and CDF are shared by all root color maps, and are used to normalize the image.
-    pub histogram: Arc<Histogram>,
-    pub cdf: CumulativeDistributionFunction,
-    // One color map and lookup table per root. The lookup table is generated from the color map
-    // and the shared CDF once per render, which speeds up the rendering a bit.
-    pub inner_color_maps: Vec<ColorMap<LinearInterpolator>>,
-    pub color_maps: Vec<ColorMapLookUpTable>,
 }
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
+    /// Construct a Newton renderer. Asserts there is at least one
+    /// gradient (the colorize cache assumes `gradients` is non-empty).
     pub fn new(params: CommonParams, system: F) -> Self {
-        let inner_color_maps: Vec<ColorMap<LinearInterpolator>> = params
-            .color
-            .color_maps
-            .iter()
-            .map(|kfs| ColorMap::new(kfs, LinearInterpolator))
-            .collect();
-
-        if inner_color_maps.is_empty() {
-            panic!("color.color_maps must define at least one color map");
-        }
-
-        let color_maps: Vec<ColorMapLookUpTable> = inner_color_maps
-            .iter()
-            .map(|cm| ColorMapLookUpTable::from_color_map(cm, params.lookup_table_count))
-            .collect();
-
-        let histogram = Histogram::new(
-            params.histogram_bin_count,
-            params.max_iteration_count as f32,
+        assert!(
+            !params.color.gradients.is_empty(),
+            "color.gradients must define at least one gradient"
         );
-
-        let mut renderable = Self {
-            system,
-            cdf: CumulativeDistributionFunction::new(&histogram),
-            histogram: histogram.into(),
-            color_maps,
-            inner_color_maps,
-            params,
-        };
-        renderable.update_color_map();
-        renderable
+        Self { params, system }
     }
 
     fn newton_rhapson_iteration_sequence(&self, z0: Complex64) -> Option<NewtonRhapsonResult> {
@@ -272,26 +242,6 @@ impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
             self.params.convergence_tolerance,
             self.params.max_iteration_count,
         )
-    }
-
-    fn update_color_map(&mut self) {
-        // This histogram uses data shared from all roots, so we do not need the `_soln` value in the below
-        // closure. Then we update all color maps based on the shared CDF, which is generated from the histogram.
-        populate_histogram(
-            &|point: &[f64; 2]| {
-                self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]))
-                    .map(|result| result.iteration_count as f32)
-            },
-            &self.params.image_specification,
-            self.params.histogram_bin_count as u32,
-            self.histogram.clone(),
-        );
-        self.cdf.reset(&self.histogram);
-
-        for (color_table, inner_map) in self.color_maps.iter_mut().zip(self.inner_color_maps.iter())
-        {
-            reset_color_map_lookup_table_from_cdf(color_table, &self.cdf, inner_map);
-        }
     }
 }
 
@@ -328,13 +278,20 @@ where
             level,
             ClampedLogInterpolator,
         );
+    }
+}
 
-        self.params.histogram_sample_count = scale_down_parameter_for_speed(
-            600.0,
-            cache.histogram_sample_count as f64,
-            level,
-            ClampedLogInterpolator,
-        ) as usize;
+impl<F> FieldKernel for NewtonsMethodRenderable<F>
+where
+    F: ComplexFunctionWithSlope + Sync + Send,
+{
+    fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+        let n_gradients = self.params.color.gradients.len() as u32;
+        self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]))
+            .map(|res| {
+                let k = (self.system.root_index(res.soln) as u32) % n_gradients.max(1);
+                (res.smooth_iteration_count, k)
+            })
     }
 }
 
@@ -343,6 +300,7 @@ where
     F: ComplexFunctionWithSlope + Sync + Send,
 {
     type Params = CommonParams;
+
     fn image_specification(&self) -> &ImageSpecification {
         &self.params.image_specification
     }
@@ -353,31 +311,34 @@ where
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
         self.params.image_specification = image_specification;
-        self.update_color_map();
     }
 
-    fn render_point(&self, point: &[f64; 2]) -> image::Rgb<u8> {
-        let result =
-            match self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1])) {
-                Some(res) => res,
-                None => {
-                    return image::Rgb(self.params.color.cyclic_attractor);
-                }
-            };
-
-        // Use the solution to select the correct color map for this point:
-        let color_map_index = self.system.root_index(result.soln) % self.color_maps.len();
-        self.color_maps[color_map_index].compute_pixel(result.smooth_iteration_count)
-    }
-
-    fn write_diagnostics<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        self.histogram.display(writer)?;
-        self.cdf.display(writer)?;
-        std::io::Result::Ok(())
+    fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        Ok(())
     }
 
     fn params(&self) -> &Self::Params {
         &self.params
+    }
+
+    fn color_map(&self) -> &ColorMap {
+        &self.params.color
+    }
+
+    fn color_map_mut(&mut self) -> &mut ColorMap {
+        &mut self.params.color
+    }
+
+    fn histogram_bin_count(&self) -> usize {
+        self.params.histogram_bin_count
+    }
+
+    fn histogram_max_value(&self) -> f32 {
+        self.params.max_iteration_count as f32
+    }
+
+    fn lookup_table_count(&self) -> usize {
+        self.params.lookup_table_count
     }
 }
 
