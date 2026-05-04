@@ -1,22 +1,32 @@
 use crate::core::{
-    color_map::ForegroundBackground,
+    color_map::{ColorMap, ColorMapKeyFrame},
+    field_iteration::FieldKernel,
     image_utils::{
-        ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
+        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed, scale_up_parameter_for_speed,
     },
     interpolation::{ClampedLinearInterpolator, ClampedLogInterpolator},
     ode_solvers::rk4_simulate,
 };
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-/// Default color pair for DDP: white foreground / black background.
-/// Matches the previously hard-coded values, so JSON files written before
-/// the `color` field existed continue to render identically.
-fn ddp_default_color() -> ForegroundBackground {
-    ForegroundBackground {
-        foreground: [255, 255, 255],
-        background: [0, 0, 0],
+/// Default color map for DDP: black flat color (out-of-basin) and a
+/// degenerate single-keyframe-pair white gradient (zeroth-basin).
+/// Matches the previously hard-coded foreground/background, so JSON files
+/// without a `color` field continue to render identically.
+fn ddp_default_color() -> ColorMap {
+    ColorMap {
+        flat_color: [0, 0, 0],
+        gradients: vec![vec![
+            ColorMapKeyFrame {
+                query: 0.0,
+                rgb_raw: [255, 255, 255],
+            },
+            ColorMapKeyFrame {
+                query: 1.0,
+                rgb_raw: [255, 255, 255],
+            },
+        ]],
     }
 }
 
@@ -31,17 +41,41 @@ pub struct DrivenDampedPendulumParams {
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
-    /// Foreground (zeroth-basin) and background (other) colors.
+    /// Flat (out-of-basin) color and a single-gradient (in-basin) palette.
+    /// The gradient is constant-color in the canonical configuration, so
+    /// the histogram / CDF percentile output never affects pixels.
     #[serde(default = "ddp_default_color")]
-    pub color: ForegroundBackground,
+    pub color: ColorMap,
+}
+
+impl FieldKernel for DrivenDampedPendulumParams {
+    /// Map "in zeroth basin" to a `Some((1.0, 0))` cell — value `1.0`
+    /// trivially fills the single histogram bin, and gradient index 0
+    /// routes to DDP's only gradient. Out-of-basin / non-converged → `None`,
+    /// which colorizes through `flat_color`.
+    fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+        match compute_basin_of_attraction(
+            &point,
+            self.time_phase,
+            self.n_max_period,
+            self.n_steps_per_period,
+            self.periodic_state_error_tolerance,
+        ) {
+            Some(0) => Some((1.0, 0)),
+            _ => None,
+        }
+    }
 }
 
 impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
-    type ColorMap = ForegroundBackground;
 
-    fn color_map(&self) -> &Self::ColorMap {
+    fn color_map(&self) -> &ColorMap {
         &self.color
+    }
+
+    fn color_map_mut(&mut self) -> &mut ColorMap {
+        &mut self.color
     }
 
     fn image_specification(&self) -> &ImageSpecification {
@@ -64,8 +98,8 @@ impl Renderable for DrivenDampedPendulumParams {
         self
     }
 
-    /// DDP doesn't normalize, so the histogram is unused. Return any positive
-    /// bin count to satisfy the pipeline's `Histogram::new` contract.
+    /// DDP's gradient is constant-color, so the histogram output never
+    /// affects pixels — a single bin is sufficient.
     fn histogram_bin_count(&self) -> usize {
         1
     }
@@ -75,78 +109,10 @@ impl Renderable for DrivenDampedPendulumParams {
         1.0
     }
 
-    /// `ForegroundBackground` doesn't hold lookup tables; this value is
-    /// unused.
+    /// LUT resolution for the (constant-color) gradient. Small value to
+    /// keep allocation trivial.
     fn lookup_table_count(&self) -> usize {
-        0
-    }
-
-    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<i32>>>) {
-        let n_max_plus_1 = field.len() / self.image_specification.resolution[0] as usize;
-        let pixel_map = PixelMapper::new(&self.image_specification);
-        let pixel_width =
-            self.image_specification.width / self.image_specification.resolution[0] as f64;
-        let pixel_height =
-            self.image_specification.height() / self.image_specification.resolution[1] as f64;
-
-        let time_phase = self.time_phase;
-        let n_max_period = self.n_max_period;
-        let n_steps_per_period = self.n_steps_per_period;
-        let tol = self.periodic_state_error_tolerance;
-
-        if sampling_level >= 0 {
-            let n = sampling_level as usize + 1;
-            let step = 1.0 / n as f64;
-            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-                let i = outer_x % n_max_plus_1;
-                if i >= n {
-                    return;
-                }
-                let px = (outer_x / n_max_plus_1) as u32;
-                let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
-                for (outer_y, cell) in col.iter_mut().enumerate() {
-                    let j = outer_y % n_max_plus_1;
-                    if j >= n {
-                        continue;
-                    }
-                    let py = (outer_y / n_max_plus_1) as u32;
-                    let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
-                    *cell = compute_basin_of_attraction(
-                        &[re, im],
-                        time_phase,
-                        n_max_period,
-                        n_steps_per_period,
-                        tol,
-                    );
-                }
-            });
-        } else {
-            let block_size = (-sampling_level) as usize + 1;
-            let stride = n_max_plus_1 * block_size;
-            field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-                if outer_x % stride != 0 {
-                    return;
-                }
-                let block_x = outer_x / stride;
-                let px = (block_x * block_size) as u32;
-                let re = pixel_map.width.map(px);
-                for (outer_y, cell) in col.iter_mut().enumerate() {
-                    if outer_y % stride != 0 {
-                        continue;
-                    }
-                    let block_y = outer_y / stride;
-                    let py = (block_y * block_size) as u32;
-                    let im = pixel_map.height.map(py);
-                    *cell = compute_basin_of_attraction(
-                        &[re, im],
-                        time_phase,
-                        n_max_period,
-                        n_steps_per_period,
-                        tol,
-                    );
-                }
-            });
-        }
+        4
     }
 }
 
@@ -274,9 +240,9 @@ mod tests {
     use super::*;
 
     /// A pre-Phase-1 DDP params JSON has no `color` field. The
-    /// `#[serde(default)]` shim must fill it with white-foreground /
-    /// black-background — matching the previously hard-coded values — so
-    /// existing files render identically.
+    /// `#[serde(default)]` shim must fill it with the degenerate
+    /// white-on-black gradient — matching the previously hard-coded
+    /// values — so existing files render identically.
     #[test]
     fn parses_legacy_json_without_color_field_with_default_white_black() {
         let json = r#"{
@@ -294,7 +260,10 @@ mod tests {
             }
         }"#;
         let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.color.foreground, [255, 255, 255]);
-        assert_eq!(parsed.color.background, [0, 0, 0]);
+        assert_eq!(parsed.color.flat_color, [0, 0, 0]);
+        assert_eq!(parsed.color.gradients.len(), 1);
+        assert_eq!(parsed.color.gradients[0].len(), 2);
+        assert_eq!(parsed.color.gradients[0][0].rgb_raw, [255, 255, 255]);
+        assert_eq!(parsed.color.gradients[0][1].rgb_raw, [255, 255, 255]);
     }
 }

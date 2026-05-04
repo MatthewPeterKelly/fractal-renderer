@@ -12,8 +12,8 @@
         "sampling_level": 1
       },
       "color": {
-        "cyclic_attractor": [150, 0, 30],
-        "color_maps": [
+        "flat_color": [150, 0, 30],
+        "gradients": [
           [
             {
               "query": 0.0,
@@ -55,8 +55,7 @@
         ]
       },
       "lookup_table_count": 2048,
-      "histogram_bin_count": 64,
-      "histogram_sample_count": 20000
+      "histogram_bin_count": 64
     },
     "system": {
       "CoshMinusOne": {

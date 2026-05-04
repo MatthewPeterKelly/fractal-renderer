@@ -136,6 +136,20 @@ Completed on branch `decouple-scalar-field-calculation-from-color-rendering`
 in three commits: 4199c23 (machinery, parallel-to-old), 0caa21c (runtime
 switch + JSON migration), 8008aff (full-field histogram).
 
+**Phase Three**
+Completed on branch `decouple-scalar-field-and-color-mapping-common-aa`
+in two commits: 56ad860 (Phase 3.1 — `FieldKernel` + core iteration
+helpers, parallel-to-old) and the follow-up that landed Phase 3.2 + 3.3
+together: collapsed `ColorMapKind` to a unified `ColorMap`, dropped
+`normalize_field` (CDF lookup now happens inside `colorize_cell`),
+introduced per-root histograms / CDFs, dropped the `QuadraticMap<T>`
+wrapper, mass-migrated every example/bench/test JSON via
+`scripts/migrate_phase_3_color_maps.py`, restored the DDP regression
+fixture, and added two Newton fixtures. Mandelbrot/Julia/Barnsley/
+Sierpinski hashes invariant; DDP visually identical (constant-color
+gradient) but bit-shift due to cell-type change; Newton hashes new
+(per-root contrast improvement).
+
 ---
 
 ## 4. Hard Constraints & Cross-Platform Learnings
@@ -538,6 +552,12 @@ trait + per-cell `apply_cdf` shape entirely.
 
 ### Phase 3 — Pipeline unification & per-root colors
 
+**Status: shipped.** Two commits on branch
+`decouple-scalar-field-and-color-mapping-common-aa`:
+56ad860 (3.1 machinery, parallel-to-old) and the follow-up that
+collapsed the trait surface, dropped `normalize_field`, switched to
+per-root histograms / CDFs, and migrated every fixture JSON.
+
 **Goal:** finish what Phase 2 started. Lift all AA / block-fill iteration
 out of per-fractal code and into core. Collapse the three `ColorMapKind`
 variants into one `ColorMap` shape. Drop the `normalize_field` pipeline
@@ -548,6 +568,20 @@ distribution).
 **Detailed plan:** see [phase-3-detailed-plan.md](phase-3-detailed-plan.md)
 for trait shapes, file lists, commit-by-commit verification, and the JSON
 migration script.
+
+**Implementation deviations from the planned commit boundary:** the
+plan sketched three commits (3.1/3.2/3.3) but called the boundaries
+"final breakdown TBD". The actual ship was two commits because the
+3.2/3.3 work was deeply intertwined: dropping the per-fractal iteration
+methods (3.2) requires the field cell type to be uniform, which is
+exactly what the `ColorMapKind` collapse (3.3) provides. Splitting them
+would have required either a temporary lossy bridging layer (per-fractal
+`Option<(f32, u32)>` → variant-specific cell type) or duplicating the
+trait surface for one commit. Either option was uglier than landing the
+two together. The `QuadraticMap<T>` wrapper was also dropped here (open
+question §13.1) — Mandelbrot and Julia now implement `Renderable` /
+`FieldKernel` / `SpeedOptimizer` via blanket impls over
+`T: QuadraticMapParams`.
 
 **Why now (vs. shipping with Phase 2):** the Phase 2 review surfaced that
 the AA / block-fill iteration logic was duplicated across all three

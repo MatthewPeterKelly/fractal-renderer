@@ -6,8 +6,8 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::color_map::ColorMapKind;
-use crate::core::histogram::{CumulativeDistributionFunction, Histogram};
+use crate::core::color_map::ColorMap;
+use crate::core::field_iteration::FieldKernel;
 use crate::core::interpolation::Interpolator;
 use crate::core::render_pipeline::RenderingPipeline;
 
@@ -215,15 +215,14 @@ impl SpeedOptimizer for RenderOptions {
     }
 }
 
-/// Drives the new four-phase `RenderingPipeline`. Per-(sub)pixel dispatch
-/// is fully monomorphized through `Self::ColorMap: ColorMapKind`.
-pub trait Renderable: Sync + Send + SpeedOptimizer {
+/// Drives the five-phase `RenderingPipeline`. Per-(sub)pixel dispatch is
+/// fully monomorphized through `Self: FieldKernel`. AA / block-fill
+/// iteration lives in `core::field_iteration`; the trait surface a
+/// fractal must implement collapses to `FieldKernel::evaluate` plus the
+/// housekeeping methods below.
+pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
     /// The type of parameters that describe the renderable object.
     type Params: Serialize + Debug;
-
-    /// Statically-paired color-map shape and per-(sub)pixel cell type. Drives
-    /// the field buffer's element type and the colorize hot path.
-    type ColorMap: ColorMapKind;
 
     /// Access the current image specification for the renderable object.
     fn image_specification(&self) -> &ImageSpecification;
@@ -240,57 +239,32 @@ pub trait Renderable: Sync + Send + SpeedOptimizer {
     /// summary.
     fn write_diagnostics<W: Write>(&self, writer: &mut W) -> io::Result<()>;
 
-    /// @return a reference to the internal parameters of the renderable
-    /// object, which can then be serialized to a JSON file.
+    /// Reference to the internal parameters of the renderable object, which
+    /// can be serialized to JSON.
     fn params(&self) -> &Self::Params;
 
-    /// Histogram capacity in bins; used by the pipeline to allocate the
-    /// `Histogram` once at construction. Fractals that never normalize
-    /// (e.g. DDP) can return any positive value.
+    /// Histogram capacity in bins per gradient. Each gradient gets its own
+    /// histogram allocated to this size at pipeline construction.
     fn histogram_bin_count(&self) -> usize;
 
-    /// Maximum value the pipeline expects to insert into the histogram.
-    /// Used to size each bin's range. Fractals that never normalize can
-    /// return any positive number.
+    /// Maximum scalar value any cell will produce. Used to size each
+    /// histogram bin's range.
     fn histogram_max_value(&self) -> f32;
 
-    /// Number of entries in each precomputed color lookup table held by
-    /// the colorize cache. Variants without lookup tables (e.g.
-    /// `ForegroundBackground`) can return any value.
+    /// LUT resolution per gradient. Each gradient's lookup table is
+    /// allocated to this size at pipeline construction.
     fn lookup_table_count(&self) -> usize;
 
-    /// (a) Fill the preallocated `field` buffer with raw, un-normalized
-    /// values. The cells the impl populates depend on `sampling_level`
-    /// and `n_max_plus_1` (derived from `field.len() / W`).
-    fn compute_raw_field(
-        &self,
-        sampling_level: i32,
-        field: &mut Vec<Vec<<Self::ColorMap as ColorMapKind>::Cell>>,
-    );
+    /// Reference to the unified `ColorMap` driving colorization. Length of
+    /// `gradients` is fixed for the session and matches the gradient
+    /// indices that `FieldKernel::evaluate` is allowed to emit.
+    fn color_map(&self) -> &ColorMap;
 
-    /// (b) Walk the populated cells of `field` and insert each value into
-    /// `histogram`. The pipeline calls `histogram.reset()` first; impls
-    /// should not reset. Default impl is a no-op (DDP).
-    fn populate_histogram(
-        &self,
-        _sampling_level: i32,
-        _field: &[Vec<<Self::ColorMap as ColorMapKind>::Cell>],
-        _histogram: &Histogram,
-    ) {
-    }
-
-    /// (c) Replace each populated cell's raw value with its CDF percentile,
-    /// in place. Default impl is a no-op (DDP).
-    fn normalize_field(
-        &self,
-        _sampling_level: i32,
-        _cdf: &CumulativeDistributionFunction,
-        _field: &mut Vec<Vec<<Self::ColorMap as ColorMapKind>::Cell>>,
-    ) {
-    }
-
-    /// Reference to the concrete color-map data driving colorization.
-    fn color_map(&self) -> &Self::ColorMap;
+    /// Mutable access to the color map. Used by Phase 7 live keyframe edits;
+    /// holds no semantic difference from `color_map` today, the editor flow
+    /// just needs a path to mutate keyframes through the renderer.
+    #[allow(dead_code)]
+    fn color_map_mut(&mut self) -> &mut ColorMap;
 }
 
 /// Render a fractal to a PNG file (and a sibling JSON / diagnostics file).

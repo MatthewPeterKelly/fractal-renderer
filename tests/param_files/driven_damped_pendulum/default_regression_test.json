@@ -13,8 +13,19 @@
       "sampling_level": 2
     },
     "color": {
-      "foreground": [255, 255, 255],
-      "background": [0, 0, 0]
+      "flat_color": [0, 0, 0],
+      "gradients": [
+        [
+          {
+            "query": 0.0,
+            "rgb_raw": [255, 255, 255]
+          },
+          {
+            "query": 1.0,
+            "rgb_raw": [255, 255, 255]
+          }
+        ]
+      ]
     }
   }
 }

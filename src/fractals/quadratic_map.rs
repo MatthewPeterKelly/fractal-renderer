@@ -1,12 +1,11 @@
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 use crate::core::{
-    color_map::BackgroundWithColorMap,
-    histogram::{CumulativeDistributionFunction, Histogram},
+    color_map::ColorMap,
+    field_iteration::FieldKernel,
     image_utils::{
-        ImageSpecification, PixelMapper, RenderOptions, Renderable, SpeedOptimizer,
+        ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed,
     },
     interpolation::ClampedLinearInterpolator,
@@ -16,15 +15,10 @@ use crate::core::{
 /// (Mandelbrot, Julia). The `color` field holds the user-facing palette;
 /// the remaining fields tune the histogram-based normalization and the
 /// pre-baked lookup table.
-///
-/// Phase 2.3 dropped `histogram_sample_count`; the histogram is now built
-/// from a full walk of the populated field cells. Older JSON files that
-/// still carry the field will deserialize via `#[serde(default)]` and
-/// the value is ignored.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
-    /// Background color and gradient keyframes for escaped pixels.
-    pub color: BackgroundWithColorMap,
+    /// Flat color (for in-set pixels) and one gradient (for escaped pixels).
+    pub color: ColorMap,
     /// Number of entries in the precomputed color lookup table.
     pub lookup_table_count: usize,
     /// Number of bins used by the histogram that drives gradient normalization.
@@ -162,7 +156,11 @@ impl QuadraticMapSequence {
     }
 }
 
-pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
+/// Trait implemented by Mandelbrot and Julia parameter types. Each
+/// implementation supplies the actual escape-count math; the
+/// `Renderable` / `FieldKernel` impls live as blanket impls below so
+/// the per-fractal types stay parameter-only.
+pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync + Send {
     /// Access the current image specification.
     fn image_specification(&self) -> &ImageSpecification;
 
@@ -175,9 +173,8 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
 
     /// Access the color map parameters.
     fn color_map_params(&self) -> &ColorMapParams;
-    /// Mutable access to the color map parameters. Currently unused inside
-    /// the lib (the speed optimizer no longer touches the color cache);
-    /// kept on the trait for Phase 6 live keyframe edits.
+    /// Mutable access to the color map parameters. Used by the live editor
+    /// flow (Phase 7) to mutate keyframes through the renderer.
     #[allow(dead_code)]
     fn color_map_params_mut(&mut self) -> &mut ColorMapParams;
 
@@ -185,7 +182,7 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync {
     fn render_options(&self) -> &RenderOptions;
     fn render_options_mut(&mut self) -> &mut RenderOptions;
 
-    // Actually evaluate the fractal.
+    /// Evaluate the smooth log-escape count at the given point.
     fn normalized_log_escape_count(&self, point: &[f64; 2]) -> Option<f32>;
 }
 
@@ -198,58 +195,39 @@ pub struct ParamsReferenceCache {
     pub render_options: RenderOptions,
 }
 
-/// Newtype wrapper that carries the fractal parameters and implements
-/// `Renderable` for the rendering pipeline. Histogram, CDF, and color
-/// caches now live in the pipeline, not here.
-pub struct QuadraticMap<T: QuadraticMapParams> {
-    /// User-facing parameters that drive convergence, color, and rendering.
-    pub fractal_params: T,
-}
-
-impl<T: QuadraticMapParams> QuadraticMap<T> {
-    /// Construct a `QuadraticMap` from its parameters. Allocation-free
-    /// after this call (the pipeline owns the actual buffers).
-    pub fn new(fractal_params: T) -> QuadraticMap<T> {
-        QuadraticMap { fractal_params }
-    }
-}
-
-impl<T> SpeedOptimizer for QuadraticMap<T>
-where
-    T: QuadraticMapParams,
-{
+impl<T: QuadraticMapParams> SpeedOptimizer for T {
     type ReferenceCache = ParamsReferenceCache;
 
     fn reference_cache(&self) -> Self::ReferenceCache {
         ParamsReferenceCache {
-            max_iter_count: self.fractal_params.convergence_params().max_iter_count,
-            render_options: *self.fractal_params.render_options(),
+            max_iter_count: self.convergence_params().max_iter_count,
+            render_options: *self.render_options(),
         }
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        self.fractal_params.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
+        self.convergence_params_mut().max_iter_count = scale_down_parameter_for_speed(
             128.0,
             cache.max_iter_count as f64,
             level,
             ClampedLinearInterpolator,
         ) as u32;
-        self.fractal_params
-            .render_options_mut()
+        self.render_options_mut()
             .set_speed_optimization_level(level, &cache.render_options);
     }
 }
 
-impl<T> Renderable for QuadraticMap<T>
-where
-    T: QuadraticMapParams + Sync + Send,
-{
+impl<T: QuadraticMapParams> FieldKernel for T {
+    fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+        self.normalized_log_escape_count(&point).map(|v| (v, 0))
+    }
+}
+
+impl<T: QuadraticMapParams> Renderable for T {
     type Params = T;
-    type ColorMap = BackgroundWithColorMap;
 
     fn set_image_specification(&mut self, image_specification: ImageSpecification) {
-        self.fractal_params
-            .set_image_specification(image_specification);
+        QuadraticMapParams::set_image_specification(self, image_specification);
     }
 
     fn write_diagnostics<W: std::io::Write>(&self, _writer: &mut W) -> std::io::Result<()> {
@@ -257,223 +235,34 @@ where
     }
 
     fn params(&self) -> &Self::Params {
-        &self.fractal_params
+        self
     }
 
     fn image_specification(&self) -> &ImageSpecification {
-        self.fractal_params.image_specification()
+        QuadraticMapParams::image_specification(self)
     }
 
     fn render_options(&self) -> &RenderOptions {
-        self.fractal_params.render_options()
+        QuadraticMapParams::render_options(self)
     }
 
-    fn color_map(&self) -> &Self::ColorMap {
-        &self.fractal_params.color_map_params().color
+    fn color_map(&self) -> &ColorMap {
+        &self.color_map_params().color
+    }
+
+    fn color_map_mut(&mut self) -> &mut ColorMap {
+        &mut self.color_map_params_mut().color
     }
 
     fn histogram_bin_count(&self) -> usize {
-        self.fractal_params.color_map_params().histogram_bin_count
+        self.color_map_params().histogram_bin_count
     }
 
     fn histogram_max_value(&self) -> f32 {
-        QuadraticMapSequence::log_iter_count(
-            self.fractal_params.convergence_params().max_iter_count as f32,
-        )
+        QuadraticMapSequence::log_iter_count(self.convergence_params().max_iter_count as f32)
     }
 
     fn lookup_table_count(&self) -> usize {
-        self.fractal_params.color_map_params().lookup_table_count
-    }
-
-    fn compute_raw_field(&self, sampling_level: i32, field: &mut Vec<Vec<Option<f32>>>) {
-        let spec = *self.fractal_params.image_specification();
-        let n_max_plus_1 = field.len() / spec.resolution[0] as usize;
-        compute_raw_field_quadratic(&spec, n_max_plus_1, sampling_level, field, |p| {
-            self.fractal_params.normalized_log_escape_count(p)
-        });
-    }
-
-    fn populate_histogram(
-        &self,
-        sampling_level: i32,
-        field: &[Vec<Option<f32>>],
-        histogram: &Histogram,
-    ) {
-        let n_max_plus_1 =
-            field.len() / self.fractal_params.image_specification().resolution[0] as usize;
-        walk_populated_quadratic_cells(sampling_level, n_max_plus_1, field, |v| {
-            histogram.insert(*v)
-        });
-    }
-
-    fn normalize_field(
-        &self,
-        sampling_level: i32,
-        cdf: &CumulativeDistributionFunction,
-        field: &mut Vec<Vec<Option<f32>>>,
-    ) {
-        let spec = *self.fractal_params.image_specification();
-        let n_max_plus_1 = field.len() / spec.resolution[0] as usize;
-        normalize_populated_cells(sampling_level, n_max_plus_1, field, |v| cdf.percentile(*v));
-    }
-}
-
-/// Populate the cells of `field` reachable at the requested `sampling_level`.
-///
-/// - **Positive `sampling_level = r`**: each output pixel block (`n_max_plus_1²`
-///   cells) gets the first `(r+1)²` cells populated, evaluated at subpixel
-///   positions `(i / (r+1), j / (r+1))` of the pixel for `i, j ∈ 0..(r+1)`.
-///   At `r == n_max_plus_1 - 1` this fills the whole field; at `r == 0` only
-///   one cell per block is touched.
-/// - **`sampling_level == 0`**: same as above with `r = 0` (one cell per
-///   block).
-/// - **Negative `sampling_level = -m`**: block-fill. Each `(m+1) × (m+1)`
-///   output-pixel block uses one shared evaluation, stored at the top-left
-///   field cell of the leftmost output pixel of the block.
-fn compute_raw_field_quadratic<F>(
-    image_specification: &ImageSpecification,
-    n_max_plus_1: usize,
-    sampling_level: i32,
-    field: &mut Vec<Vec<Option<f32>>>,
-    escape_count: F,
-) where
-    F: Fn(&[f64; 2]) -> Option<f32> + Sync,
-{
-    let pixel_map = PixelMapper::new(image_specification);
-    let pixel_width = image_specification.width / image_specification.resolution[0] as f64;
-    let pixel_height = image_specification.height() / image_specification.resolution[1] as f64;
-
-    if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        let step = 1.0 / n as f64;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            let i = outer_x % n_max_plus_1;
-            if i >= n {
-                return;
-            }
-            let px = (outer_x / n_max_plus_1) as u32;
-            let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                let j = outer_y % n_max_plus_1;
-                if j >= n {
-                    continue;
-                }
-                let py = (outer_y / n_max_plus_1) as u32;
-                let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
-                *cell = escape_count(&[re, im]);
-            }
-        });
-    } else {
-        let block_size = (-sampling_level) as usize + 1;
-        let stride = n_max_plus_1 * block_size;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            if outer_x % stride != 0 {
-                return;
-            }
-            let block_x = outer_x / stride;
-            let px = (block_x * block_size) as u32;
-            let re = pixel_map.width.map(px);
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                if outer_y % stride != 0 {
-                    continue;
-                }
-                let block_y = outer_y / stride;
-                let py = (block_y * block_size) as u32;
-                let im = pixel_map.height.map(py);
-                *cell = escape_count(&[re, im]);
-            }
-        });
-    }
-}
-
-/// Walk the same set of populated cells `compute_raw_field_quadratic`
-/// fills, applying `f` to each `Some` value in place. Used by
-/// `normalize_field` to rewrite raw escape counts as CDF percentiles.
-fn normalize_populated_cells<F: Fn(&f32) -> f32 + Sync>(
-    sampling_level: i32,
-    n_max_plus_1: usize,
-    field: &mut Vec<Vec<Option<f32>>>,
-    f: F,
-) {
-    if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            let i = outer_x % n_max_plus_1;
-            if i >= n {
-                return;
-            }
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                let j = outer_y % n_max_plus_1;
-                if j >= n {
-                    continue;
-                }
-                if let Some(v) = cell {
-                    *v = f(v);
-                }
-            }
-        });
-    } else {
-        let block_size = (-sampling_level) as usize + 1;
-        let stride = n_max_plus_1 * block_size;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            if outer_x % stride != 0 {
-                return;
-            }
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                if outer_y % stride != 0 {
-                    continue;
-                }
-                if let Some(v) = cell {
-                    *v = f(v);
-                }
-            }
-        });
-    }
-}
-
-/// Read-only walk over the same populated cells, calling `f` on each
-/// `Some(&value)`. Used by `populate_histogram` to insert the field's
-/// raw values into the shared histogram.
-fn walk_populated_quadratic_cells<F: Fn(&f32) + Sync>(
-    sampling_level: i32,
-    n_max_plus_1: usize,
-    field: &[Vec<Option<f32>>],
-    f: F,
-) {
-    use rayon::iter::IntoParallelRefIterator;
-    if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        field.par_iter().enumerate().for_each(|(outer_x, col)| {
-            let i = outer_x % n_max_plus_1;
-            if i >= n {
-                return;
-            }
-            for (outer_y, cell) in col.iter().enumerate() {
-                let j = outer_y % n_max_plus_1;
-                if j >= n {
-                    continue;
-                }
-                if let Some(v) = cell {
-                    f(v);
-                }
-            }
-        });
-    } else {
-        let block_size = (-sampling_level) as usize + 1;
-        let stride = n_max_plus_1 * block_size;
-        field.par_iter().enumerate().for_each(|(outer_x, col)| {
-            if outer_x % stride != 0 {
-                return;
-            }
-            for (outer_y, cell) in col.iter().enumerate() {
-                if outer_y % stride != 0 {
-                    continue;
-                }
-                if let Some(v) = cell {
-                    f(v);
-                }
-            }
-        });
+        self.color_map_params().lookup_table_count
     }
 }

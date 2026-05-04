@@ -18,18 +18,13 @@ use rayon::iter::{
 };
 use rayon::slice::ParallelSliceMut;
 
-use crate::core::color_map::ColorMapKind;
+use crate::core::color_map::{ColorMapCache, colorize_cell};
 use crate::core::histogram::Histogram;
 use crate::core::image_utils::{ImageSpecification, PixelMapper};
 
 /// Domain-specific per-point evaluation. Each fractal implements exactly
 /// this much of the math; AA / block-fill iteration lives in the shared
 /// helpers below, generic over `K: FieldKernel`.
-///
-/// Phase 3.1 declares the trait but no fractal implements it yet; the
-/// `#[allow(dead_code)]` clears the per-binary unused-item warning until
-/// Phase 3.2 wires up the runtime path.
-#[allow(dead_code)]
 pub trait FieldKernel: Sync + Send {
     /// Evaluate the scalar field at one real-space point.
     /// Returns `Some((value, gradient_index))` or `None` for "no value".
@@ -51,7 +46,6 @@ pub trait FieldKernel: Sync + Send {
 ///
 /// Cells skipped by the traversal are left untouched; the pipeline only
 /// reads the populated subset on subsequent passes.
-#[allow(dead_code)]
 pub fn compute_raw_field<K: FieldKernel>(
     spec: &ImageSpecification,
     n_max_plus_1: usize,
@@ -113,7 +107,6 @@ pub fn compute_raw_field<K: FieldKernel>(
 /// Histograms use atomic interior mutability, so the per-cell `insert`
 /// call only needs `&Histogram`. The `&mut [Histogram]` signature is
 /// here to make the per-render reset / fill semantics explicit.
-#[allow(dead_code)]
 pub fn populate_histograms(
     n_max_plus_1: usize,
     sampling_level: i32,
@@ -162,7 +155,7 @@ pub fn populate_histograms(
 }
 
 /// Walk the row-major output `egui::ColorImage`, collapsing field cells
-/// into output pixels.
+/// into output pixels via the unified `ColorMapCache`.
 ///
 /// - **Positive `sampling_level = r`**: each output pixel `(px, py)` averages
 ///   the `(r+1)²` cells at `field[px·n_max_plus_1 + i][py·n_max_plus_1 + j]`
@@ -172,12 +165,11 @@ pub fn populate_histograms(
 /// - **Negative `sampling_level = -m`**: block-fill (nearest-neighbor).
 ///   Every `(m+1) × (m+1)` output-pixel block reads one field cell.
 ///
-/// Generic over `C: ColorMapKind`; fully monomorphized at the call site.
-/// Per-pixel allocations: zero. Moved here from `render_pipeline.rs` in
-/// Phase 3.1.
-pub fn colorize_collapse<C: ColorMapKind>(
-    cache: &C::Cache,
-    field: &[Vec<C::Cell>],
+/// CDF percentile lookup happens inside `colorize_cell`; the field stays
+/// raw end-to-end. Per-pixel allocations: zero.
+pub fn colorize_collapse_unified(
+    cache: &ColorMapCache,
+    field: &[Vec<Option<(f32, u32)>>],
     n_max_plus_1: usize,
     sampling_level: i32,
     out: &mut ColorImage,
@@ -198,7 +190,7 @@ pub fn colorize_collapse<C: ColorMapKind>(
                         let col = &field[cx];
                         for j in 0..n {
                             let cy = py * n_max_plus_1 + j;
-                            let rgb = C::colorize_cell(cache, col[cy]);
+                            let rgb = colorize_cell(cache, col[cy]);
                             sum[0] += rgb[0] as u32;
                             sum[1] += rgb[1] as u32;
                             sum[2] += rgb[2] as u32;
@@ -222,7 +214,7 @@ pub fn colorize_collapse<C: ColorMapKind>(
                 for (px, pixel) in row.iter_mut().enumerate() {
                     let block_x = px / block_size;
                     let cx = block_x * block_size * n_max_plus_1;
-                    let rgb = C::colorize_cell(cache, field[cx][cy]);
+                    let rgb = colorize_cell(cache, field[cx][cy]);
                     *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
                 }
             });
@@ -232,73 +224,30 @@ pub fn colorize_collapse<C: ColorMapKind>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::color_map::{BackgroundWithColorMap, ColorMapKeyFrame, ForegroundBackground};
+    use crate::core::color_map::{ColorMap, ColorMapKeyFrame};
+    use crate::core::histogram::CumulativeDistributionFunction;
 
-    /// Synthetic 4×4 field of `Option<i32>` with a 2×2 average per output
-    /// pixel (sampling_level = 1, so `n = 2`). Every subpixel in the
-    /// top-left block is `Some(0)` (foreground), so the output pixel is
-    /// pure foreground. Every subpixel in the top-right is `None`, so the
-    /// output is pure background. Bottom row mixes 2 foreground + 2
-    /// background → averaged channel is the integer mean.
-    #[test]
-    fn colorize_collapse_aa_averaging_matches_hand_computed() {
-        let cm = ForegroundBackground {
-            foreground: [200, 100, 0],
-            background: [0, 50, 250],
-        };
-        let cache = cm.create_cache(0);
-
-        // Output is 2×2; field is 4×4. field[x][y].
-        let mut field: Vec<Vec<Option<i32>>> = vec![vec![None; 4]; 4];
-        field[0][0] = Some(0);
-        field[0][1] = Some(0);
-        field[1][0] = Some(0);
-        field[1][1] = Some(0);
-        field[0][2] = Some(0);
-        field[0][3] = None;
-        field[1][2] = Some(0);
-        field[1][3] = None;
-        field[2][2] = Some(7);
-        field[2][3] = Some(7);
-        field[3][2] = Some(7);
-        field[3][3] = Some(7);
-
-        let mut out = ColorImage::filled([2, 2], Color32::BLACK);
-        colorize_collapse::<ForegroundBackground>(&cache, &field, 2, 1, &mut out);
-
-        let pixel_at = |px: usize, py: usize| out.pixels[py * 2 + px];
-        assert_eq!(pixel_at(0, 0), Color32::from_rgb(200, 100, 0));
-        assert_eq!(pixel_at(1, 0), Color32::from_rgb(0, 50, 250));
-        assert_eq!(pixel_at(0, 1), Color32::from_rgb(100, 75, 125));
-        assert_eq!(pixel_at(1, 1), Color32::from_rgb(0, 50, 250));
+    /// Build a minimal `ColorMapCache` whose CDFs are pre-shaped so that
+    /// percentile lookups land predictably on the gradient endpoints:
+    /// inserting a single mid-bucket sample makes value `0.0` map to 0.0
+    /// (low keyframe) and any value in the rightmost bin map to 1.0 (high
+    /// keyframe).
+    fn cache_with_unit_distribution(map: &ColorMap) -> ColorMapCache {
+        let mut cache = map.create_cache(4, 1.0, 256);
+        for cdf in cache.cdfs.iter_mut() {
+            let h = Histogram::new(4, 1.0);
+            h.insert(0.5);
+            *cdf = CumulativeDistributionFunction::new(&h);
+        }
+        cache
     }
 
-    #[test]
-    fn colorize_collapse_no_aa_one_cell_per_pixel() {
-        let cm = ForegroundBackground {
-            foreground: [255, 0, 0],
-            background: [0, 0, 255],
-        };
-        let cache = cm.create_cache(0);
-
-        let mut field: Vec<Vec<Option<i32>>> = vec![vec![None; 2]; 2];
-        field[0][0] = Some(0);
-        field[1][1] = Some(0);
-
-        let mut out = ColorImage::filled([2, 2], Color32::BLACK);
-        colorize_collapse::<ForegroundBackground>(&cache, &field, 1, 0, &mut out);
-
-        assert_eq!(out.pixels[0], Color32::from_rgb(255, 0, 0));
-        assert_eq!(out.pixels[1], Color32::from_rgb(0, 0, 255));
-        assert_eq!(out.pixels[2], Color32::from_rgb(0, 0, 255));
-        assert_eq!(out.pixels[3], Color32::from_rgb(255, 0, 0));
-    }
-
-    #[test]
-    fn colorize_collapse_background_with_color_map_endpoints() {
-        let cm = BackgroundWithColorMap {
-            background: [9, 9, 9],
-            color_map: vec![
+    /// Single-keyframe-equivalent gradient: value at 0.0 → red,
+    /// value at 1.0 → blue.
+    fn red_to_blue_map() -> ColorMap {
+        ColorMap {
+            flat_color: [9, 9, 9],
+            gradients: vec![vec![
                 ColorMapKeyFrame {
                     query: 0.0,
                     rgb_raw: [255, 0, 0],
@@ -307,22 +256,105 @@ mod tests {
                     query: 1.0,
                     rgb_raw: [0, 0, 255],
                 },
-            ],
-        };
-        let cache = cm.create_cache(256);
-        let mut field: Vec<Vec<Option<f32>>> = vec![vec![None; 1]; 1];
-        field[0][0] = Some(0.0);
-        let mut out = ColorImage::filled([1, 1], Color32::BLACK);
-        colorize_collapse::<BackgroundWithColorMap>(&cache, &field, 1, 0, &mut out);
-        assert_eq!(out.pixels[0], Color32::from_rgb(255, 0, 0));
+            ]],
+        }
+    }
 
-        field[0][0] = Some(1.0);
-        colorize_collapse::<BackgroundWithColorMap>(&cache, &field, 1, 0, &mut out);
-        assert_eq!(out.pixels[0], Color32::from_rgb(0, 0, 255));
+    /// 4×4 field of `Option<(f32, u32)>` with sampling_level=1, n=2.
+    /// Verifies AA averaging works: a 2×2 block of `Some((0.0, 0))` yields
+    /// the low keyframe; a block mixing `None` with `Some` averages with
+    /// the flat color.
+    #[test]
+    fn colorize_collapse_unified_aa_averaging_matches_hand_computed() {
+        let map = red_to_blue_map();
+        let cache = cache_with_unit_distribution(&map);
 
-        field[0][0] = None;
-        colorize_collapse::<BackgroundWithColorMap>(&cache, &field, 1, 0, &mut out);
-        assert_eq!(out.pixels[0], Color32::from_rgb(9, 9, 9));
+        let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 4]; 4];
+        // Top-left block (px=0, py=0) ← all Some((0.0, 0)) → red.
+        field[0][0] = Some((0.0, 0));
+        field[0][1] = Some((0.0, 0));
+        field[1][0] = Some((0.0, 0));
+        field[1][1] = Some((0.0, 0));
+        // Top-right block (px=1, py=0) ← all None → flat color.
+        // Bottom-left block (px=0, py=1) ← 2 Some((0.0, 0)) + 2 None.
+        field[0][2] = Some((0.0, 0));
+        field[0][3] = None;
+        field[1][2] = Some((0.0, 0));
+        field[1][3] = None;
+        // Bottom-right block (px=1, py=1) ← all Some((1.0, 0)) → blue.
+        field[2][2] = Some((1.0, 0));
+        field[2][3] = Some((1.0, 0));
+        field[3][2] = Some((1.0, 0));
+        field[3][3] = Some((1.0, 0));
+
+        let mut out = ColorImage::filled([2, 2], Color32::BLACK);
+        colorize_collapse_unified(&cache, &field, 2, 1, &mut out);
+
+        let pixel_at = |px: usize, py: usize| out.pixels[py * 2 + px];
+        assert_eq!(pixel_at(0, 0), Color32::from_rgb(255, 0, 0));
+        assert_eq!(pixel_at(1, 0), Color32::from_rgb(9, 9, 9));
+        // Bottom-left averages 2× red + 2× flat: (255+255+9+9)/4=132,
+        // (0+0+9+9)/4=4.5→4, (0+0+9+9)/4=4.5→4.
+        let bl = pixel_at(0, 1);
+        assert_eq!(bl, Color32::from_rgb(132, 4, 4));
+        assert_eq!(pixel_at(1, 1), Color32::from_rgb(0, 0, 255));
+    }
+
+    /// `n = 1` (sampling_level = 0): one cell per output pixel, no averaging.
+    #[test]
+    fn colorize_collapse_unified_no_aa_one_cell_per_pixel() {
+        let map = red_to_blue_map();
+        let cache = cache_with_unit_distribution(&map);
+
+        let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 2]; 2];
+        field[0][0] = Some((0.0, 0));
+        field[1][1] = Some((0.0, 0));
+
+        let mut out = ColorImage::filled([2, 2], Color32::BLACK);
+        colorize_collapse_unified(&cache, &field, 1, 0, &mut out);
+
+        assert_eq!(out.pixels[0], Color32::from_rgb(255, 0, 0)); // (0,0)
+        assert_eq!(out.pixels[1], Color32::from_rgb(9, 9, 9)); // (1,0) None
+        assert_eq!(out.pixels[2], Color32::from_rgb(9, 9, 9)); // (0,1) None
+        assert_eq!(out.pixels[3], Color32::from_rgb(255, 0, 0)); // (1,1)
+    }
+
+    /// Block-fill (sampling_level = -1): each 2×2 output block reads one
+    /// field cell.
+    #[test]
+    fn colorize_collapse_unified_block_fill_shares_color_in_each_block() {
+        let map = red_to_blue_map();
+        let cache = cache_with_unit_distribution(&map);
+
+        let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 4]; 4];
+        field[0][0] = Some((0.0, 0));
+        field[2][0] = Some((1.0, 0));
+        field[0][2] = Some((1.0, 0));
+        field[2][2] = Some((0.0, 0));
+
+        let mut out = ColorImage::filled([4, 4], Color32::BLACK);
+        colorize_collapse_unified(&cache, &field, 1, -1, &mut out);
+
+        // Top-left 2×2 block: red.
+        for py in 0..2 {
+            for px in 0..2 {
+                assert_eq!(
+                    out.pixels[py * 4 + px],
+                    Color32::from_rgb(255, 0, 0),
+                    "({px},{py})"
+                );
+            }
+        }
+        // Top-right 2×2 block: blue.
+        for py in 0..2 {
+            for px in 2..4 {
+                assert_eq!(
+                    out.pixels[py * 4 + px],
+                    Color32::from_rgb(0, 0, 255),
+                    "({px},{py})"
+                );
+            }
+        }
     }
 
     /// Synthetic kernel that returns a value derived from the input point

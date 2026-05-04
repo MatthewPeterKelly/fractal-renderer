@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{
     color_map::{
-        ColorMap, ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, with_uniform_spacing,
+        ColorMapKeyFrame, ColorMapLookUpTable, ColorMapper, KeyframeColorMap, with_uniform_spacing,
     },
     file_io::{FilePrefix, serialize_to_json_or_panic},
     image_utils::write_image_to_file_or_panic,
@@ -44,22 +44,28 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
     let color_maps: Vec<NamedColorMapper> = vec![
         NamedColorMapper {
             name: "user-defined, linear interpolation".to_owned(),
-            color_map: Box::new(ColorMap::new(&params.keyframes, LinearInterpolator {})),
+            color_map: Box::new(KeyframeColorMap::new(
+                &params.keyframes,
+                LinearInterpolator {},
+            )),
         },
         NamedColorMapper {
             name: "user-defined, nearest interpolation".to_owned(),
-            color_map: Box::new(ColorMap::new(
+            color_map: Box::new(KeyframeColorMap::new(
                 &params.keyframes,
                 StepInterpolator { threshold: 0.5 },
             )),
         },
         NamedColorMapper {
             name: "uniform-spacing, linear interpolation".to_owned(),
-            color_map: Box::new(ColorMap::new(&uniform_keyframes, LinearInterpolator {})),
+            color_map: Box::new(KeyframeColorMap::new(
+                &uniform_keyframes,
+                LinearInterpolator {},
+            )),
         },
         NamedColorMapper {
             name: "uniform-spacing, nearest interpolation".to_owned(),
-            color_map: Box::new(ColorMap::new(
+            color_map: Box::new(KeyframeColorMap::new(
                 &uniform_keyframes,
                 StepInterpolator { threshold: 0.5 },
             )),
@@ -67,14 +73,14 @@ pub fn generate_color_swatch(params_path: &str, file_prefix: FilePrefix) {
         NamedColorMapper {
             name: "user-defined, lookup table 16 entries".to_owned(),
             color_map: Box::new(ColorMapLookUpTable::from_color_map(
-                &ColorMap::new(&params.keyframes, LinearInterpolator {}),
+                &KeyframeColorMap::new(&params.keyframes, LinearInterpolator {}),
                 16,
             )),
         },
         NamedColorMapper {
             name: "user-defined, lookup table 1024 entries".to_owned(),
             color_map: Box::new(ColorMapLookUpTable::from_color_map(
-                &ColorMap::new(&params.keyframes, LinearInterpolator {}),
+                &KeyframeColorMap::new(&params.keyframes, LinearInterpolator {}),
                 1024,
             )),
         },

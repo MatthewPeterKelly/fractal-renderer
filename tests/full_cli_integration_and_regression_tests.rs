@@ -102,15 +102,28 @@ mod tests {
                 "barnsley_fern/default_regression_test",
                 "a4605eabb0ecaec01d3decc4191430143b36e36820a1ec5a186c836ed7364dd4",
             ),
-            // Disabled; Works locally, but not in CI. Details here:
-            // https://github.com/MatthewPeterKelly/fractal-renderer/issues/90
-            // (
-            //     "driven_damped_pendulum/default_regression_test",
-            //     "5f1bbcbe83afdc2ea36b34ce3774e5efc99bec3b426c80524bf0c4efb1097e7e",
-            // ),
+            // DDP: fixture restored in Phase 3.3. The cell type changed
+            // from `Option<i32>` to `Option<(f32, u32)>` and DDP now
+            // routes through the unified colorize cache; output looks
+            // visually identical to the legacy white-on-black render.
+            (
+                "driven_damped_pendulum/default_regression_test",
+                "32cabfccc6fcb179fdad363cd49bd0762089fb1fed0a9302bbb143bd29db7b95",
+            ),
             (
                 "serpinsky/default_regression_test",
                 "d7776c07094689b9c994f69012eeacccebd0167ab6fcec30e67f73f8ca9cd4c5",
+            ),
+            // Newton fixtures added in Phase 3.3 (per-root histograms).
+            // Each basin gets its own iteration-count distribution; output
+            // is per-basin contrast-enhanced relative to legacy single-CDF.
+            (
+                "newtons_method/roots_of_unity_4_regression_test",
+                "e03f053f8805877106ec4b968cda338d74ded945e7c134900bfaf879d83e2f21",
+            ),
+            (
+                "newtons_method/cosh_minus_one_regression_test",
+                "0fb4bb9a6ed7856eea5ee0adf50ae5eaa9b3935764719ba6705c371dfe1bf308",
             ),
         ];
 

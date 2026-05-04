@@ -1,7 +1,7 @@
 //! Benchmark for the fractal rendering pipeline. Runs `RenderingPipeline::render`
-//! end-to-end (compute_raw_field → populate_histogram → normalize_field →
-//! refresh_cache + colorize_collapse) at the user's full sampling level on
-//! a representative Mandelbrot example.
+//! end-to-end (compute_raw_field → populate_histograms → CDF rebuild →
+//! refresh_cache → colorize_collapse_unified) at the user's full sampling
+//! level on a representative Mandelbrot example.
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use egui::{Color32, ColorImage};
 use fractal_renderer::{
@@ -9,7 +9,7 @@ use fractal_renderer::{
         image_utils::{Renderable, field_upsample_factor},
         render_pipeline::RenderingPipeline,
     },
-    fractals::{mandelbrot::MandelbrotParams, quadratic_map::QuadraticMap},
+    fractals::mandelbrot::MandelbrotParams,
 };
 
 fn run_pipeline_render_benchmark(c: &mut Criterion, path: &str) {
@@ -17,7 +17,7 @@ fn run_pipeline_render_benchmark(c: &mut Criterion, path: &str) {
         serde_json::from_str(&std::fs::read_to_string(path).expect("Unable to read param file"))
             .unwrap();
 
-    let renderer = QuadraticMap::new(mandelbrot_params);
+    let renderer = mandelbrot_params;
     let resolution = renderer.image_specification().resolution;
     let n_max_plus_1 = field_upsample_factor(renderer.render_options().sampling_level);
     let bin_count = renderer.histogram_bin_count();

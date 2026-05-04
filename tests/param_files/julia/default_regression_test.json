@@ -13,25 +13,26 @@
     },
     "color_map": {
       "color": {
-        "background": [0, 0, 0],
-        "color_map": [
-          {
-            "query": 0.0,
-            "rgb_raw": [50, 0, 100]
-          },
-          {
-            "query": 0.5,
-            "rgb_raw": [0, 50, 230]
-          },
-          {
-            "query": 1.0,
-            "rgb_raw": [230, 245, 255]
-          }
+        "flat_color": [0, 0, 0],
+        "gradients": [
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [50, 0, 100]
+            },
+            {
+              "query": 0.5,
+              "rgb_raw": [0, 50, 230]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [230, 245, 255]
+            }
+          ]
         ]
       },
       "lookup_table_count": 128,
-      "histogram_bin_count": 16,
-      "histogram_sample_count": 80
+      "histogram_bin_count": 16
     },
     "render_options": {
       "sampling_level": 0

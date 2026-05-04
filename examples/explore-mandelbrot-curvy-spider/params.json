@@ -12,29 +12,30 @@
     },
     "color_map": {
       "color": {
-        "background": [0, 0, 0],
-        "color_map": [
-          {
-            "query": 0.0,
-            "rgb_raw": [100, 40, 0]
-          },
-          {
-            "query": 0.9,
-            "rgb_raw": [30, 0, 80]
-          },
-          {
-            "query": 0.98,
-            "rgb_raw": [0, 50, 240]
-          },
-          {
-            "query": 1.0,
-            "rgb_raw": [230, 245, 255]
-          }
+        "flat_color": [0, 0, 0],
+        "gradients": [
+          [
+            {
+              "query": 0.0,
+              "rgb_raw": [100, 40, 0]
+            },
+            {
+              "query": 0.9,
+              "rgb_raw": [30, 0, 80]
+            },
+            {
+              "query": 0.98,
+              "rgb_raw": [0, 50, 240]
+            },
+            {
+              "query": 1.0,
+              "rgb_raw": [230, 245, 255]
+            }
+          ]
         ]
       },
       "lookup_table_count": 1024,
-      "histogram_bin_count": 64,
-      "histogram_sample_count": 50000
+      "histogram_bin_count": 64
     },
     "render_options": {
       "sampling_level": 0

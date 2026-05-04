@@ -2,14 +2,14 @@
   "NewtonsMethod": {
     "params": {
       "image_specification": {
-        "resolution": [2560, 1600],
+        "resolution": [64, 48],
         "center": [-0.9, -3.141592653589793],
         "width": 2.3
       },
-      "max_iteration_count": 512,
+      "max_iteration_count": 60,
       "convergence_tolerance": 1e-6,
       "render_options": {
-        "sampling_level": 3
+        "sampling_level": 1
       },
       "color": {
         "flat_color": [150, 0, 30],
