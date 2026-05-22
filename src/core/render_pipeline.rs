@@ -1,15 +1,17 @@
 //! Top-level orchestrator that owns all reusable buffers and drives the
-//! five-phase render pipeline:
+//! four-phase render pipeline:
 //!
 //! 1. (a) `field_iteration::compute_raw_field` — fill the field with raw
 //!    `Option<(f32, u32)>` cells via the fractal's `FieldKernel::evaluate`.
 //! 2. (b) `field_iteration::populate_histograms` — bin populated cells into
-//!    the per-gradient histograms.
-//! 3. (c) Rebuild each per-gradient `CumulativeDistributionFunction` from
-//!    the freshly-populated histogram.
-//! 4. (d) `ColorMap::refresh_cache` — refresh per-gradient LUTs and the
-//!    flat color from the current keyframes.
-//! 5. (e) `field_iteration::colorize_collapse_unified` — walk the output
+//!    the per-color-map histograms (owned by the cache).
+//! 3. (c) `ColorPaletteCache::refresh_after_compute_pass` — atomically
+//!    rebuild every downstream-visible piece of cache state (per-color-map
+//!    CDFs from the freshly-populated histograms, per-color-map LUTs from
+//!    the palette's keyframes, and the cached background color). Pulling
+//!    all three into one call prevents the cache from drifting into a
+//!    half-updated state between renders.
+//! 4. (d) `field_iteration::colorize_collapse_unified` — walk the output
 //!    `egui::ColorImage`, averaging `(n+1)²` subpixel `[u8; 3]` results
 //!    into each output pixel via `colorize_cell`.
 //!
@@ -25,24 +27,20 @@ use crate::core::color_map::ColorPaletteCache;
 use crate::core::field_iteration::{
     colorize_collapse_unified, compute_raw_field, populate_histograms,
 };
-use crate::core::histogram::Histogram;
 use crate::core::image_utils::Renderable;
 
 /// Top-level orchestrator that owns all reusable buffers for one fractal
-/// instance and runs the five-phase pipeline against them on every render.
+/// instance and runs the four-phase pipeline against them on every render.
 pub struct RenderingPipeline<F: Renderable> {
     /// The fractal whose `FieldKernel::evaluate` drives the compute phase.
     fractal: F,
     /// Subpixel field, sized at construction for `(n_max+1)·W × (n_max+1)·H`
     /// where `n_max+1` is derived from the user's JSON `sampling_level`.
     field: Vec<Vec<Option<(f32, u32)>>>,
-    /// One histogram per color map. Length matches
-    /// `fractal.color_palette().color_maps.len()`.
-    histograms: Vec<Histogram>,
-    /// Allocation-once color cache (per-color-map CDFs + LUTs and the
-    /// pre-converted flat `Color32`). CDFs are refreshed by the pipeline
-    /// after each compute pass; LUTs are refreshed by
-    /// `ColorPalette::refresh_cache` from current keyframes.
+    /// Allocation-once color cache (per-color-map histograms, CDFs, LUTs,
+    /// and the pre-converted background `Color32`). The pipeline fills the
+    /// histograms during (b), then `refresh_after_compute_pass` rebuilds
+    /// the CDFs / LUTs / background atomically as one step.
     color_cache: ColorPaletteCache,
     /// Permanent upsample factor for the field. The runtime sampling level
     /// passed to `render` is at most `n_max_plus_1 - 1`.
@@ -64,12 +62,6 @@ impl<F: Renderable> RenderingPipeline<F> {
         let outer = (spec.resolution[0] as usize) * n_max_plus_1;
         let inner = (spec.resolution[1] as usize) * n_max_plus_1;
         let field = (0..outer).map(|_| vec![None; inner]).collect();
-        let histograms = fractal
-            .color_palette()
-            .color_maps
-            .iter()
-            .map(|_| Histogram::new(histogram_bin_count, histogram_max_value))
-            .collect();
         let color_cache = fractal.color_palette().create_cache(
             histogram_bin_count,
             histogram_max_value,
@@ -78,7 +70,6 @@ impl<F: Renderable> RenderingPipeline<F> {
         Self {
             fractal,
             field,
-            histograms,
             color_cache,
             n_max_plus_1,
         }
@@ -113,28 +104,22 @@ impl<F: Renderable> RenderingPipeline<F> {
             &mut self.field,
         );
 
-        // (b) Bin populated cells into per-gradient histograms.
-        for h in &mut self.histograms {
-            h.reset();
-        }
+        // (b) Bin populated cells into the cache's per-color-map histograms.
+        self.color_cache.reset_histograms();
         populate_histograms(
             self.n_max_plus_1,
             sampling_level,
             &self.field,
-            &mut self.histograms,
+            &mut self.color_cache.histograms,
         );
 
-        // (c) Rebuild per-gradient CDFs from the freshly-populated histograms.
-        for (cdf, hist) in self.color_cache.cdfs.iter_mut().zip(&self.histograms) {
-            cdf.reset(hist);
-        }
+        // (c) Atomically rebuild every downstream-visible cache field
+        // (per-color-map CDFs, LUTs, background color) so the colorize
+        // pass below can't observe a half-updated cache.
+        self.color_cache
+            .refresh_after_compute_pass(self.fractal.color_palette());
 
-        // (d) Refresh LUTs and flat color from current keyframes.
-        self.fractal
-            .color_palette()
-            .refresh_cache(&mut self.color_cache);
-
-        // (e) Walk the output image; CDF + LUT lookup per cell; AA-average.
+        // (d) Walk the output image; CDF + LUT lookup per cell; AA-average.
         colorize_collapse_unified(
             &self.color_cache,
             &self.field,

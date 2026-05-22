@@ -60,24 +60,93 @@ where
 
 /// Allocation-once cache used by the colorize hot path. The pipeline
 /// owns one of these and refreshes it in place each frame.
+///
+/// The cache is the single source of truth for every piece of state the
+/// colorize step reads: per-color-map histograms, per-color-map CDFs,
+/// per-color-map LUTs, and the background color. The pipeline never
+/// touches the CDF / LUT / background fields directly — it fills the
+/// histograms, then calls `refresh_after_compute_pass` which rebuilds
+/// everything downstream atomically. This eliminates the foot-gun where
+/// the CDF could drift out of sync with the LUT or background.
 pub struct ColorPaletteCache {
-    /// Per-color-map CDF, refreshed by the pipeline after each compute pass.
-    /// Length matches `ColorPalette::color_maps.len()`.
-    pub cdfs: Vec<CumulativeDistributionFunction>,
-    /// Per-color-map `[0, 1]`-domain lookup table. Refreshed by
-    /// `ColorPalette::refresh_cache` from the current keyframes.
-    pub luts: Vec<ColorMapLookUpTable>,
+    /// One histogram per color map. The pipeline resets these before each
+    /// compute pass via [`ColorPaletteCache::reset_histograms`] and fills
+    /// them in `field_iteration::populate_histograms`. CDF state is
+    /// rebuilt from these on the next [`refresh_after_compute_pass`] call.
+    pub histograms: Vec<Histogram>,
+    /// Per-color-map CDF. Rebuilt from `histograms` inside
+    /// `refresh_after_compute_pass`.
+    cdfs: Vec<CumulativeDistributionFunction>,
+    /// Per-color-map `[0, 1]`-domain lookup table. Refreshed from the
+    /// current keyframes inside `refresh_after_compute_pass`.
+    luts: Vec<ColorMapLookUpTable>,
     /// `ColorPalette::background_color` pre-converted to `Color32`.
-    pub background: Color32,
+    background: Color32,
+}
+
+impl ColorPaletteCache {
+    /// Read-only view of the per-color-map CDFs; the colorize hot path
+    /// reads them directly from `colorize_cell`. Mutation goes through
+    /// [`refresh_after_compute_pass`] only.
+    pub fn cdfs(&self) -> &[CumulativeDistributionFunction] {
+        &self.cdfs
+    }
+
+    /// Reset every histogram bin to zero. Call this between renders, before
+    /// `field_iteration::populate_histograms` fills them again.
+    pub fn reset_histograms(&mut self) {
+        for histogram in &self.histograms {
+            histogram.reset();
+        }
+    }
+
+    /// Atomically rebuild every downstream-visible piece of cache state:
+    ///
+    /// 1. Per-color-map CDFs are rebuilt from `self.histograms` (which the
+    ///    pipeline filled between the prior `reset_histograms` and this
+    ///    call).
+    /// 2. Per-color-map LUTs are refreshed from `palette`'s current
+    ///    keyframes.
+    /// 3. The cached `background` color is refreshed from
+    ///    `palette.background_color`.
+    ///
+    /// One call updates all three so the colorize step can never see a
+    /// stale half-update.
+    pub fn refresh_after_compute_pass(&mut self, palette: &ColorPalette) {
+        debug_assert_eq!(
+            self.cdfs.len(),
+            self.histograms.len(),
+            "ColorPaletteCache CDF / histogram counts must match"
+        );
+        debug_assert_eq!(
+            self.luts.len(),
+            palette.color_maps.len(),
+            "ColorPaletteCache LUT count must match ColorPalette color_maps length; \
+             color-map count is fixed for the session"
+        );
+        for (cdf, histogram) in self.cdfs.iter_mut().zip(self.histograms.iter()) {
+            cdf.reset(histogram);
+        }
+        for (lut, keyframes) in self.luts.iter_mut().zip(palette.color_maps.iter()) {
+            let inner = KeyframeColorMap::new(keyframes, LinearInterpolator);
+            lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
+        }
+        self.background = Color32::from_rgb(
+            palette.background_color[0],
+            palette.background_color[1],
+            palette.background_color[2],
+        );
+    }
 }
 
 impl ColorPalette {
     /// Allocate the cache once at pipeline construction.
     ///
-    /// The CDFs are allocated against the supplied `histogram_bin_count`
-    /// and `histogram_max_value` so the pipeline can reuse them in place
-    /// across frames; their contents are recomputed from each frame's
-    /// per-color-map histogram.
+    /// The CDFs and histograms are allocated against the supplied
+    /// `histogram_bin_count` and `histogram_max_value` so the pipeline can
+    /// reuse them in place across frames; their contents are recomputed
+    /// from each frame's per-color-map histogram via
+    /// [`ColorPaletteCache::refresh_after_compute_pass`].
     pub fn create_cache(
         &self,
         histogram_bin_count: usize,
@@ -88,13 +157,14 @@ impl ColorPalette {
             !self.color_maps.is_empty(),
             "ColorPalette.color_maps must contain at least one color map"
         );
-        let cdfs = self
+        let histograms: Vec<Histogram> = self
             .color_maps
             .iter()
-            .map(|_| {
-                let hist = Histogram::new(histogram_bin_count, histogram_max_value);
-                CumulativeDistributionFunction::new(&hist)
-            })
+            .map(|_| Histogram::new(histogram_bin_count, histogram_max_value))
+            .collect();
+        let cdfs = histograms
+            .iter()
+            .map(CumulativeDistributionFunction::new)
             .collect();
         let luts = self
             .color_maps
@@ -112,32 +182,11 @@ impl ColorPalette {
             self.background_color[2],
         );
         ColorPaletteCache {
+            histograms,
             cdfs,
             luts,
             background,
         }
-    }
-
-    /// Refresh `background` and the per-color-map `luts` from the current
-    /// keyframes and `background_color`. Allocation-free; does NOT touch
-    /// `cdfs` (those are owned by the pipeline and refreshed from histograms
-    /// after each compute pass).
-    pub fn refresh_cache(&self, cache: &mut ColorPaletteCache) {
-        debug_assert_eq!(
-            cache.luts.len(),
-            self.color_maps.len(),
-            "ColorPaletteCache LUT count must match ColorPalette color_maps length; \
-             color-map count is fixed for the session"
-        );
-        for (lut, kfs) in cache.luts.iter_mut().zip(self.color_maps.iter()) {
-            let inner = KeyframeColorMap::new(kfs, LinearInterpolator);
-            lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
-        }
-        cache.background = Color32::from_rgb(
-            self.background_color[0],
-            self.background_color[1],
-            self.background_color[2],
-        );
     }
 }
 
@@ -150,7 +199,7 @@ pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8
         Some((value, color_map_index)) => {
             let count = cache.luts.len();
             let index = (color_map_index as usize) % count.max(1);
-            let percentile = cache.cdfs[index].percentile(value);
+            let percentile = cache.cdfs()[index].percentile(value);
             let rgb: Rgb<u8> = cache.luts[index].compute_pixel(percentile);
             [rgb[0], rgb[1], rgb[2]]
         }
@@ -398,6 +447,18 @@ mod tests {
         assert_eq!(colorize_cell(&cache, None), [9, 9, 9]);
     }
 
+    /// Populate each histogram in `cache` with a single mid-bucket sample
+    /// so the subsequent `refresh_after_compute_pass` produces a CDF that
+    /// maps value `0.0` → 0.0 (low keyframe) and any value in the rightmost
+    /// bin → 1.0 (high keyframe).
+    fn prime_cdfs_to_unit_distribution(cache: &mut ColorPaletteCache, palette: &ColorPalette) {
+        cache.reset_histograms();
+        for histogram in &cache.histograms {
+            histogram.insert(0.5);
+        }
+        cache.refresh_after_compute_pass(palette);
+    }
+
     #[test]
     fn colorize_cell_routes_to_correct_color_map() {
         let palette = ColorPalette {
@@ -416,17 +477,8 @@ mod tests {
                 ],
             ],
         };
-        // Bin count 1, max value 1.0 → CDF maps any value to 1.0 (all data
-        // in the single bin), which lands on the high keyframe.
         let mut cache = palette.create_cache(4, 1.0, 256);
-        // Populate fake CDFs so percentile resolves predictably: insert
-        // the same value into both histograms and rebuild the CDFs.
-        let h0 = Histogram::new(4, 1.0);
-        h0.insert(0.5);
-        cache.cdfs[0] = CumulativeDistributionFunction::new(&h0);
-        let h1 = Histogram::new(4, 1.0);
-        h1.insert(0.5);
-        cache.cdfs[1] = CumulativeDistributionFunction::new(&h1);
+        prime_cdfs_to_unit_distribution(&mut cache, &palette);
 
         // Color map 0 maps low percentiles toward red, high toward blue.
         let m0_low = colorize_cell(&cache, Some((0.0, 0)));
@@ -448,9 +500,7 @@ mod tests {
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 256);
-        let h = Histogram::new(4, 1.0);
-        h.insert(0.0);
-        cache.cdfs[0] = CumulativeDistributionFunction::new(&h);
+        prime_cdfs_to_unit_distribution(&mut cache, &palette);
 
         // color-map index 2 wraps to 0 via modulo.
         let rgb = colorize_cell(&cache, Some((0.0, 2)));
@@ -458,31 +508,30 @@ mod tests {
     }
 
     #[test]
-    fn refresh_cache_picks_up_keyframe_edits() {
+    fn refresh_after_compute_pass_picks_up_keyframe_edits() {
         let mut palette = ColorPalette {
             background_color: [0, 0, 0],
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
-        // Mutate a keyframe and refresh.
+        // Edit a keyframe and verify the next atomic refresh picks it up
+        // alongside the freshly-binned CDFs.
         palette.color_maps[0][0].rgb_raw = [50, 60, 70];
-        palette.refresh_cache(&mut cache);
-        // Force the CDF to map 0.0 → 0.0 so the lookup hits the low keyframe.
-        let h = Histogram::new(4, 1.0);
-        h.insert(0.5);
-        cache.cdfs[0] = CumulativeDistributionFunction::new(&h);
+        cache.reset_histograms();
+        cache.histograms[0].insert(0.5);
+        cache.refresh_after_compute_pass(&palette);
         assert_eq!(colorize_cell(&cache, Some((0.0, 0))), [50, 60, 70]);
     }
 
     #[test]
-    fn refresh_cache_picks_up_background_color_edits() {
+    fn refresh_after_compute_pass_picks_up_background_color_edits() {
         let mut palette = ColorPalette {
             background_color: [1, 2, 3],
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
         palette.background_color = [99, 100, 101];
-        palette.refresh_cache(&mut cache);
+        cache.refresh_after_compute_pass(&palette);
         assert_eq!(colorize_cell(&cache, None), [99, 100, 101]);
     }
 }

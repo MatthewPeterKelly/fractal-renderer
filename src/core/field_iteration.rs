@@ -225,7 +225,6 @@ pub fn colorize_collapse_unified(
 mod tests {
     use super::*;
     use crate::core::color_map::{ColorMapKeyFrame, ColorPalette};
-    use crate::core::histogram::CumulativeDistributionFunction;
 
     /// Build a minimal `ColorPaletteCache` whose CDFs are pre-shaped so that
     /// percentile lookups land predictably on the color-map endpoints:
@@ -234,11 +233,11 @@ mod tests {
     /// keyframe).
     fn cache_with_unit_distribution(palette: &ColorPalette) -> ColorPaletteCache {
         let mut cache = palette.create_cache(4, 1.0, 256);
-        for cdf in cache.cdfs.iter_mut() {
-            let h = Histogram::new(4, 1.0);
-            h.insert(0.5);
-            *cdf = CumulativeDistributionFunction::new(&h);
+        cache.reset_histograms();
+        for histogram in &cache.histograms {
+            histogram.insert(0.5);
         }
+        cache.refresh_after_compute_pass(palette);
         cache
     }
 

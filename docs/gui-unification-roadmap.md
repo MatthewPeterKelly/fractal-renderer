@@ -221,8 +221,8 @@ upgrades within the eframe family are unconstrained.
 > end state. The earlier shape is preserved in commits 4199c23 / 0caa21c /
 > 8008aff for reference.
 
-A single uniform color-map type, a single uniform cell shape, and a
-five-phase pipeline serve every fractal family. Per-fractal customization
+A single uniform color-palette type, a single uniform cell shape, and a
+four-phase pipeline serve every fractal family. Per-fractal customization
 reduces to one method (`evaluate(point) -> Cell`) plus static config.
 
 The field shape is `Vec<Vec<Cell>>` with `Cell = Option<(f32, u32)>` — the
@@ -261,29 +261,48 @@ palette whose color map is constant (the foreground color repeated at
 
 The old `ColorMapKind` trait collapses to a single impl on `ColorPalette`.
 With one impl the trait carries no weight, so it is dropped —
-`ColorPalette` exposes its `create_cache` / `refresh_cache` /
-`colorize_cell` as inherent methods, and the pipeline operates over a
-concrete `ColorPalette` rather than a generic parameter.
+`ColorPalette` exposes `create_cache` as an inherent method, and the
+pipeline operates over a concrete `ColorPalette` rather than a generic
+parameter. The cache itself owns the per-color-map histograms and exposes
+a single atomic `refresh_after_compute_pass` entry point that rebuilds
+every downstream-visible piece of state at once, so the colorize step
+can never observe a half-updated cache.
 
 ```rust
 impl ColorPalette {
     /// Allocate the cache once at pipeline construction.
-    /// `lookup_table_count` sets the resolution of each color map's LUT.
-    pub fn create_cache(&self, lookup_table_count: usize) -> ColorPaletteCache;
-
-    /// Rebuild the cache in place from current keyframes / flat colors.
-    /// Allocation-free. Re-runs after keyframe edits (Phase 7).
-    pub fn refresh_cache(&self, cache: &mut ColorPaletteCache);
+    pub fn create_cache(
+        &self,
+        histogram_bin_count: usize,
+        histogram_max_value: f32,
+        lookup_table_count: usize,
+    ) -> ColorPaletteCache;
 }
 
 pub struct ColorPaletteCache {
-    /// Per-color-map CDF. Length matches `ColorPalette::color_maps.len()`.
-    /// Refreshed by the pipeline after each compute pass.
-    pub cdfs: Vec<CumulativeDistributionFunction>,
-    /// Per-color-map LUT, `[0,1]`-domain. Refreshed by `refresh_cache`.
-    pub luts: Vec<ColorMapLookUpTable>,
-    /// Pre-converted `background_color`.
-    pub background: Color32,
+    /// Per-color-map histogram. Reset by the pipeline before each compute
+    /// pass; filled in `field_iteration::populate_histograms`. Read back
+    /// inside `refresh_after_compute_pass` to rebuild the CDFs.
+    pub histograms: Vec<Histogram>,
+    // Private: rebuilt atomically by `refresh_after_compute_pass`.
+    cdfs: Vec<CumulativeDistributionFunction>,
+    luts: Vec<ColorMapLookUpTable>,
+    background: Color32,
+}
+
+impl ColorPaletteCache {
+    /// Read-only access to the per-color-map CDFs; the colorize hot path
+    /// reads them directly from `colorize_cell`.
+    pub fn cdfs(&self) -> &[CumulativeDistributionFunction];
+
+    /// Zero every histogram bin. Call before each
+    /// `field_iteration::populate_histograms` invocation.
+    pub fn reset_histograms(&mut self);
+
+    /// Rebuild CDFs from `self.histograms`, refresh LUTs from `palette`'s
+    /// current keyframes, and refresh the cached `background` color.
+    /// Allocation-free; re-runs after keyframe edits (Phase 7).
+    pub fn refresh_after_compute_pass(&mut self, palette: &ColorPalette);
 }
 
 /// Per-cell colorize. Statically dispatched, called inside the AA-collapse
@@ -345,19 +364,18 @@ top of [src/cli/explore.rs](../src/cli/explore.rs) where `match
 fractal_params { … }` selects the concrete `F` to instantiate. From there
 inward every call site is monomorphized.
 
-### 5.3 The five-phase `RenderingPipeline`
+### 5.3 The four-phase `RenderingPipeline`
 
 A single top-level orchestrator, parameterized by `F: Renderable`, owns all
-reusable buffers. The pipeline is broken into five steps, but only step (a)
-is fractal-specific — the rest is shared core code:
+reusable buffers. The pipeline is four steps long; only step (a) is
+fractal-specific — the rest is shared core code:
 
 ```rust
 pub struct RenderingPipeline<F: Renderable> {
     fractal: F,
     field: Vec<Vec<Option<(f32, u32)>>>,
-    /// One histogram per color map. Length matches
-    /// `fractal.color_palette().color_maps.len()`.
-    histograms: Vec<Histogram>,
+    /// Owns histograms + CDFs + LUTs + background. Refreshed atomically
+    /// inside `refresh_after_compute_pass`.
     color_cache: ColorPaletteCache,
     n_max_plus_1: usize,
 }
@@ -369,20 +387,17 @@ impl<F: Renderable> RenderingPipeline<F> {
             self.fractal.image_specification(),
             self.n_max_plus_1, sampling_level, &self.fractal, &mut self.field);
 
-        // (b) Bin into per-color-map histograms.
-        for h in &mut self.histograms { h.reset(); }
+        // (b) Bin into the cache's per-color-map histograms.
+        self.color_cache.reset_histograms();
         core::field_iteration::populate_histograms(
-            self.n_max_plus_1, sampling_level, &self.field, &mut self.histograms);
+            self.n_max_plus_1, sampling_level, &self.field,
+            &mut self.color_cache.histograms);
 
-        // (c) Rebuild per-color-map CDFs.
-        for (cdf, hist) in self.color_cache.cdfs.iter_mut().zip(&self.histograms) {
-            cdf.reset(hist);
-        }
+        // (c) Atomically rebuild CDFs (from the just-filled histograms),
+        // LUTs (from the palette's keyframes), and the background color.
+        self.color_cache.refresh_after_compute_pass(self.fractal.color_palette());
 
-        // (d) Refresh LUTs from current keyframes.
-        self.fractal.color_palette().refresh_cache(&mut self.color_cache);
-
-        // (e) Walk field; CDF + LUT lookup per cell; AA-average per output pixel.
+        // (d) Walk field; CDF + LUT lookup per cell; AA-average per output pixel.
         core::field_iteration::colorize_collapse_unified(
             &self.color_cache, &self.field,
             self.n_max_plus_1, sampling_level, out);
@@ -395,9 +410,10 @@ stays raw; the CDF lookup happens inside `colorize_cell` at colorize time.
 This means:
 
 - **Keyframe edits** invalidate only the LUTs (and optionally the
-  `background_color`). Re-run (d) + (e); skip (a)/(b)/(c). Phase 7 lives here.
+  `background_color`). Re-run a focused refresh + (d); skip (a)/(b)/(c).
+  Phase 7 lives here.
 - **No race between normalize and colorize**: the field is only ever
-  written by (a) and only ever read by (b)/(e).
+  written by (a) and only ever read by (b)/(d).
 - **Per-root histograms come for free**: Newton naturally bins into
   separate histograms per root, so each basin gets its own CDF over its own
   iteration-count distribution. The other fractals trivially reduce to a
