@@ -13,7 +13,7 @@
       },
       "color": {
         "flat_color": [255, 255, 255],
-        "gradients": [
+        "color_maps": [
           [
             {
               "query": 0.0,

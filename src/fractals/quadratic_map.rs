@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 use crate::core::{
-    color_map::ColorMap,
+    color_map::ColorPalette,
     field_iteration::FieldKernel,
     image_utils::{
         ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
@@ -17,11 +17,11 @@ use crate::core::{
 /// pre-baked lookup table.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ColorMapParams {
-    /// Flat color (for in-set pixels) and one gradient (for escaped pixels).
-    pub color: ColorMap,
+    /// Flat color (for in-set pixels) and one color map (for escaped pixels).
+    pub color: ColorPalette,
     /// Number of entries in the precomputed color lookup table.
     pub lookup_table_count: usize,
-    /// Number of bins used by the histogram that drives gradient normalization.
+    /// Number of bins used by the histogram that drives color-map normalization.
     pub histogram_bin_count: usize,
 }
 
@@ -246,11 +246,11 @@ impl<T: QuadraticMapParams> Renderable for T {
         QuadraticMapParams::render_options(self)
     }
 
-    fn color_map(&self) -> &ColorMap {
+    fn color_palette(&self) -> &ColorPalette {
         &self.color_map_params().color
     }
 
-    fn color_map_mut(&mut self) -> &mut ColorMap {
+    fn color_palette_mut(&mut self) -> &mut ColorPalette {
         &mut self.color_map_params_mut().color
     }
 

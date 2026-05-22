@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::core::color_map::ColorMap;
+use crate::core::color_map::ColorPalette;
 use crate::core::field_iteration::FieldKernel;
 use crate::core::interpolation::Interpolator;
 use crate::core::render_pipeline::RenderingPipeline;
@@ -251,20 +251,21 @@ pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
     /// histogram bin's range.
     fn histogram_max_value(&self) -> f32;
 
-    /// LUT resolution per gradient. Each gradient's lookup table is
+    /// LUT resolution per color map. Each color map's lookup table is
     /// allocated to this size at pipeline construction.
     fn lookup_table_count(&self) -> usize;
 
-    /// Reference to the unified `ColorMap` driving colorization. Length of
-    /// `gradients` is fixed for the session and matches the gradient
+    /// Reference to the unified `ColorPalette` driving colorization. Length
+    /// of `color_maps` is fixed for the session and matches the color-map
     /// indices that `FieldKernel::evaluate` is allowed to emit.
-    fn color_map(&self) -> &ColorMap;
+    fn color_palette(&self) -> &ColorPalette;
 
-    /// Mutable access to the color map. Used by Phase 7 live keyframe edits;
-    /// holds no semantic difference from `color_map` today, the editor flow
-    /// just needs a path to mutate keyframes through the renderer.
+    /// Mutable access to the color palette. Used by Phase 7 live keyframe
+    /// edits; holds no semantic difference from `color_palette` today, the
+    /// editor flow just needs a path to mutate keyframes through the
+    /// renderer.
     #[allow(dead_code)]
-    fn color_map_mut(&mut self) -> &mut ColorMap;
+    fn color_palette_mut(&mut self) -> &mut ColorPalette;
 }
 
 /// Render a fractal to a PNG file (and a sibling JSON / diagnostics file).

@@ -14,7 +14,7 @@
     },
     "color": {
       "flat_color": [0, 0, 0],
-      "gradients": [
+      "color_maps": [
         [
           {
             "query": 0.0,

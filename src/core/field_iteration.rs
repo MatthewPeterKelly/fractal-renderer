@@ -18,7 +18,7 @@ use rayon::iter::{
 };
 use rayon::slice::ParallelSliceMut;
 
-use crate::core::color_map::{ColorMapCache, colorize_cell};
+use crate::core::color_map::{ColorPaletteCache, colorize_cell};
 use crate::core::histogram::Histogram;
 use crate::core::image_utils::{ImageSpecification, PixelMapper};
 
@@ -155,7 +155,7 @@ pub fn populate_histograms(
 }
 
 /// Walk the row-major output `egui::ColorImage`, collapsing field cells
-/// into output pixels via the unified `ColorMapCache`.
+/// into output pixels via the unified `ColorPaletteCache`.
 ///
 /// - **Positive `sampling_level = r`**: each output pixel `(px, py)` averages
 ///   the `(r+1)²` cells at `field[px·n_max_plus_1 + i][py·n_max_plus_1 + j]`
@@ -168,7 +168,7 @@ pub fn populate_histograms(
 /// CDF percentile lookup happens inside `colorize_cell`; the field stays
 /// raw end-to-end. Per-pixel allocations: zero.
 pub fn colorize_collapse_unified(
-    cache: &ColorMapCache,
+    cache: &ColorPaletteCache,
     field: &[Vec<Option<(f32, u32)>>],
     n_max_plus_1: usize,
     sampling_level: i32,
@@ -224,16 +224,16 @@ pub fn colorize_collapse_unified(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::color_map::{ColorMap, ColorMapKeyFrame};
+    use crate::core::color_map::{ColorMapKeyFrame, ColorPalette};
     use crate::core::histogram::CumulativeDistributionFunction;
 
-    /// Build a minimal `ColorMapCache` whose CDFs are pre-shaped so that
-    /// percentile lookups land predictably on the gradient endpoints:
+    /// Build a minimal `ColorPaletteCache` whose CDFs are pre-shaped so that
+    /// percentile lookups land predictably on the color-map endpoints:
     /// inserting a single mid-bucket sample makes value `0.0` map to 0.0
     /// (low keyframe) and any value in the rightmost bin map to 1.0 (high
     /// keyframe).
-    fn cache_with_unit_distribution(map: &ColorMap) -> ColorMapCache {
-        let mut cache = map.create_cache(4, 1.0, 256);
+    fn cache_with_unit_distribution(palette: &ColorPalette) -> ColorPaletteCache {
+        let mut cache = palette.create_cache(4, 1.0, 256);
         for cdf in cache.cdfs.iter_mut() {
             let h = Histogram::new(4, 1.0);
             h.insert(0.5);
@@ -242,12 +242,11 @@ mod tests {
         cache
     }
 
-    /// Single-keyframe-equivalent gradient: value at 0.0 → red,
-    /// value at 1.0 → blue.
-    fn red_to_blue_map() -> ColorMap {
-        ColorMap {
+    /// Single-color-map palette: value at 0.0 → red, value at 1.0 → blue.
+    fn red_to_blue_palette() -> ColorPalette {
+        ColorPalette {
             flat_color: [9, 9, 9],
-            gradients: vec![vec![
+            color_maps: vec![vec![
                 ColorMapKeyFrame {
                     query: 0.0,
                     rgb_raw: [255, 0, 0],
@@ -266,8 +265,8 @@ mod tests {
     /// the flat color.
     #[test]
     fn colorize_collapse_unified_aa_averaging_matches_hand_computed() {
-        let map = red_to_blue_map();
-        let cache = cache_with_unit_distribution(&map);
+        let palette = red_to_blue_palette();
+        let cache = cache_with_unit_distribution(&palette);
 
         let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 4]; 4];
         // Top-left block (px=0, py=0) ← all Some((0.0, 0)) → red.
@@ -303,8 +302,8 @@ mod tests {
     /// `n = 1` (sampling_level = 0): one cell per output pixel, no averaging.
     #[test]
     fn colorize_collapse_unified_no_aa_one_cell_per_pixel() {
-        let map = red_to_blue_map();
-        let cache = cache_with_unit_distribution(&map);
+        let palette = red_to_blue_palette();
+        let cache = cache_with_unit_distribution(&palette);
 
         let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 2]; 2];
         field[0][0] = Some((0.0, 0));
@@ -323,8 +322,8 @@ mod tests {
     /// field cell.
     #[test]
     fn colorize_collapse_unified_block_fill_shares_color_in_each_block() {
-        let map = red_to_blue_map();
-        let cache = cache_with_unit_distribution(&map);
+        let palette = red_to_blue_palette();
+        let cache = cache_with_unit_distribution(&palette);
 
         let mut field: Vec<Vec<Option<(f32, u32)>>> = vec![vec![None; 4]; 4];
         field[0][0] = Some((0.0, 0));

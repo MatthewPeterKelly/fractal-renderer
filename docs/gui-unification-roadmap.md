@@ -227,52 +227,60 @@ reduces to one method (`evaluate(point) -> Cell`) plus static config.
 
 The field shape is `Vec<Vec<Cell>>` with `Cell = Option<(f32, u32)>` — the
 `f32` is the raw scalar value (smooth iteration count, basin marker, etc.)
-and the `u32` is the _gradient index_ picking which gradient to colorize
-through. Mandelbrot/Julia/DDP always emit gradient index 0; Newton emits the
-root index. The field stays raw end-to-end — there is no `normalize_field`
-pass; CDF percentile lookup happens inside `colorize_cell`.
+and the `u32` is the _color-map index_ picking which color map to colorize
+through. Mandelbrot/Julia/DDP always emit color-map index 0; Newton emits
+the root index. The field stays raw end-to-end — there is no
+`normalize_field` pass; CDF percentile lookup happens inside
+`colorize_cell`.
 
-### 5.1 The unified `ColorMap` type
+### 5.1 The unified `ColorPalette` type
+
+A single color map is itself a `Vec<ColorMapKeyFrame>`, so the outer
+container is "a palette of color maps plus a background":
 
 ```rust
+/// A single color map: the keyframes that get interpolated to colorize
+/// one channel of a fractal.
+pub type ColorMap = Vec<ColorMapKeyFrame>;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ColorMap {
+pub struct ColorPalette {
     /// Color used for cells whose evaluation produced no scalar (Mandelbrot
     /// in-set, DDP out-of-basin, Newton non-converging).
     pub flat_color: [u8; 3],
-    /// One gradient per "channel". Mandelbrot/Julia/DDP have `len() == 1`;
-    /// Newton has one entry per root. The `u32` in each cell indexes into
-    /// this vec.
-    pub gradients: Vec<Vec<ColorMapKeyFrame>>,
+    /// One color map per "channel". Mandelbrot/Julia/DDP have
+    /// `len() == 1`; Newton has one entry per root. The `u32` in each cell
+    /// indexes into this vec.
+    pub color_maps: Vec<ColorMap>,
 }
 ```
 
-DDP's degenerate "all foreground" case is encoded as a single-keyframe
-gradient (a constant-color gradient — the foreground color repeated at
+DDP's degenerate "all foreground" case is encoded as a single-color-map
+palette whose color map is constant (the foreground color repeated at
 `query=0.0` and `query=1.0`).
 
-The `ColorMapKind` trait collapses to a single impl on `ColorMap`. With one
-impl the trait carries no weight, so it is dropped — `ColorMap` exposes its
-`create_cache` / `refresh_cache` / `colorize_cell` as inherent methods, and
-the pipeline operates over a concrete `ColorMap` rather than a generic
-parameter.
+The old `ColorMapKind` trait collapses to a single impl on `ColorPalette`.
+With one impl the trait carries no weight, so it is dropped —
+`ColorPalette` exposes its `create_cache` / `refresh_cache` /
+`colorize_cell` as inherent methods, and the pipeline operates over a
+concrete `ColorPalette` rather than a generic parameter.
 
 ```rust
-impl ColorMap {
+impl ColorPalette {
     /// Allocate the cache once at pipeline construction.
-    /// `lookup_table_count` sets the resolution of each gradient's LUT.
-    pub fn create_cache(&self, lookup_table_count: usize) -> ColorMapCache;
+    /// `lookup_table_count` sets the resolution of each color map's LUT.
+    pub fn create_cache(&self, lookup_table_count: usize) -> ColorPaletteCache;
 
     /// Rebuild the cache in place from current keyframes / flat colors.
     /// Allocation-free. Re-runs after keyframe edits (Phase 7).
-    pub fn refresh_cache(&self, cache: &mut ColorMapCache);
+    pub fn refresh_cache(&self, cache: &mut ColorPaletteCache);
 }
 
-pub struct ColorMapCache {
-    /// Per-gradient CDF. Length matches `ColorMap::gradients.len()`.
+pub struct ColorPaletteCache {
+    /// Per-color-map CDF. Length matches `ColorPalette::color_maps.len()`.
     /// Refreshed by the pipeline after each compute pass.
     pub cdfs: Vec<CumulativeDistributionFunction>,
-    /// Per-gradient LUT, `[0,1]`-domain. Refreshed by `refresh_cache`.
+    /// Per-color-map LUT, `[0,1]`-domain. Refreshed by `refresh_cache`.
     pub luts: Vec<ColorMapLookUpTable>,
     /// Pre-converted `flat_color`.
     pub flat: Color32,
@@ -281,12 +289,12 @@ pub struct ColorMapCache {
 /// Per-cell colorize. Statically dispatched, called inside the AA-collapse
 /// loop. CDF lookup + LUT lookup happen here, in color space.
 #[inline]
-pub fn colorize_cell(cache: &ColorMapCache, cell: Option<(f32, u32)>) -> [u8; 3] {
+pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3] {
     match cell {
-        Some((value, gradient_index)) => {
-            let g = gradient_index as usize;
-            let pct = cache.cdfs[g].percentile(value);
-            cache.luts[g].lookup(pct)
+        Some((value, color_map_index)) => {
+            let index = color_map_index as usize;
+            let percentile = cache.cdfs[index].percentile(value);
+            cache.luts[index].lookup(percentile)
         }
         None => [cache.flat.r(), cache.flat.g(), cache.flat.b()],
     }
@@ -306,7 +314,7 @@ fractal duplicates the parallel-iter skeleton.
 /// this much of the math.
 pub trait FieldKernel: Sync + Send {
     /// Evaluate the scalar field at one real-space point.
-    /// Returns `Some((value, gradient_index))` or `None` for "no value".
+    /// Returns `Some((value, color_map_index))` or `None` for "no value".
     fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)>;
 }
 
@@ -320,14 +328,14 @@ pub trait Renderable: FieldKernel + SpeedOptimizer {
     fn render_options(&self) -> &RenderOptions;
     fn params(&self) -> &Self::Params;
     fn write_diagnostics<W: Write>(&self, writer: &mut W) -> io::Result<()>;
-    fn color_map(&self) -> &ColorMap;
-    fn color_map_mut(&mut self) -> &mut ColorMap;  // used in Phase 7
+    fn color_palette(&self) -> &ColorPalette;
+    fn color_palette_mut(&mut self) -> &mut ColorPalette;  // used in Phase 7
 
-    /// Histogram capacity in bins per gradient.
+    /// Histogram capacity in bins per color map.
     fn histogram_bin_count(&self) -> usize;
     /// Maximum scalar value the histogram can absorb.
     fn histogram_max_value(&self) -> f32;
-    /// LUT resolution per gradient.
+    /// LUT resolution per color map.
     fn lookup_table_count(&self) -> usize;
 }
 ```
@@ -347,9 +355,10 @@ is fractal-specific — the rest is shared core code:
 pub struct RenderingPipeline<F: Renderable> {
     fractal: F,
     field: Vec<Vec<Option<(f32, u32)>>>,
-    /// One histogram per gradient. Length matches `fractal.color_map().gradients.len()`.
+    /// One histogram per color map. Length matches
+    /// `fractal.color_palette().color_maps.len()`.
     histograms: Vec<Histogram>,
-    color_cache: ColorMapCache,
+    color_cache: ColorPaletteCache,
     n_max_plus_1: usize,
 }
 
@@ -360,21 +369,21 @@ impl<F: Renderable> RenderingPipeline<F> {
             self.fractal.image_specification(),
             self.n_max_plus_1, sampling_level, &self.fractal, &mut self.field);
 
-        // (b) Bin into per-gradient histograms.
+        // (b) Bin into per-color-map histograms.
         for h in &mut self.histograms { h.reset(); }
         core::field_iteration::populate_histograms(
             self.n_max_plus_1, sampling_level, &self.field, &mut self.histograms);
 
-        // (c) Rebuild per-gradient CDFs.
+        // (c) Rebuild per-color-map CDFs.
         for (cdf, hist) in self.color_cache.cdfs.iter_mut().zip(&self.histograms) {
             cdf.reset(hist);
         }
 
         // (d) Refresh LUTs from current keyframes.
-        self.fractal.color_map().refresh_cache(&mut self.color_cache);
+        self.fractal.color_palette().refresh_cache(&mut self.color_cache);
 
         // (e) Walk field; CDF + LUT lookup per cell; AA-average per output pixel.
-        core::field_iteration::colorize_collapse(
+        core::field_iteration::colorize_collapse_unified(
             &self.color_cache, &self.field,
             self.n_max_plus_1, sampling_level, out);
     }
@@ -407,10 +416,11 @@ All buffers are allocated **once per session** (or per window resize) on
 - `field` is sized for `(n_max+1)·W × (n_max+1)·H` where `n_max+1` derives
   from the user's JSON `sampling_level` (positive AA values cap field
   size). Reallocated only on window resize.
-- `histograms` (one per gradient) and `color_cache` (containing per-gradient
-  CDFs and LUTs) are independent of resolution; each is allocated once and
-  reset/refreshed in place. Per-gradient vec lengths are determined at
-  construction from `fractal.color_map().gradients.len()`.
+- `histograms` (one per color map) and `color_cache` (containing
+  per-color-map CDFs and LUTs) are independent of resolution; each is
+  allocated once and reset/refreshed in place. Per-color-map vec lengths
+  are determined at construction from
+  `fractal.color_palette().color_maps.len()`.
 - The output `egui::ColorImage` is owned by `PixelGrid`, sized to `[W, H]`,
   reallocated only on resize.
 
@@ -438,22 +448,22 @@ interpolation between sparse samples is dropped in Phase 2.2. Users see
 `(n+1)²`-pixel blocks while interactive; full-resolution returns when
 quality climbs back to baseline.
 
-### 5.6 Why a single uniform color-map type
+### 5.6 Why a single uniform color-palette type
 
-A single `ColorMap` shape with `Vec<gradient>` keeps:
+A single `ColorPalette` shape with `Vec<ColorMap>` keeps:
 
 - **All AA / block-fill iteration in core.** Three core helpers
-  (`compute_raw_field`, `populate_histograms`, `colorize_collapse`) each
-  consume the same `Vec<Vec<Option<(f32, u32)>>>` field and the same
-  `&ColorMapCache`. No fractal code touches the parallel-iter skeleton.
+  (`compute_raw_field`, `populate_histograms`, `colorize_collapse_unified`)
+  each consume the same `Vec<Vec<Option<(f32, u32)>>>` field and the same
+  `&ColorPaletteCache`. No fractal code touches the parallel-iter skeleton.
 - **The colorize hot path allocation-free.** The cache is reused in place;
   no per-render `Vec` construction.
 - **One LUT shape, one CDF shape, one cell shape.** Mandelbrot/Julia/DDP
-  reduce to `gradients.len() == 1`; Newton uses N>1. There is no
-  "single-gradient fast path" — N=1 is the same path as N=many, just with
+  reduce to `color_maps.len() == 1`; Newton uses N>1. There is no
+  "single-color-map fast path" — N=1 is the same path as N=many, just with
   a unit-length vec.
 - **The editor static** (Phase 5): the editor widget operates on a single
-  concrete `ColorMap` type. Per-fractal customization lives in the
+  concrete `ColorPalette` type. Per-fractal customization lives in the
   per-fractal renderer, not the editor.
 
 The earlier (pre-Phase-3) shape had three separate `ColorMapKind` impls,

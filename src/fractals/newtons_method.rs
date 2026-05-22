@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{f64::consts::PI, fmt::Debug};
 
 use crate::core::{
-    color_map::ColorMap,
+    color_map::ColorPalette,
     field_iteration::FieldKernel,
     file_io::FilePrefix,
     image_utils::{
@@ -195,8 +195,8 @@ pub struct CommonParams {
     pub convergence_tolerance: f64,
     /// Rendering options (anti-aliasing, downsampling, etc.).
     pub render_options: RenderOptions,
-    /// Per-root gradients plus the cyclic-attractor (non-converged) flat color.
-    pub color: ColorMap,
+    /// Per-root color maps plus the cyclic-attractor (non-converged) flat color.
+    pub color: ColorPalette,
     /// Number of entries in each precomputed color lookup table.
     pub lookup_table_count: usize,
     /// Number of bins per per-root histogram. Each root gets its own
@@ -226,11 +226,11 @@ pub struct NewtonsMethodRenderable<F: ComplexFunctionWithSlope> {
 
 impl<F: ComplexFunctionWithSlope> NewtonsMethodRenderable<F> {
     /// Construct a Newton renderer. Asserts there is at least one
-    /// gradient (the colorize cache assumes `gradients` is non-empty).
+    /// color map (the colorize cache assumes `color_maps` is non-empty).
     pub fn new(params: CommonParams, system: F) -> Self {
         assert!(
-            !params.color.gradients.is_empty(),
-            "color.gradients must define at least one gradient"
+            !params.color.color_maps.is_empty(),
+            "color.color_maps must define at least one color map"
         );
         Self { params, system }
     }
@@ -286,10 +286,10 @@ where
     F: ComplexFunctionWithSlope + Sync + Send,
 {
     fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
-        let n_gradients = self.params.color.gradients.len() as u32;
+        let n_color_maps = self.params.color.color_maps.len() as u32;
         self.newton_rhapson_iteration_sequence(Complex64::new(point[0], point[1]))
             .map(|res| {
-                let k = (self.system.root_index(res.soln) as u32) % n_gradients.max(1);
+                let k = (self.system.root_index(res.soln) as u32) % n_color_maps.max(1);
                 (res.smooth_iteration_count, k)
             })
     }
@@ -321,11 +321,11 @@ where
         &self.params
     }
 
-    fn color_map(&self) -> &ColorMap {
+    fn color_palette(&self) -> &ColorPalette {
         &self.params.color
     }
 
-    fn color_map_mut(&mut self) -> &mut ColorMap {
+    fn color_palette_mut(&mut self) -> &mut ColorPalette {
         &mut self.params.color
     }
 

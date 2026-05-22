@@ -1,5 +1,5 @@
 use crate::core::{
-    color_map::{ColorMap, ColorMapKeyFrame},
+    color_map::{ColorMapKeyFrame, ColorPalette},
     field_iteration::FieldKernel,
     image_utils::{
         ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
@@ -10,14 +10,14 @@ use crate::core::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Default color map for DDP: black flat color (out-of-basin) and a
-/// degenerate single-keyframe-pair white gradient (zeroth-basin).
+/// Default color palette for DDP: black flat color (out-of-basin) and a
+/// degenerate single-keyframe-pair white color map (zeroth-basin).
 /// Matches the previously hard-coded foreground/background, so JSON files
 /// without a `color` field continue to render identically.
-fn ddp_default_color() -> ColorMap {
-    ColorMap {
+fn ddp_default_color() -> ColorPalette {
+    ColorPalette {
         flat_color: [0, 0, 0],
-        gradients: vec![vec![
+        color_maps: vec![vec![
             ColorMapKeyFrame {
                 query: 0.0,
                 rgb_raw: [255, 255, 255],
@@ -41,18 +41,18 @@ pub struct DrivenDampedPendulumParams {
     // Convergence criteria
     pub periodic_state_error_tolerance: f64,
     pub render_options: RenderOptions,
-    /// Flat (out-of-basin) color and a single-gradient (in-basin) palette.
-    /// The gradient is constant-color in the canonical configuration, so
+    /// Flat (out-of-basin) color and a single color map (in-basin).
+    /// The color map is constant-color in the canonical configuration, so
     /// the histogram / CDF percentile output never affects pixels.
     #[serde(default = "ddp_default_color")]
-    pub color: ColorMap,
+    pub color: ColorPalette,
 }
 
 impl FieldKernel for DrivenDampedPendulumParams {
     /// Map "in zeroth basin" to a `Some((1.0, 0))` cell — value `1.0`
-    /// trivially fills the single histogram bin, and gradient index 0
-    /// routes to DDP's only gradient. Out-of-basin / non-converged → `None`,
-    /// which colorizes through `flat_color`.
+    /// trivially fills the single histogram bin, and color-map index 0
+    /// routes to DDP's only color map. Out-of-basin / non-converged →
+    /// `None`, which colorizes through `flat_color`.
     fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
         match compute_basin_of_attraction(
             &point,
@@ -70,11 +70,11 @@ impl FieldKernel for DrivenDampedPendulumParams {
 impl Renderable for DrivenDampedPendulumParams {
     type Params = DrivenDampedPendulumParams;
 
-    fn color_map(&self) -> &ColorMap {
+    fn color_palette(&self) -> &ColorPalette {
         &self.color
     }
 
-    fn color_map_mut(&mut self) -> &mut ColorMap {
+    fn color_palette_mut(&mut self) -> &mut ColorPalette {
         &mut self.color
     }
 
@@ -98,7 +98,7 @@ impl Renderable for DrivenDampedPendulumParams {
         self
     }
 
-    /// DDP's gradient is constant-color, so the histogram output never
+    /// DDP's color map is constant-color, so the histogram output never
     /// affects pixels — a single bin is sufficient.
     fn histogram_bin_count(&self) -> usize {
         1
@@ -109,7 +109,7 @@ impl Renderable for DrivenDampedPendulumParams {
         1.0
     }
 
-    /// LUT resolution for the (constant-color) gradient. Small value to
+    /// LUT resolution for the (constant-color) color map. Small value to
     /// keep allocation trivial.
     fn lookup_table_count(&self) -> usize {
         4
@@ -261,9 +261,9 @@ mod tests {
         }"#;
         let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.color.flat_color, [0, 0, 0]);
-        assert_eq!(parsed.color.gradients.len(), 1);
-        assert_eq!(parsed.color.gradients[0].len(), 2);
-        assert_eq!(parsed.color.gradients[0][0].rgb_raw, [255, 255, 255]);
-        assert_eq!(parsed.color.gradients[0][1].rgb_raw, [255, 255, 255]);
+        assert_eq!(parsed.color.color_maps.len(), 1);
+        assert_eq!(parsed.color.color_maps[0].len(), 2);
+        assert_eq!(parsed.color.color_maps[0][0].rgb_raw, [255, 255, 255]);
+        assert_eq!(parsed.color.color_maps[0][1].rgb_raw, [255, 255, 255]);
     }
 }

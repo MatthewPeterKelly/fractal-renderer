@@ -77,9 +77,10 @@ pub fn color_editor_example_from_string(example_name: &str) {
     // shape `run_color_editor` still expects.
     let (keyframes, preview_buffer, resolution) = match fractal_params {
         FractalParams::Mandelbrot(params) => {
-            // The unified ColorMap stores per-gradient keyframes; Mandelbrot
-            // always has exactly one gradient, so index 0 is safe here.
-            let kf = params.color_map.color.gradients[0].clone();
+            // The unified ColorPalette stores per-color-map keyframes;
+            // Mandelbrot always has exactly one color map, so index 0 is
+            // safe here.
+            let kf = params.color_map.color.color_maps[0].clone();
             let resolution = params.image_specification.resolution;
             let renderer = (*params).clone();
             let n_max_plus_1 = field_upsample_factor(renderer.render_options().sampling_level);

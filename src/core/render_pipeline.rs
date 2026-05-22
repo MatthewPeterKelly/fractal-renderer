@@ -21,7 +21,7 @@
 
 use egui::ColorImage;
 
-use crate::core::color_map::ColorMapCache;
+use crate::core::color_map::ColorPaletteCache;
 use crate::core::field_iteration::{
     colorize_collapse_unified, compute_raw_field, populate_histograms,
 };
@@ -36,14 +36,14 @@ pub struct RenderingPipeline<F: Renderable> {
     /// Subpixel field, sized at construction for `(n_max+1)·W × (n_max+1)·H`
     /// where `n_max+1` is derived from the user's JSON `sampling_level`.
     field: Vec<Vec<Option<(f32, u32)>>>,
-    /// One histogram per gradient. Length matches
-    /// `fractal.color_map().gradients.len()`.
+    /// One histogram per color map. Length matches
+    /// `fractal.color_palette().color_maps.len()`.
     histograms: Vec<Histogram>,
-    /// Allocation-once color cache (per-gradient CDFs + LUTs and the
+    /// Allocation-once color cache (per-color-map CDFs + LUTs and the
     /// pre-converted flat `Color32`). CDFs are refreshed by the pipeline
     /// after each compute pass; LUTs are refreshed by
-    /// `ColorMap::refresh_cache` from current keyframes.
-    color_cache: ColorMapCache,
+    /// `ColorPalette::refresh_cache` from current keyframes.
+    color_cache: ColorPaletteCache,
     /// Permanent upsample factor for the field. The runtime sampling level
     /// passed to `render` is at most `n_max_plus_1 - 1`.
     n_max_plus_1: usize,
@@ -65,12 +65,12 @@ impl<F: Renderable> RenderingPipeline<F> {
         let inner = (spec.resolution[1] as usize) * n_max_plus_1;
         let field = (0..outer).map(|_| vec![None; inner]).collect();
         let histograms = fractal
-            .color_map()
-            .gradients
+            .color_palette()
+            .color_maps
             .iter()
             .map(|_| Histogram::new(histogram_bin_count, histogram_max_value))
             .collect();
-        let color_cache = fractal.color_map().create_cache(
+        let color_cache = fractal.color_palette().create_cache(
             histogram_bin_count,
             histogram_max_value,
             lookup_table_count,
@@ -131,7 +131,7 @@ impl<F: Renderable> RenderingPipeline<F> {
 
         // (d) Refresh LUTs and flat color from current keyframes.
         self.fractal
-            .color_map()
+            .color_palette()
             .refresh_cache(&mut self.color_cache);
 
         // (e) Walk the output image; CDF + LUT lookup per cell; AA-average.

@@ -14,7 +14,7 @@
     "color_map": {
       "color": {
         "flat_color": [12, 12, 12],
-        "gradients": [
+        "color_maps": [
           [
             {
               "query": 0.0,

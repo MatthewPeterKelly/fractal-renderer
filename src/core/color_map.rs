@@ -10,80 +10,86 @@ use crate::core::interpolation::{
 };
 use crate::core::lookup_table::LookupTable;
 
-/// Represents a single "keyframe" of a color gradient, pairing a
-/// "query" with the color that should be produced at that query point.
+/// Represents a single "keyframe" of a color map, pairing a "query" with
+/// the color that should be produced at that query point.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ColorMapKeyFrame {
-    /// Location of this color within the gradient; on `[0, 1]`.
+    /// Location of this color within the color map; on `[0, 1]`.
     pub query: f32,
     /// `[R, G, B]` triple, in raw 8-bit channels.
     pub rgb_raw: [u8; 3],
 }
 
-/// Unified color-map shape used by every `Renderable` fractal.
+/// A single color map: a sequence of keyframes interpolated to produce a
+/// color for any query in `[0, 1]`. Used directly by Mandelbrot / Julia /
+/// DDP; one per root for Newton's method.
+pub type ColorMap = Vec<ColorMapKeyFrame>;
+
+/// Bundle of all the color data a fractal needs at render time:
+/// a background color (used when `FieldKernel::evaluate` returns `None`)
+/// plus one or more color maps that the gradient index from each populated
+/// cell routes through.
 ///
-/// Mandelbrot, Julia, and DDP carry `gradients.len() == 1`; Newton's
-/// method carries one gradient per root. The `u32` produced by
-/// `FieldKernel::evaluate` indexes into `gradients` to pick which
-/// gradient (and therefore which CDF / LUT) the cell colorizes through.
+/// Mandelbrot, Julia, and DDP carry `color_maps.len() == 1`; Newton's
+/// method carries one color map per root. The `u32` produced by
+/// `FieldKernel::evaluate` indexes into `color_maps` to pick which color
+/// map (and therefore which CDF / LUT) the cell colorizes through.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ColorMap {
+pub struct ColorPalette {
     /// Color used for cells whose `evaluate` returned `None` (Mandelbrot
     /// in-set, DDP out-of-basin, Newton non-converging).
     pub flat_color: [u8; 3],
-    /// One gradient per "channel". Length must be ≥ 1; rejected at
-    /// deserialization otherwise. Each gradient is a `Vec<ColorMapKeyFrame>`.
-    #[serde(deserialize_with = "deserialize_non_empty_gradients")]
-    pub gradients: Vec<Vec<ColorMapKeyFrame>>,
+    /// One color map per "channel". Length must be ≥ 1; rejected at
+    /// deserialization otherwise.
+    #[serde(deserialize_with = "deserialize_non_empty_color_maps")]
+    pub color_maps: Vec<ColorMap>,
 }
 
-fn deserialize_non_empty_gradients<'de, D>(
-    deserializer: D,
-) -> Result<Vec<Vec<ColorMapKeyFrame>>, D::Error>
+fn deserialize_non_empty_color_maps<'de, D>(deserializer: D) -> Result<Vec<ColorMap>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let gradients: Vec<Vec<ColorMapKeyFrame>> = Vec::deserialize(deserializer)?;
-    if gradients.is_empty() {
+    let color_maps: Vec<ColorMap> = Vec::deserialize(deserializer)?;
+    if color_maps.is_empty() {
         return Err(serde::de::Error::custom(
-            "ColorMap.gradients must contain at least one gradient",
+            "ColorPalette.color_maps must contain at least one color map",
         ));
     }
-    Ok(gradients)
+    Ok(color_maps)
 }
 
 /// Allocation-once cache used by the colorize hot path. The pipeline
 /// owns one of these and refreshes it in place each frame.
-pub struct ColorMapCache {
-    /// Per-gradient CDF, refreshed by the pipeline after each compute pass.
-    /// Length matches `ColorMap::gradients.len()`.
+pub struct ColorPaletteCache {
+    /// Per-color-map CDF, refreshed by the pipeline after each compute pass.
+    /// Length matches `ColorPalette::color_maps.len()`.
     pub cdfs: Vec<CumulativeDistributionFunction>,
-    /// Per-gradient `[0, 1]`-domain lookup table. Refreshed by
-    /// `ColorMap::refresh_cache` from the current keyframes.
+    /// Per-color-map `[0, 1]`-domain lookup table. Refreshed by
+    /// `ColorPalette::refresh_cache` from the current keyframes.
     pub luts: Vec<ColorMapLookUpTable>,
     /// `flat_color` pre-converted to `Color32`.
     pub flat: Color32,
 }
 
-impl ColorMap {
+impl ColorPalette {
     /// Allocate the cache once at pipeline construction.
     ///
     /// The CDFs are allocated against the supplied `histogram_bin_count`
     /// and `histogram_max_value` so the pipeline can reuse them in place
     /// across frames; their contents are recomputed from each frame's
-    /// per-gradient histogram.
+    /// per-color-map histogram.
     pub fn create_cache(
         &self,
         histogram_bin_count: usize,
         histogram_max_value: f32,
         lookup_table_count: usize,
-    ) -> ColorMapCache {
+    ) -> ColorPaletteCache {
         assert!(
-            !self.gradients.is_empty(),
-            "ColorMap.gradients must contain at least one gradient"
+            !self.color_maps.is_empty(),
+            "ColorPalette.color_maps must contain at least one color map"
         );
         let cdfs = self
-            .gradients
+            .color_maps
             .iter()
             .map(|_| {
                 let hist = Histogram::new(histogram_bin_count, histogram_max_value);
@@ -91,7 +97,7 @@ impl ColorMap {
             })
             .collect();
         let luts = self
-            .gradients
+            .color_maps
             .iter()
             .map(|kfs| {
                 let inner = KeyframeColorMap::new(kfs, LinearInterpolator);
@@ -101,21 +107,21 @@ impl ColorMap {
             })
             .collect();
         let flat = Color32::from_rgb(self.flat_color[0], self.flat_color[1], self.flat_color[2]);
-        ColorMapCache { cdfs, luts, flat }
+        ColorPaletteCache { cdfs, luts, flat }
     }
 
-    /// Refresh `flat` and the per-gradient `luts` from the current keyframes
+    /// Refresh `flat` and the per-color-map `luts` from the current keyframes
     /// and `flat_color`. Allocation-free; does NOT touch `cdfs` (those are
     /// owned by the pipeline and refreshed from histograms after each
     /// compute pass).
-    pub fn refresh_cache(&self, cache: &mut ColorMapCache) {
+    pub fn refresh_cache(&self, cache: &mut ColorPaletteCache) {
         debug_assert_eq!(
             cache.luts.len(),
-            self.gradients.len(),
-            "ColorMapCache LUT count must match ColorMap gradient count; \
-             gradient count is fixed for the session"
+            self.color_maps.len(),
+            "ColorPaletteCache LUT count must match ColorPalette color_maps length; \
+             color-map count is fixed for the session"
         );
-        for (lut, kfs) in cache.luts.iter_mut().zip(self.gradients.iter()) {
+        for (lut, kfs) in cache.luts.iter_mut().zip(self.color_maps.iter()) {
             let inner = KeyframeColorMap::new(kfs, LinearInterpolator);
             lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
         }
@@ -124,16 +130,16 @@ impl ColorMap {
 }
 
 /// Per-cell color lookup. Statically dispatched; called inside the
-/// AA-collapse loop. CDF percentile lookup happens here, in color space —
-/// the field stays raw end-to-end.
+/// anti-aliasing collapse loop. CDF percentile lookup happens here, in
+/// color space — the field stays raw end-to-end.
 #[inline]
-pub fn colorize_cell(cache: &ColorMapCache, cell: Option<(f32, u32)>) -> [u8; 3] {
+pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3] {
     match cell {
-        Some((value, gradient_index)) => {
-            let n = cache.luts.len();
-            let g = (gradient_index as usize) % n.max(1);
-            let pct = cache.cdfs[g].percentile(value);
-            let rgb: Rgb<u8> = cache.luts[g].compute_pixel(pct);
+        Some((value, color_map_index)) => {
+            let count = cache.luts.len();
+            let index = (color_map_index as usize) % count.max(1);
+            let percentile = cache.cdfs[index].percentile(value);
+            let rgb: Rgb<u8> = cache.luts[index].compute_pixel(percentile);
             [rgb[0], rgb[1], rgb[2]]
         }
         None => [cache.flat.r(), cache.flat.g(), cache.flat.b()],
@@ -284,9 +290,9 @@ mod tests {
         }
     }
 
-    /// Two-stop gradient from red (`[255, 0, 0]`) at 0.0 to blue
+    /// Two-stop color map from red (`[255, 0, 0]`) at 0.0 to blue
     /// (`[0, 0, 255]`) at 1.0.
-    fn red_to_blue() -> Vec<ColorMapKeyFrame> {
+    fn red_to_blue() -> ColorMap {
         vec![
             ColorMapKeyFrame {
                 query: 0.0,
@@ -341,46 +347,46 @@ mod tests {
     }
 
     #[test]
-    fn color_map_serde_round_trip() {
-        let original = ColorMap {
+    fn color_palette_serde_round_trip() {
+        let original = ColorPalette {
             flat_color: [10, 20, 30],
-            gradients: vec![red_to_blue()],
+            color_maps: vec![red_to_blue()],
         };
         let json = serde_json::to_string(&original).unwrap();
-        let parsed: ColorMap = serde_json::from_str(&json).unwrap();
+        let parsed: ColorPalette = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.flat_color, original.flat_color);
-        assert_eq!(parsed.gradients.len(), original.gradients.len());
-        assert_eq!(parsed.gradients[0].len(), original.gradients[0].len());
+        assert_eq!(parsed.color_maps.len(), original.color_maps.len());
+        assert_eq!(parsed.color_maps[0].len(), original.color_maps[0].len());
     }
 
     #[test]
-    fn color_map_rejects_empty_gradients_at_deserialization() {
+    fn color_palette_rejects_empty_color_maps_at_deserialization() {
         let json = r#"{
             "flat_color": [0, 0, 0],
-            "gradients": []
+            "color_maps": []
         }"#;
-        let result: Result<ColorMap, _> = serde_json::from_str(json);
+        let result: Result<ColorPalette, _> = serde_json::from_str(json);
         assert!(
             result.is_err(),
-            "an empty `gradients` list must fail to deserialize"
+            "an empty `color_maps` list must fail to deserialize"
         );
     }
 
     #[test]
     fn colorize_cell_uses_flat_color_for_none() {
-        let map = ColorMap {
+        let palette = ColorPalette {
             flat_color: [9, 9, 9],
-            gradients: vec![red_to_blue()],
+            color_maps: vec![red_to_blue()],
         };
-        let cache = map.create_cache(8, 1.0, 256);
+        let cache = palette.create_cache(8, 1.0, 256);
         assert_eq!(colorize_cell(&cache, None), [9, 9, 9]);
     }
 
     #[test]
-    fn colorize_cell_routes_to_correct_gradient() {
-        let map = ColorMap {
+    fn colorize_cell_routes_to_correct_color_map() {
+        let palette = ColorPalette {
             flat_color: [42, 42, 42],
-            gradients: vec![
+            color_maps: vec![
                 red_to_blue(),
                 vec![
                     ColorMapKeyFrame {
@@ -396,7 +402,7 @@ mod tests {
         };
         // Bin count 1, max value 1.0 → CDF maps any value to 1.0 (all data
         // in the single bin), which lands on the high keyframe.
-        let mut cache = map.create_cache(4, 1.0, 256);
+        let mut cache = palette.create_cache(4, 1.0, 256);
         // Populate fake CDFs so percentile resolves predictably: insert
         // the same value into both histograms and rebuild the CDFs.
         let h0 = Histogram::new(4, 1.0);
@@ -406,45 +412,45 @@ mod tests {
         h1.insert(0.5);
         cache.cdfs[1] = CumulativeDistributionFunction::new(&h1);
 
-        // Gradient 0 maps low percentiles toward red, high toward blue.
-        let g0_low = colorize_cell(&cache, Some((0.0, 0)));
-        let g0_high = colorize_cell(&cache, Some((1.0, 0)));
-        assert_eq!(g0_low, [255, 0, 0]);
-        assert_eq!(g0_high, [0, 0, 255]);
+        // Color map 0 maps low percentiles toward red, high toward blue.
+        let m0_low = colorize_cell(&cache, Some((0.0, 0)));
+        let m0_high = colorize_cell(&cache, Some((1.0, 0)));
+        assert_eq!(m0_low, [255, 0, 0]);
+        assert_eq!(m0_high, [0, 0, 255]);
 
-        // Gradient 1 maps low percentiles toward green, high toward red.
-        let g1_low = colorize_cell(&cache, Some((0.0, 1)));
-        let g1_high = colorize_cell(&cache, Some((1.0, 1)));
-        assert_eq!(g1_low, [0, 200, 0]);
-        assert_eq!(g1_high, [200, 0, 0]);
+        // Color map 1 maps low percentiles toward green, high toward red.
+        let m1_low = colorize_cell(&cache, Some((0.0, 1)));
+        let m1_high = colorize_cell(&cache, Some((1.0, 1)));
+        assert_eq!(m1_low, [0, 200, 0]);
+        assert_eq!(m1_high, [200, 0, 0]);
     }
 
     #[test]
-    fn colorize_cell_wraps_out_of_range_gradient_index() {
-        let map = ColorMap {
+    fn colorize_cell_wraps_out_of_range_color_map_index() {
+        let palette = ColorPalette {
             flat_color: [0, 0, 0],
-            gradients: vec![red_to_blue()],
+            color_maps: vec![red_to_blue()],
         };
-        let mut cache = map.create_cache(4, 1.0, 256);
+        let mut cache = palette.create_cache(4, 1.0, 256);
         let h = Histogram::new(4, 1.0);
         h.insert(0.0);
         cache.cdfs[0] = CumulativeDistributionFunction::new(&h);
 
-        // gradient index 2 wraps to 0 via modulo.
+        // color-map index 2 wraps to 0 via modulo.
         let rgb = colorize_cell(&cache, Some((0.0, 2)));
         assert_eq!(rgb, [255, 0, 0]);
     }
 
     #[test]
     fn refresh_cache_picks_up_keyframe_edits() {
-        let mut map = ColorMap {
+        let mut palette = ColorPalette {
             flat_color: [0, 0, 0],
-            gradients: vec![red_to_blue()],
+            color_maps: vec![red_to_blue()],
         };
-        let mut cache = map.create_cache(4, 1.0, 64);
+        let mut cache = palette.create_cache(4, 1.0, 64);
         // Mutate a keyframe and refresh.
-        map.gradients[0][0].rgb_raw = [50, 60, 70];
-        map.refresh_cache(&mut cache);
+        palette.color_maps[0][0].rgb_raw = [50, 60, 70];
+        palette.refresh_cache(&mut cache);
         // Force the CDF to map 0.0 → 0.0 so the lookup hits the low keyframe.
         let h = Histogram::new(4, 1.0);
         h.insert(0.5);
@@ -454,13 +460,13 @@ mod tests {
 
     #[test]
     fn refresh_cache_picks_up_flat_color_edits() {
-        let mut map = ColorMap {
+        let mut palette = ColorPalette {
             flat_color: [1, 2, 3],
-            gradients: vec![red_to_blue()],
+            color_maps: vec![red_to_blue()],
         };
-        let mut cache = map.create_cache(4, 1.0, 64);
-        map.flat_color = [99, 100, 101];
-        map.refresh_cache(&mut cache);
+        let mut cache = palette.create_cache(4, 1.0, 64);
+        palette.flat_color = [99, 100, 101];
+        palette.refresh_cache(&mut cache);
         assert_eq!(colorize_cell(&cache, None), [99, 100, 101]);
     }
 }

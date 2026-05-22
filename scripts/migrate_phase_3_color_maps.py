@@ -38,15 +38,24 @@ TARGET_DIRS = ("examples", "benches", "tests/param_files")
 
 
 def migrate_legacy_quadratic_color(color: dict) -> dict | None:
-    """Convert {background, color_map} -> {flat_color, gradients}."""
+    """Convert {background, color_map} -> {flat_color, color_maps}.
+
+    Also normalizes earlier Phase-3 outputs that used `gradients` as the
+    outer-vec key into the post-review `color_maps` spelling.
+    """
     if not isinstance(color, dict):
         return None
+    if "flat_color" in color and "color_maps" in color:
+        return None  # already migrated to the post-review shape
     if "flat_color" in color and "gradients" in color:
-        return None  # already migrated
+        return {
+            "flat_color": color["flat_color"],
+            "color_maps": color["gradients"],
+        }
     if "background" in color and "color_map" in color:
         return {
             "flat_color": color["background"],
-            "gradients": [color["color_map"]],
+            "color_maps": [color["color_map"]],
         }
     return None
 
@@ -69,17 +78,27 @@ def migrate_quadratic_params_block(params: dict) -> bool:
 
 
 def migrate_ddp(params: dict) -> bool:
-    """Migrate DDP `color: {foreground, background}` -> unified `ColorMap`.
-    Returns True iff a change was made."""
+    """Migrate DDP `color: {foreground, background}` -> unified
+    `ColorPalette`. Returns True iff a change was made.
+
+    Also normalizes earlier Phase-3 outputs that used `gradients` into the
+    post-review `color_maps` spelling.
+    """
     color = params.get("color")
     if not isinstance(color, dict):
         return False
+    if "flat_color" in color and "color_maps" in color:
+        return False  # already in post-review shape
     if "flat_color" in color and "gradients" in color:
-        return False  # already migrated
+        params["color"] = {
+            "flat_color": color["flat_color"],
+            "color_maps": color["gradients"],
+        }
+        return True
     if "foreground" in color and "background" in color:
         params["color"] = {
             "flat_color": color["background"],
-            "gradients": [
+            "color_maps": [
                 [
                     {"query": 0.0, "rgb_raw": color["foreground"]},
                     {"query": 1.0, "rgb_raw": color["foreground"]},
@@ -92,15 +111,24 @@ def migrate_ddp(params: dict) -> bool:
 
 def migrate_newton(params: dict) -> bool:
     """Migrate Newton `color: {cyclic_attractor, color_maps}` -> unified
-    `ColorMap`. Returns True iff a change was made."""
+    `ColorPalette`. Also normalizes earlier Phase-3 outputs that used
+    `gradients` into the post-review `color_maps` spelling. Returns True
+    iff a change was made."""
     color = params.get("color")
     changed = False
     if isinstance(color, dict):
-        if "flat_color" not in color or "gradients" not in color:
-            if "cyclic_attractor" in color and "color_maps" in color:
+        already_post_review = "flat_color" in color and "color_maps" in color
+        if not already_post_review:
+            if "flat_color" in color and "gradients" in color:
+                params["color"] = {
+                    "flat_color": color["flat_color"],
+                    "color_maps": color["gradients"],
+                }
+                changed = True
+            elif "cyclic_attractor" in color and "color_maps" in color:
                 params["color"] = {
                     "flat_color": color["cyclic_attractor"],
-                    "gradients": color["color_maps"],
+                    "color_maps": color["color_maps"],
                 }
                 changed = True
     if "histogram_sample_count" in params:
