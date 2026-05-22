@@ -12,7 +12,7 @@
         "sampling_level": 3
       },
       "color": {
-        "flat_color": [150, 0, 30],
+        "background_color": [150, 0, 30],
         "color_maps": [
           [
             {

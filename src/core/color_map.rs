@@ -38,7 +38,7 @@ pub type ColorMap = Vec<ColorMapKeyFrame>;
 pub struct ColorPalette {
     /// Color used for cells whose `evaluate` returned `None` (Mandelbrot
     /// in-set, DDP out-of-basin, Newton non-converging).
-    pub flat_color: [u8; 3],
+    pub background_color: [u8; 3],
     /// One color map per "channel". Length must be ≥ 1; rejected at
     /// deserialization otherwise.
     #[serde(deserialize_with = "deserialize_non_empty_color_maps")]
@@ -67,8 +67,8 @@ pub struct ColorPaletteCache {
     /// Per-color-map `[0, 1]`-domain lookup table. Refreshed by
     /// `ColorPalette::refresh_cache` from the current keyframes.
     pub luts: Vec<ColorMapLookUpTable>,
-    /// `flat_color` pre-converted to `Color32`.
-    pub flat: Color32,
+    /// `ColorPalette::background_color` pre-converted to `Color32`.
+    pub background: Color32,
 }
 
 impl ColorPalette {
@@ -106,14 +106,22 @@ impl ColorPalette {
                 })
             })
             .collect();
-        let flat = Color32::from_rgb(self.flat_color[0], self.flat_color[1], self.flat_color[2]);
-        ColorPaletteCache { cdfs, luts, flat }
+        let background = Color32::from_rgb(
+            self.background_color[0],
+            self.background_color[1],
+            self.background_color[2],
+        );
+        ColorPaletteCache {
+            cdfs,
+            luts,
+            background,
+        }
     }
 
-    /// Refresh `flat` and the per-color-map `luts` from the current keyframes
-    /// and `flat_color`. Allocation-free; does NOT touch `cdfs` (those are
-    /// owned by the pipeline and refreshed from histograms after each
-    /// compute pass).
+    /// Refresh `background` and the per-color-map `luts` from the current
+    /// keyframes and `background_color`. Allocation-free; does NOT touch
+    /// `cdfs` (those are owned by the pipeline and refreshed from histograms
+    /// after each compute pass).
     pub fn refresh_cache(&self, cache: &mut ColorPaletteCache) {
         debug_assert_eq!(
             cache.luts.len(),
@@ -125,7 +133,11 @@ impl ColorPalette {
             let inner = KeyframeColorMap::new(kfs, LinearInterpolator);
             lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
         }
-        cache.flat = Color32::from_rgb(self.flat_color[0], self.flat_color[1], self.flat_color[2]);
+        cache.background = Color32::from_rgb(
+            self.background_color[0],
+            self.background_color[1],
+            self.background_color[2],
+        );
     }
 }
 
@@ -142,7 +154,11 @@ pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8
             let rgb: Rgb<u8> = cache.luts[index].compute_pixel(percentile);
             [rgb[0], rgb[1], rgb[2]]
         }
-        None => [cache.flat.r(), cache.flat.g(), cache.flat.b()],
+        None => [
+            cache.background.r(),
+            cache.background.g(),
+            cache.background.b(),
+        ],
     }
 }
 
@@ -349,12 +365,12 @@ mod tests {
     #[test]
     fn color_palette_serde_round_trip() {
         let original = ColorPalette {
-            flat_color: [10, 20, 30],
+            background_color: [10, 20, 30],
             color_maps: vec![red_to_blue()],
         };
         let json = serde_json::to_string(&original).unwrap();
         let parsed: ColorPalette = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.flat_color, original.flat_color);
+        assert_eq!(parsed.background_color, original.background_color);
         assert_eq!(parsed.color_maps.len(), original.color_maps.len());
         assert_eq!(parsed.color_maps[0].len(), original.color_maps[0].len());
     }
@@ -362,7 +378,7 @@ mod tests {
     #[test]
     fn color_palette_rejects_empty_color_maps_at_deserialization() {
         let json = r#"{
-            "flat_color": [0, 0, 0],
+            "background_color": [0, 0, 0],
             "color_maps": []
         }"#;
         let result: Result<ColorPalette, _> = serde_json::from_str(json);
@@ -373,9 +389,9 @@ mod tests {
     }
 
     #[test]
-    fn colorize_cell_uses_flat_color_for_none() {
+    fn colorize_cell_uses_background_color_for_none() {
         let palette = ColorPalette {
-            flat_color: [9, 9, 9],
+            background_color: [9, 9, 9],
             color_maps: vec![red_to_blue()],
         };
         let cache = palette.create_cache(8, 1.0, 256);
@@ -385,7 +401,7 @@ mod tests {
     #[test]
     fn colorize_cell_routes_to_correct_color_map() {
         let palette = ColorPalette {
-            flat_color: [42, 42, 42],
+            background_color: [42, 42, 42],
             color_maps: vec![
                 red_to_blue(),
                 vec![
@@ -428,7 +444,7 @@ mod tests {
     #[test]
     fn colorize_cell_wraps_out_of_range_color_map_index() {
         let palette = ColorPalette {
-            flat_color: [0, 0, 0],
+            background_color: [0, 0, 0],
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 256);
@@ -444,7 +460,7 @@ mod tests {
     #[test]
     fn refresh_cache_picks_up_keyframe_edits() {
         let mut palette = ColorPalette {
-            flat_color: [0, 0, 0],
+            background_color: [0, 0, 0],
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
@@ -459,13 +475,13 @@ mod tests {
     }
 
     #[test]
-    fn refresh_cache_picks_up_flat_color_edits() {
+    fn refresh_cache_picks_up_background_color_edits() {
         let mut palette = ColorPalette {
-            flat_color: [1, 2, 3],
+            background_color: [1, 2, 3],
             color_maps: vec![red_to_blue()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
-        palette.flat_color = [99, 100, 101];
+        palette.background_color = [99, 100, 101];
         palette.refresh_cache(&mut cache);
         assert_eq!(colorize_cell(&cache, None), [99, 100, 101]);
     }

@@ -247,7 +247,7 @@ pub type ColorMap = Vec<ColorMapKeyFrame>;
 pub struct ColorPalette {
     /// Color used for cells whose evaluation produced no scalar (Mandelbrot
     /// in-set, DDP out-of-basin, Newton non-converging).
-    pub flat_color: [u8; 3],
+    pub background_color: [u8; 3],
     /// One color map per "channel". Mandelbrot/Julia/DDP have
     /// `len() == 1`; Newton has one entry per root. The `u32` in each cell
     /// indexes into this vec.
@@ -282,8 +282,8 @@ pub struct ColorPaletteCache {
     pub cdfs: Vec<CumulativeDistributionFunction>,
     /// Per-color-map LUT, `[0,1]`-domain. Refreshed by `refresh_cache`.
     pub luts: Vec<ColorMapLookUpTable>,
-    /// Pre-converted `flat_color`.
-    pub flat: Color32,
+    /// Pre-converted `background_color`.
+    pub background: Color32,
 }
 
 /// Per-cell colorize. Statically dispatched, called inside the AA-collapse
@@ -296,7 +296,7 @@ pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8
             let percentile = cache.cdfs[index].percentile(value);
             cache.luts[index].lookup(percentile)
         }
-        None => [cache.flat.r(), cache.flat.g(), cache.flat.b()],
+        None => [cache.background.r(), cache.background.g(), cache.background.b()],
     }
 }
 ```
@@ -395,7 +395,7 @@ stays raw; the CDF lookup happens inside `colorize_cell` at colorize time.
 This means:
 
 - **Keyframe edits** invalidate only the LUTs (and optionally the
-  `flat_color`). Re-run (d) + (e); skip (a)/(b)/(c). Phase 7 lives here.
+  `background_color`). Re-run (d) + (e); skip (a)/(b)/(c). Phase 7 lives here.
 - **No race between normalize and colorize**: the field is only ever
   written by (a) and only ever read by (b)/(e).
 - **Per-root histograms come for free**: Newton naturally bins into
@@ -883,16 +883,16 @@ Contents to be defined post-Phase-7 measurement. Likely candidates:
 
 ### 7.2 Layout
 
-The unified `ColorMap` always renders the same widget shape:
+The unified `ColorPalette` always renders the same widget shape:
 
 - One color picker row at top labeled per-fractal (`Background` for
   Mandelbrot/Julia/DDP; `Cyclic attractor` for Newton) that edits
-  `flat_color`.
-- A tab strip (one tab per entry in `gradients`). When `gradients.len() == 1`
-  the tab strip is suppressed and the lone gradient's editor renders directly.
-  Otherwise tabs are labeled "Root 0", "Root 1", … and the active tab shows
-  the single-gradient editor for that gradient. Switching tabs resets keyframe
-  selection.
+  `background_color`.
+- A tab strip (one tab per entry in `color_maps`). When
+  `color_maps.len() == 1` the tab strip is suppressed and the lone color
+  map's editor renders directly. Otherwise tabs are labeled "Root 0",
+  "Root 1", … and the active tab shows the single-color-map editor for
+  that color map. Switching tabs resets keyframe selection.
 
 ### 7.3 Application keys (interactive mode)
 
@@ -1050,13 +1050,13 @@ but may be added later if a particular bug class becomes recurring.
 
 ### 10.1 What to unit-test (mandatory)
 
-- `colorize_cell` correctness on the unified `ColorMap`:
-  - All-`None` field → all output pixels equal `flat_color`.
-  - Single-keyframe gradients (constant-color).
+- `colorize_cell` correctness on the unified `ColorPalette`:
+  - All-`None` field → all output pixels equal `background_color`.
+  - Single-keyframe color maps (constant-color).
   - Boundary keyframe values (0.0 and 1.0) at LUT endpoints.
-  - Multi-gradient routing: cells with `gradient_index = k` colorize
-    through `gradients[k]`, not gradient 0.
-  - Empty `gradients`: rejected at deserialization or construction with a
+  - Multi-color-map routing: cells with `color_map_index = k` colorize
+    through `color_maps[k]`, not color map 0.
+  - Empty `color_maps`: rejected at deserialization or construction with a
     structured error; not reachable on the colorize hot path.
 - Core iteration helpers in `src/core/field_iteration.rs` against
   synthetic `FieldKernel` impls:

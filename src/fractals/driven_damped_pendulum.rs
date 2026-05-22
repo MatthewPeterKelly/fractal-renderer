@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// without a `color` field continue to render identically.
 fn ddp_default_color() -> ColorPalette {
     ColorPalette {
-        flat_color: [0, 0, 0],
+        background_color: [0, 0, 0],
         color_maps: vec![vec![
             ColorMapKeyFrame {
                 query: 0.0,
@@ -52,7 +52,7 @@ impl FieldKernel for DrivenDampedPendulumParams {
     /// Map "in zeroth basin" to a `Some((1.0, 0))` cell — value `1.0`
     /// trivially fills the single histogram bin, and color-map index 0
     /// routes to DDP's only color map. Out-of-basin / non-converged →
-    /// `None`, which colorizes through `flat_color`.
+    /// `None`, which colorizes through `background_color`.
     fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
         match compute_basin_of_attraction(
             &point,
@@ -260,7 +260,7 @@ mod tests {
             }
         }"#;
         let parsed: DrivenDampedPendulumParams = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.color.flat_color, [0, 0, 0]);
+        assert_eq!(parsed.color.background_color, [0, 0, 0]);
         assert_eq!(parsed.color.color_maps.len(), 1);
         assert_eq!(parsed.color.color_maps[0].len(), 2);
         assert_eq!(parsed.color.color_maps[0][0].rgb_raw, [255, 255, 255]);

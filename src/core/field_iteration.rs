@@ -245,7 +245,7 @@ mod tests {
     /// Single-color-map palette: value at 0.0 → red, value at 1.0 → blue.
     fn red_to_blue_palette() -> ColorPalette {
         ColorPalette {
-            flat_color: [9, 9, 9],
+            background_color: [9, 9, 9],
             color_maps: vec![vec![
                 ColorMapKeyFrame {
                     query: 0.0,

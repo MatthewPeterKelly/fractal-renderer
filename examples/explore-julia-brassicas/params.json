@@ -13,7 +13,7 @@
     },
     "color_map": {
       "color": {
-        "flat_color": [12, 12, 12],
+        "background_color": [12, 12, 12],
         "color_maps": [
           [
             {
