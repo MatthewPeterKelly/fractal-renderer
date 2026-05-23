@@ -357,7 +357,7 @@ mod tests {
 
     /// Two-stop color map from red (`[255, 0, 0]`) at 0.0 to blue
     /// (`[0, 0, 255]`) at 1.0.
-    fn red_to_blue() -> ColorMap {
+    fn make_red_to_blue_color_map() -> ColorMap {
         vec![
             ColorMapKeyFrame {
                 query: 0.0,
@@ -415,7 +415,7 @@ mod tests {
     fn color_palette_serde_round_trip() {
         let original = ColorPalette {
             background_color: [10, 20, 30],
-            color_maps: vec![red_to_blue()],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let json = serde_json::to_string(&original).unwrap();
         let parsed: ColorPalette = serde_json::from_str(&json).unwrap();
@@ -441,7 +441,7 @@ mod tests {
     fn colorize_cell_uses_background_color_for_none() {
         let palette = ColorPalette {
             background_color: [9, 9, 9],
-            color_maps: vec![red_to_blue()],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let cache = palette.create_cache(8, 1.0, 256);
         assert_eq!(colorize_cell(&cache, None), [9, 9, 9]);
@@ -464,7 +464,7 @@ mod tests {
         let palette = ColorPalette {
             background_color: [42, 42, 42],
             color_maps: vec![
-                red_to_blue(),
+                make_red_to_blue_color_map(),
                 vec![
                     ColorMapKeyFrame {
                         query: 0.0,
@@ -497,7 +497,7 @@ mod tests {
     fn colorize_cell_wraps_out_of_range_color_map_index() {
         let palette = ColorPalette {
             background_color: [0, 0, 0],
-            color_maps: vec![red_to_blue()],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let mut cache = palette.create_cache(4, 1.0, 256);
         prime_cdfs_to_unit_distribution(&mut cache, &palette);
@@ -511,7 +511,7 @@ mod tests {
     fn refresh_after_compute_pass_picks_up_keyframe_edits() {
         let mut palette = ColorPalette {
             background_color: [0, 0, 0],
-            color_maps: vec![red_to_blue()],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
         // Edit a keyframe and verify the next atomic refresh picks it up
@@ -527,7 +527,7 @@ mod tests {
     fn refresh_after_compute_pass_picks_up_background_color_edits() {
         let mut palette = ColorPalette {
             background_color: [1, 2, 3],
-            color_maps: vec![red_to_blue()],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let mut cache = palette.create_cache(4, 1.0, 64);
         palette.background_color = [99, 100, 101];

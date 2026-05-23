@@ -59,9 +59,14 @@ impl<F: Renderable> RenderingPipeline<F> {
     ) -> Self {
         assert!(n_max_plus_1 >= 1, "n_max_plus_1 must be at least 1");
         let spec = fractal.image_specification();
-        let outer = (spec.resolution[0] as usize) * n_max_plus_1;
-        let inner = (spec.resolution[1] as usize) * n_max_plus_1;
-        let field = (0..outer).map(|_| vec![None; inner]).collect();
+        // The field buffer is sized as (n_max_plus_1·W) × (n_max_plus_1·H)
+        // cells — one cell per sub-pixel slot at the maximum AA factor
+        // baked in at construction. Runtime sampling levels at or below
+        // that cap populate a sub-rectangle of this buffer; the remainder
+        // stays untouched between frames.
+        let outer_dim_x = (spec.resolution[0] as usize) * n_max_plus_1;
+        let inner_dim_y = (spec.resolution[1] as usize) * n_max_plus_1;
+        let field = (0..outer_dim_x).map(|_| vec![None; inner_dim_y]).collect();
         let color_cache = fractal.color_palette().create_cache(
             histogram_bin_count,
             histogram_max_value,
