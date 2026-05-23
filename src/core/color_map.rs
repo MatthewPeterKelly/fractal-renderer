@@ -79,7 +79,7 @@ pub struct ColorPaletteCache {
     cdfs: Vec<CumulativeDistributionFunction>,
     /// Per-color-map `[0, 1]`-domain lookup table. Refreshed from the
     /// current keyframes inside `refresh_after_compute_pass`.
-    luts: Vec<ColorMapLookUpTable>,
+    lookup_tables: Vec<ColorMapLookUpTable>,
     /// `ColorPalette::background_color` pre-converted to `Color32`.
     background: Color32,
 }
@@ -119,7 +119,7 @@ impl ColorPaletteCache {
             "ColorPaletteCache CDF / histogram counts must match"
         );
         debug_assert_eq!(
-            self.luts.len(),
+            self.lookup_tables.len(),
             palette.color_maps.len(),
             "ColorPaletteCache LUT count must match ColorPalette color_maps length; \
              color-map count is fixed for the session"
@@ -127,7 +127,7 @@ impl ColorPaletteCache {
         for (cdf, histogram) in self.cdfs.iter_mut().zip(self.histograms.iter()) {
             cdf.reset(histogram);
         }
-        for (lut, keyframes) in self.luts.iter_mut().zip(palette.color_maps.iter()) {
+        for (lut, keyframes) in self.lookup_tables.iter_mut().zip(palette.color_maps.iter()) {
             let inner = KeyframeColorMap::new(keyframes, LinearInterpolator);
             lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
         }
@@ -166,11 +166,11 @@ impl ColorPalette {
             .iter()
             .map(CumulativeDistributionFunction::new)
             .collect();
-        let luts = self
+        let lookup_tables = self
             .color_maps
             .iter()
-            .map(|kfs| {
-                let inner = KeyframeColorMap::new(kfs, LinearInterpolator);
+            .map(|keyframes| {
+                let inner = KeyframeColorMap::new(keyframes, LinearInterpolator);
                 ColorMapLookUpTable::new(lookup_table_count, [0.0, 1.0], &|q: f32| {
                     inner.compute_pixel(q)
                 })
@@ -184,7 +184,7 @@ impl ColorPalette {
         ColorPaletteCache {
             histograms,
             cdfs,
-            luts,
+            lookup_tables,
             background,
         }
     }
@@ -197,10 +197,10 @@ impl ColorPalette {
 pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3] {
     match cell {
         Some((value, color_map_index)) => {
-            let count = cache.luts.len();
+            let count = cache.lookup_tables.len();
             let index = (color_map_index as usize) % count.max(1);
             let percentile = cache.cdfs()[index].percentile(value);
-            let rgb: Rgb<u8> = cache.luts[index].compute_pixel(percentile);
+            let rgb: Rgb<u8> = cache.lookup_tables[index].compute_pixel(percentile);
             [rgb[0], rgb[1], rgb[2]]
         }
         None => [

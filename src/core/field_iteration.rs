@@ -1,16 +1,29 @@
 //! Core iteration helpers shared by every fractal that uses the
-//! `RenderingPipeline`. These functions encapsulate the AA / block-fill
-//! traversal logic so per-fractal code only needs to implement
-//! `FieldKernel::evaluate`.
+//! `RenderingPipeline`. These functions encapsulate the
+//! anti-aliasing / block-fill traversal logic so per-fractal code only
+//! needs to implement `FieldKernel::evaluate`.
 //!
-//! ## Phase 3.1 scope
+//! ## The sample-planner abstraction
 //!
-//! Pure parallel-to-old machinery: the helpers live here, but no fractal
-//! has been migrated to call them yet. Tests against synthetic kernels
-//! gate behavior; the existing `Renderable::compute_raw_field` /
-//! `populate_histogram` / `normalize_field` impls remain on the runtime
-//! path. Phase 3.2 deletes the per-fractal duplicates and routes the
-//! pipeline through these helpers.
+//! The pipeline owns a field buffer sized to the maximum sub-pixel
+//! upsample factor `n_max_plus_1`. At runtime the regulator picks a
+//! `sampling_level` that says how to populate that buffer:
+//!
+//! - **Positive `sampling_level = subpixel_count - 1`**: anti-aliasing.
+//!   Each output pixel maps to one `n_max_plus_1 × n_max_plus_1` block of
+//!   field cells; the top-left `subpixel_count × subpixel_count` corner of
+//!   each block is populated, one sample per sub-pixel position.
+//! - **`sampling_level == 0`**: baseline. One field cell per output pixel.
+//! - **Negative `sampling_level = -(block_size - 1)`**: block-fill.
+//!   `block_size × block_size` output pixels share one sample.
+//!
+//! [`SamplePlanner`] encodes this scheme in one place: given an outer
+//! field index it returns `(pixel_index, subpixel_index)` for populated
+//! positions or `None` for positions the traversal should skip. Both the
+//! parallel-mutable traversal (used by `compute_raw_field`) and the
+//! read-only traversal (used by `populate_histograms`) consult the same
+//! planner, so the modular arithmetic lives in exactly one place and is
+//! covered by its own unit tests.
 
 use egui::{Color32, ColorImage};
 use rayon::iter::{
@@ -23,28 +36,189 @@ use crate::core::histogram::Histogram;
 use crate::core::image_utils::{ImageSpecification, PixelMapper};
 
 /// Domain-specific per-point evaluation. Each fractal implements exactly
-/// this much of the math; AA / block-fill iteration lives in the shared
-/// helpers below, generic over `K: FieldKernel`.
+/// this much of the math; anti-aliasing / block-fill iteration lives in
+/// the shared helpers below, generic over `K: FieldKernel`.
 pub trait FieldKernel: Sync + Send {
     /// Evaluate the scalar field at one real-space point.
-    /// Returns `Some((value, gradient_index))` or `None` for "no value".
-    /// `gradient_index` selects which gradient (and which per-gradient
+    /// Returns `Some((value, color_map_index))` or `None` for "no value".
+    /// `color_map_index` selects which color map (and which per-color-map
     /// histogram / CDF / LUT) the cell colorizes through.
     fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)>;
 }
 
+/// Decomposes a field outer index back into the corresponding
+/// `(pixel_index, subpixel_index)` for a given sampling level, or `None`
+/// for positions the traversal should skip. Owns the modular arithmetic
+/// for both the anti-aliasing and block-fill paths so the two iteration
+/// helpers (`compute_raw_field` and `populate_histograms`) consult one
+/// implementation. `Copy` so it's cheap to capture in rayon closures.
+#[derive(Copy, Clone, Debug)]
+pub enum SamplePlanner {
+    /// Anti-aliasing at `subpixel_count²` samples per output pixel.
+    /// `subpixel_count = sampling_level + 1` (so `1` at baseline).
+    AntiAliasing {
+        /// Field cells per output pixel side (the maximum AA factor the
+        /// field was sized for, plus one).
+        n_max_plus_1: usize,
+        /// Active sub-pixel resolution this render. `≤ n_max_plus_1`.
+        subpixel_count: u32,
+    },
+    /// Block-fill (nearest-neighbor downsample): one sample per
+    /// `block_size × block_size` output pixels.
+    BlockFill {
+        /// Field cells per output pixel side (always present for buffer
+        /// arithmetic, even though block-fill has no sub-pixel grid).
+        n_max_plus_1: usize,
+        /// Output pixels per side of one nearest-neighbor block.
+        /// `block_size = |sampling_level| + 1`.
+        block_size: u32,
+    },
+}
+
+impl SamplePlanner {
+    /// Construct the planner appropriate for the runtime sampling level.
+    pub fn new(n_max_plus_1: usize, sampling_level: i32) -> Self {
+        assert!(n_max_plus_1 >= 1, "n_max_plus_1 must be at least 1");
+        if sampling_level >= 0 {
+            SamplePlanner::AntiAliasing {
+                n_max_plus_1,
+                subpixel_count: (sampling_level as u32) + 1,
+            }
+        } else {
+            SamplePlanner::BlockFill {
+                n_max_plus_1,
+                block_size: ((-sampling_level) as u32) + 1,
+            }
+        }
+    }
+
+    /// Number of subpixels per output-pixel side this render. Always `1`
+    /// for block-fill (the upsampled-mapper construction below treats
+    /// block-fill as a degenerate AA with one subpixel per pixel).
+    pub fn subpixel_count(&self) -> u32 {
+        match *self {
+            SamplePlanner::AntiAliasing { subpixel_count, .. } => subpixel_count,
+            SamplePlanner::BlockFill { .. } => 1,
+        }
+    }
+
+    /// Decompose an outer field index into the corresponding output
+    /// `(pixel_index, subpixel_index)`. Returns `None` for outer indices
+    /// the traversal should skip (sub-pixel positions outside the active
+    /// AA grid, or block-fill positions that aren't on the stride).
+    #[inline]
+    pub fn decompose(&self, outer_index: usize) -> Option<(u32, u32)> {
+        match *self {
+            SamplePlanner::AntiAliasing {
+                n_max_plus_1,
+                subpixel_count,
+            } => {
+                // Outer index in field-buffer space splits into
+                // (pixel, subpixel) by integer divmod against the field's
+                // per-pixel cell count (= n_max_plus_1). The traversal
+                // populates only the first `subpixel_count` slots of each
+                // pixel's row/column; everything past that is dead space
+                // we leave un-written for the upper-bound case where the
+                // runtime AA factor < the cap baked into the buffer.
+                let subpixel_index = outer_index % n_max_plus_1;
+                if subpixel_index >= subpixel_count as usize {
+                    return None;
+                }
+                let pixel_index = (outer_index / n_max_plus_1) as u32;
+                Some((pixel_index, subpixel_index as u32))
+            }
+            SamplePlanner::BlockFill {
+                n_max_plus_1,
+                block_size,
+            } => {
+                // Block-fill samples once per `block_size`-pixel block and
+                // shares the result across the block in the colorize step.
+                // In field-buffer space that means one populated cell every
+                // `n_max_plus_1 * block_size` outer indices, starting at 0.
+                let stride = n_max_plus_1 * block_size as usize;
+                if !outer_index.is_multiple_of(stride) {
+                    return None;
+                }
+                let block_index = outer_index / stride;
+                let pixel_index = (block_index * block_size as usize) as u32;
+                Some((pixel_index, 0))
+            }
+        }
+    }
+}
+
+/// Walk every populated cell of `field` in parallel by column. The closure
+/// receives a mutable reference to the cell plus its decomposed
+/// `(pixel_index, subpixel_index)` from the supplied planner.
+///
+/// Used by [`compute_raw_field`]; the iteration shape (parallel columns,
+/// sequential rows) matches the existing rayon split semantics so we
+/// don't fight the runtime.
+pub fn par_for_each_populated_cell_mut(
+    planner: SamplePlanner,
+    field: &mut [Vec<Option<(f32, u32)>>],
+    visit: impl Fn(&mut Option<(f32, u32)>, [u32; 2], [u32; 2]) + Sync + Send,
+) {
+    field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
+        let Some((pixel_index_x, subpixel_index_x)) = planner.decompose(outer_x) else {
+            return;
+        };
+        for (outer_y, cell) in col.iter_mut().enumerate() {
+            if let Some((pixel_index_y, subpixel_index_y)) = planner.decompose(outer_y) {
+                visit(
+                    cell,
+                    [pixel_index_x, pixel_index_y],
+                    [subpixel_index_x, subpixel_index_y],
+                );
+            }
+        }
+    });
+}
+
+/// Read-only sibling of [`par_for_each_populated_cell_mut`]: walks every
+/// populated cell of `field` in parallel by column, passing the closure
+/// a shared reference to the cell plus the decomposed pixel/subpixel
+/// indices. Used by [`populate_histograms`].
+pub fn par_for_each_populated_cell(
+    planner: SamplePlanner,
+    field: &[Vec<Option<(f32, u32)>>],
+    visit: impl Fn(&Option<(f32, u32)>, [u32; 2], [u32; 2]) + Sync + Send,
+) {
+    field.par_iter().enumerate().for_each(|(outer_x, col)| {
+        let Some((pixel_index_x, subpixel_index_x)) = planner.decompose(outer_x) else {
+            return;
+        };
+        for (outer_y, cell) in col.iter().enumerate() {
+            if let Some((pixel_index_y, subpixel_index_y)) = planner.decompose(outer_y) {
+                visit(
+                    cell,
+                    [pixel_index_x, pixel_index_y],
+                    [subpixel_index_x, subpixel_index_y],
+                );
+            }
+        }
+    });
+}
+
 /// Fill the preallocated `field` with raw values produced by `kernel`.
 ///
-/// - **Positive `sampling_level = r`**: each output pixel block (`n_max_plus_1²`
-///   cells) gets the first `(r+1)²` cells populated, evaluated at subpixel
-///   positions `(i / (r+1), j / (r+1))` of the pixel for `i, j ∈ 0..(r+1)`.
-/// - **`sampling_level == 0`**: same as above with `r = 0` (one cell per
-///   block, the top-left).
-/// - **Negative `sampling_level = -m`**: block-fill. Each `(m+1) × (m+1)`
-///   output-pixel block uses one shared evaluation at the top-left field
-///   cell of the leftmost output pixel of the block.
+/// Iteration shape comes from [`SamplePlanner`]; subpixel-to-real-space
+/// math comes from constructing a `PixelMapper` against
+/// `spec.upsample(subpixel_count)` and looking up the combined index
+/// `pixel_index * subpixel_count + subpixel_index`. Two things follow:
 ///
-/// Cells skipped by the traversal are left untouched; the pipeline only
+/// 1. The sub-pixel correction is consistent — there's no longer a
+///    mix of `width/(W-1)` (from `PixelMapper::map`) and `width/W` (from
+///    a hand-computed `pixel_width / n`) the way the pre-cleanup code
+///    used. Each subpixel slot is exactly `width/(W·n − 1)` apart, which
+///    is what `PixelMapper` would produce if W were the upsampled
+///    resolution all along.
+/// 2. At `sampling_level == 0` and at block-fill levels, `subpixel_count`
+///    is `1`, so `spec.upsample(1) == spec` and the mapper degenerates to
+///    the base-resolution map — pixel hashes are invariant at those
+///    levels.
+///
+/// Cells skipped by the planner are left untouched; the pipeline only
 /// reads the populated subset on subsequent passes.
 pub fn compute_raw_field<K: FieldKernel>(
     spec: &ImageSpecification,
@@ -53,117 +227,58 @@ pub fn compute_raw_field<K: FieldKernel>(
     kernel: &K,
     field: &mut [Vec<Option<(f32, u32)>>],
 ) {
-    let pixel_map = PixelMapper::new(spec);
-    let pixel_width = spec.width / spec.resolution[0] as f64;
-    let pixel_height = spec.height() / spec.resolution[1] as f64;
-
-    if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        let step = 1.0 / n as f64;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            let i = outer_x % n_max_plus_1;
-            if i >= n {
-                return;
-            }
-            let px = (outer_x / n_max_plus_1) as u32;
-            let re = pixel_map.width.map(px) + (i as f64) * step * pixel_width;
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                let j = outer_y % n_max_plus_1;
-                if j >= n {
-                    continue;
-                }
-                let py = (outer_y / n_max_plus_1) as u32;
-                let im = pixel_map.height.map(py) + (j as f64) * step * pixel_height;
-                *cell = kernel.evaluate([re, im]);
-            }
-        });
-    } else {
-        let block_size = (-sampling_level) as usize + 1;
-        let stride = n_max_plus_1 * block_size;
-        field.par_iter_mut().enumerate().for_each(|(outer_x, col)| {
-            if outer_x % stride != 0 {
-                return;
-            }
-            let block_x = outer_x / stride;
-            let px = (block_x * block_size) as u32;
-            let re = pixel_map.width.map(px);
-            for (outer_y, cell) in col.iter_mut().enumerate() {
-                if outer_y % stride != 0 {
-                    continue;
-                }
-                let block_y = outer_y / stride;
-                let py = (block_y * block_size) as u32;
-                let im = pixel_map.height.map(py);
-                *cell = kernel.evaluate([re, im]);
-            }
-        });
-    }
+    let planner = SamplePlanner::new(n_max_plus_1, sampling_level);
+    let subpixel_count = planner.subpixel_count();
+    let upsampled = PixelMapper::new(&spec.upsample(subpixel_count));
+    par_for_each_populated_cell_mut(planner, field, |cell, pixel_index, subpixel_index| {
+        let combined_x = pixel_index[0] * subpixel_count + subpixel_index[0];
+        let combined_y = pixel_index[1] * subpixel_count + subpixel_index[1];
+        let re = upsampled.width.map(combined_x);
+        let im = upsampled.height.map(combined_y);
+        *cell = kernel.evaluate([re, im]);
+    });
 }
 
-/// Walk every populated cell of `field` and insert each `Some((value, k))`
-/// into `histograms[k % histograms.len()]`. The pipeline calls
-/// `Histogram::reset` on each entry first; this function never resets.
+/// Walk every populated cell of `field` and insert each
+/// `Some((value, color_map_index))` into
+/// `histograms[color_map_index % histograms.len()]`.
 ///
-/// Histograms use atomic interior mutability, so the per-cell `insert`
-/// call only needs `&Histogram`. The `&mut [Histogram]` signature is
-/// here to make the per-render reset / fill semantics explicit.
+/// Callers reset the histograms first (typically via
+/// `ColorPaletteCache::reset_histograms`); this function only accumulates,
+/// so it's safe to call repeatedly between resets. The `&mut [Histogram]`
+/// signature reflects per-render ergonomics — `Histogram::insert` itself
+/// is interior-mutable, but the slice borrow ties the histograms to the
+/// render that's currently filling them.
 pub fn populate_histograms(
     n_max_plus_1: usize,
     sampling_level: i32,
     field: &[Vec<Option<(f32, u32)>>],
     histograms: &mut [Histogram],
 ) {
-    let n_hists = histograms.len();
-    assert!(n_hists > 0, "histograms slice must not be empty");
-    let histograms: &[Histogram] = histograms;
-    if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        field.par_iter().enumerate().for_each(|(outer_x, col)| {
-            let i = outer_x % n_max_plus_1;
-            if i >= n {
-                return;
-            }
-            for (outer_y, cell) in col.iter().enumerate() {
-                let j = outer_y % n_max_plus_1;
-                if j >= n {
-                    continue;
-                }
-                if let Some((v, k)) = cell {
-                    let idx = (*k as usize) % n_hists;
-                    histograms[idx].insert(*v);
-                }
-            }
-        });
-    } else {
-        let block_size = (-sampling_level) as usize + 1;
-        let stride = n_max_plus_1 * block_size;
-        field.par_iter().enumerate().for_each(|(outer_x, col)| {
-            if outer_x % stride != 0 {
-                return;
-            }
-            for (outer_y, cell) in col.iter().enumerate() {
-                if outer_y % stride != 0 {
-                    continue;
-                }
-                if let Some((v, k)) = cell {
-                    let idx = (*k as usize) % n_hists;
-                    histograms[idx].insert(*v);
-                }
-            }
-        });
-    }
+    let histogram_count = histograms.len();
+    assert!(histogram_count > 0, "histograms slice must not be empty");
+    let histograms_ref: &[Histogram] = histograms;
+    let planner = SamplePlanner::new(n_max_plus_1, sampling_level);
+    par_for_each_populated_cell(planner, field, |cell, _pixel_index, _subpixel_index| {
+        if let Some((value, color_map_index)) = cell {
+            let index = (*color_map_index as usize) % histogram_count;
+            histograms_ref[index].insert(*value);
+        }
+    });
 }
 
 /// Walk the row-major output `egui::ColorImage`, collapsing field cells
 /// into output pixels via the unified `ColorPaletteCache`.
 ///
-/// - **Positive `sampling_level = r`**: each output pixel `(px, py)` averages
-///   the `(r+1)²` cells at `field[px·n_max_plus_1 + i][py·n_max_plus_1 + j]`
-///   for `i, j ∈ 0..(r+1)`.
-/// - **`sampling_level == 0`**: one cell per output pixel (the top-left of
-///   each block).
-/// - **Negative `sampling_level = -m`**: block-fill (nearest-neighbor).
-///   Every `(m+1) × (m+1)` output-pixel block reads one field cell.
+/// - **Positive `sampling_level = subpixel_count - 1`**: each output pixel
+///   `(px, py)` averages the `subpixel_count²` cells at
+///   `field[px·n_max_plus_1 + i][py·n_max_plus_1 + j]` for
+///   `i, j ∈ 0..subpixel_count`.
+/// - **`sampling_level == 0`**: one cell per output pixel (the top-left
+///   of each block).
+/// - **Negative `sampling_level = -(block_size - 1)`**: block-fill
+///   (nearest-neighbor). Every `block_size²` output-pixel block reads one
+///   field cell.
 ///
 /// CDF percentile lookup happens inside `colorize_cell`; the field stays
 /// raw end-to-end. Per-pixel allocations: zero.
@@ -174,47 +289,47 @@ pub fn colorize_collapse_unified(
     sampling_level: i32,
     out: &mut ColorImage,
 ) {
-    let width = out.size[0];
+    let output_width = out.size[0];
 
     if sampling_level >= 0 {
-        let n = sampling_level as usize + 1;
-        let count = (n * n) as u32;
+        let subpixel_count = sampling_level as usize + 1;
+        let cells_per_pixel = (subpixel_count * subpixel_count) as u32;
         out.pixels
-            .par_chunks_exact_mut(width)
+            .par_chunks_exact_mut(output_width)
             .enumerate()
-            .for_each(|(py, row)| {
-                for (px, pixel) in row.iter_mut().enumerate() {
+            .for_each(|(pixel_index_y, row)| {
+                for (pixel_index_x, pixel) in row.iter_mut().enumerate() {
                     let mut sum = [0u32; 3];
-                    for i in 0..n {
-                        let cx = px * n_max_plus_1 + i;
-                        let col = &field[cx];
-                        for j in 0..n {
-                            let cy = py * n_max_plus_1 + j;
-                            let rgb = colorize_cell(cache, col[cy]);
+                    for subpixel_index_x in 0..subpixel_count {
+                        let cell_x = pixel_index_x * n_max_plus_1 + subpixel_index_x;
+                        let col = &field[cell_x];
+                        for subpixel_index_y in 0..subpixel_count {
+                            let cell_y = pixel_index_y * n_max_plus_1 + subpixel_index_y;
+                            let rgb = colorize_cell(cache, col[cell_y]);
                             sum[0] += rgb[0] as u32;
                             sum[1] += rgb[1] as u32;
                             sum[2] += rgb[2] as u32;
                         }
                     }
                     *pixel = Color32::from_rgb(
-                        (sum[0] / count) as u8,
-                        (sum[1] / count) as u8,
-                        (sum[2] / count) as u8,
+                        (sum[0] / cells_per_pixel) as u8,
+                        (sum[1] / cells_per_pixel) as u8,
+                        (sum[2] / cells_per_pixel) as u8,
                     );
                 }
             });
     } else {
         let block_size = (-sampling_level) as usize + 1;
         out.pixels
-            .par_chunks_exact_mut(width)
+            .par_chunks_exact_mut(output_width)
             .enumerate()
-            .for_each(|(py, row)| {
-                let block_y = py / block_size;
-                let cy = block_y * block_size * n_max_plus_1;
-                for (px, pixel) in row.iter_mut().enumerate() {
-                    let block_x = px / block_size;
-                    let cx = block_x * block_size * n_max_plus_1;
-                    let rgb = colorize_cell(cache, field[cx][cy]);
+            .for_each(|(pixel_index_y, row)| {
+                let block_y = pixel_index_y / block_size;
+                let cell_y = block_y * block_size * n_max_plus_1;
+                for (pixel_index_x, pixel) in row.iter_mut().enumerate() {
+                    let block_x = pixel_index_x / block_size;
+                    let cell_x = block_x * block_size * n_max_plus_1;
+                    let rgb = colorize_cell(cache, field[cell_x][cell_y]);
                     *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
                 }
             });
@@ -226,8 +341,8 @@ mod tests {
     use super::*;
     use crate::core::color_map::{ColorMapKeyFrame, ColorPalette};
 
-    /// Build a minimal `ColorPaletteCache` whose CDFs are pre-shaped so that
-    /// percentile lookups land predictably on the color-map endpoints:
+    /// Build a minimal `ColorPaletteCache` whose CDFs are pre-shaped so
+    /// that percentile lookups land predictably on the color-map endpoints:
     /// inserting a single mid-bucket sample makes value `0.0` map to 0.0
     /// (low keyframe) and any value in the rightmost bin map to 1.0 (high
     /// keyframe).
@@ -259,9 +374,9 @@ mod tests {
     }
 
     /// 4×4 field of `Option<(f32, u32)>` with sampling_level=1, n=2.
-    /// Verifies AA averaging works: a 2×2 block of `Some((0.0, 0))` yields
-    /// the low keyframe; a block mixing `None` with `Some` averages with
-    /// the flat color.
+    /// Verifies anti-aliasing averaging works: a 2×2 block of
+    /// `Some((0.0, 0))` yields the low keyframe; a block mixing `None`
+    /// with `Some` averages with the background color.
     #[test]
     fn colorize_collapse_unified_aa_averaging_matches_hand_computed() {
         let palette = red_to_blue_palette();
@@ -273,7 +388,7 @@ mod tests {
         field[0][1] = Some((0.0, 0));
         field[1][0] = Some((0.0, 0));
         field[1][1] = Some((0.0, 0));
-        // Top-right block (px=1, py=0) ← all None → flat color.
+        // Top-right block (px=1, py=0) ← all None → background color.
         // Bottom-left block (px=0, py=1) ← 2 Some((0.0, 0)) + 2 None.
         field[0][2] = Some((0.0, 0));
         field[0][3] = None;
@@ -291,14 +406,15 @@ mod tests {
         let pixel_at = |px: usize, py: usize| out.pixels[py * 2 + px];
         assert_eq!(pixel_at(0, 0), Color32::from_rgb(255, 0, 0));
         assert_eq!(pixel_at(1, 0), Color32::from_rgb(9, 9, 9));
-        // Bottom-left averages 2× red + 2× flat: (255+255+9+9)/4=132,
-        // (0+0+9+9)/4=4.5→4, (0+0+9+9)/4=4.5→4.
-        let bl = pixel_at(0, 1);
-        assert_eq!(bl, Color32::from_rgb(132, 4, 4));
+        // Bottom-left averages 2× red + 2× background:
+        //  (255+255+9+9)/4=132, (0+0+9+9)/4=4, (0+0+9+9)/4=4.
+        let bottom_left = pixel_at(0, 1);
+        assert_eq!(bottom_left, Color32::from_rgb(132, 4, 4));
         assert_eq!(pixel_at(1, 1), Color32::from_rgb(0, 0, 255));
     }
 
-    /// `n = 1` (sampling_level = 0): one cell per output pixel, no averaging.
+    /// `subpixel_count = 1` (sampling_level = 0): one cell per output
+    /// pixel, no averaging.
     #[test]
     fn colorize_collapse_unified_no_aa_one_cell_per_pixel() {
         let palette = red_to_blue_palette();
@@ -356,17 +472,15 @@ mod tests {
     }
 
     /// Synthetic kernel that returns a value derived from the input point
-    /// plus a fixed gradient index. The value encodes both coordinates so
-    /// tests can verify which point each cell saw.
+    /// plus a fixed color-map index.
     struct EncodingKernel {
-        gradient_index: u32,
+        color_map_index: u32,
     }
 
     impl FieldKernel for EncodingKernel {
         fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
-            // Encode (re, im) into a single f32; the test recovers it.
             let value = point[0] as f32 * 1000.0 + point[1] as f32;
-            Some((value, self.gradient_index))
+            Some((value, self.color_map_index))
         }
     }
 
@@ -380,18 +494,18 @@ mod tests {
         }
     }
 
-    /// Kernel that bins values by gradient index based on the x coordinate.
-    /// Even pixel-x → gradient 0, odd → gradient 1.
+    /// Kernel that bins values by color-map index based on the x
+    /// coordinate. Even pixel-x → color map 0, odd → color map 1.
     struct AlternatingKernel;
 
     impl FieldKernel for AlternatingKernel {
         fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
-            let k = if point[0].round() as i32 % 2 == 0 {
+            let color_map_index = if point[0].round() as i32 % 2 == 0 {
                 0
             } else {
                 1
             };
-            Some((point[0].abs() as f32, k))
+            Some((point[0].abs() as f32, color_map_index))
         }
     }
 
@@ -408,29 +522,131 @@ mod tests {
     }
 
     #[test]
+    fn sample_planner_anti_aliasing_decomposes_outer_index_correctly() {
+        let planner = SamplePlanner::new(4, 1); // n_max_plus_1 = 4, subpixel_count = 2
+
+        // Within the populated 2×2 subgrid of the first 4×4 block.
+        assert_eq!(planner.decompose(0), Some((0, 0)));
+        assert_eq!(planner.decompose(1), Some((0, 1)));
+        // Outside the active subgrid (subpixel_index ≥ subpixel_count).
+        assert_eq!(planner.decompose(2), None);
+        assert_eq!(planner.decompose(3), None);
+        // Next pixel.
+        assert_eq!(planner.decompose(4), Some((1, 0)));
+        assert_eq!(planner.decompose(5), Some((1, 1)));
+        assert_eq!(planner.decompose(6), None);
+    }
+
+    #[test]
+    fn sample_planner_anti_aliasing_baseline_is_one_cell_per_pixel() {
+        let planner = SamplePlanner::new(1, 0); // subpixel_count = 1
+        // Every cell is on the populated grid; subpixel index always 0.
+        for outer in 0..5 {
+            assert_eq!(planner.decompose(outer), Some((outer as u32, 0)));
+        }
+        assert_eq!(planner.subpixel_count(), 1);
+    }
+
+    #[test]
+    fn sample_planner_block_fill_skips_off_stride_indices() {
+        // n_max_plus_1 = 2, block_size = 2 → stride = 4.
+        let planner = SamplePlanner::new(2, -1);
+        assert_eq!(planner.decompose(0), Some((0, 0)));
+        assert_eq!(planner.decompose(1), None);
+        assert_eq!(planner.decompose(2), None);
+        assert_eq!(planner.decompose(3), None);
+        // Next block: pixel_index = block_index (1) * block_size (2) = 2.
+        assert_eq!(planner.decompose(4), Some((2, 0)));
+        assert_eq!(planner.decompose(5), None);
+        assert_eq!(planner.decompose(8), Some((4, 0)));
+        assert_eq!(planner.subpixel_count(), 1);
+    }
+
+    #[test]
+    fn sample_planner_traversal_visits_each_outer_index_once_for_aa() {
+        // Drive the read-only traversal and assert (a) every populated
+        // (outer_x, outer_y) is visited exactly once, (b) decompose
+        // is consistent with what compute_raw_field would write.
+        let n_max_plus_1 = 3;
+        let outer_dim = 6;
+        for sampling_level in [0, 1, 2] {
+            let planner = SamplePlanner::new(n_max_plus_1, sampling_level);
+            let field = allocate_field(outer_dim, outer_dim);
+            let visits = std::sync::Mutex::new(Vec::<(usize, usize, [u32; 2], [u32; 2])>::new());
+            par_for_each_populated_cell(planner, &field, |_cell, pi, si| {
+                // Recover the outer indices by re-decomposing.
+                // We need them to assert uniqueness — pass through via the
+                // planner: pixel_index*n_max_plus_1 + subpixel_index.
+                let outer_x = pi[0] as usize * n_max_plus_1 + si[0] as usize;
+                let outer_y = pi[1] as usize * n_max_plus_1 + si[1] as usize;
+                visits.lock().unwrap().push((outer_x, outer_y, pi, si));
+            });
+
+            let mut visits = visits.into_inner().unwrap();
+            visits.sort();
+            let total_unique: std::collections::BTreeSet<_> =
+                visits.iter().map(|(x, y, _, _)| (*x, *y)).collect();
+            assert_eq!(
+                total_unique.len(),
+                visits.len(),
+                "sampling_level={sampling_level}: every visited (outer_x, outer_y) must be unique"
+            );
+
+            // The total visit count must equal subpixel_count² per pixel
+            // times pixel-count², where pixel-count = outer_dim / n_max_plus_1.
+            let subpixel_count = planner.subpixel_count() as usize;
+            let pixel_count_per_side = outer_dim / n_max_plus_1;
+            let expected = subpixel_count.pow(2) * pixel_count_per_side.pow(2);
+            assert_eq!(visits.len(), expected, "sampling_level={sampling_level}");
+        }
+    }
+
+    #[test]
+    fn sample_planner_traversal_visits_match_block_fill_stride() {
+        // n_max_plus_1 = 2, block_size = 2 → stride = 4 in outer space.
+        let planner = SamplePlanner::new(2, -1);
+        let field = allocate_field(8, 4);
+        let visits = std::sync::Mutex::new(Vec::<(usize, usize)>::new());
+        par_for_each_populated_cell(planner, &field, |_cell, pi, _si| {
+            // For block-fill we infer outer from pixel: outer = pixel/block_size * stride.
+            let block_size = 2;
+            let outer_x = (pi[0] as usize / block_size) * (block_size * 2); // n_max_plus_1=2
+            let outer_y = (pi[1] as usize / block_size) * (block_size * 2);
+            visits.lock().unwrap().push((outer_x, outer_y));
+        });
+        let mut visits = visits.into_inner().unwrap();
+        visits.sort();
+        // Stride = 4; field is 8 wide × 4 tall in outer indices.
+        // Outer-x positions: 0, 4. Outer-y positions: 0.
+        // (4 isn't reached on the y axis because inner_dim=4 and stride=4
+        // gives only one position 0.)
+        assert_eq!(visits, vec![(0, 0), (4, 0)]);
+    }
+
+    #[test]
     fn compute_raw_field_aa_writes_only_first_n_squared_cells_per_block() {
         let spec = make_spec(2, 2, 4.0);
         let n_max_plus_1 = 3; // field is 6×6
         let mut field = allocate_field(6, 6);
-        let kernel = EncodingKernel { gradient_index: 0 };
+        let kernel = EncodingKernel { color_map_index: 0 };
 
-        // sampling_level = 1 → n = 2, only first 2×2 cells of each 3×3
-        // block should be populated.
+        // sampling_level = 1 → subpixel_count = 2; only the first 2×2
+        // sub-grid of each 3×3 block should be populated.
         compute_raw_field(&spec, n_max_plus_1, 1, &kernel, &mut field);
 
         for (outer_x, col) in field.iter().enumerate() {
             for (outer_y, cell) in col.iter().enumerate() {
-                let i = outer_x % n_max_plus_1;
-                let j = outer_y % n_max_plus_1;
-                if i < 2 && j < 2 {
+                let subpixel_x = outer_x % n_max_plus_1;
+                let subpixel_y = outer_y % n_max_plus_1;
+                if subpixel_x < 2 && subpixel_y < 2 {
                     assert!(
                         cell.is_some(),
-                        "cell ({outer_x},{outer_y}) within sub-block should be populated"
+                        "cell ({outer_x},{outer_y}) within sub-grid should be populated"
                     );
                 } else {
                     assert!(
                         cell.is_none(),
-                        "cell ({outer_x},{outer_y}) outside sub-block should remain None"
+                        "cell ({outer_x},{outer_y}) outside sub-grid should remain None"
                     );
                 }
             }
@@ -442,7 +658,7 @@ mod tests {
         let spec = make_spec(3, 3, 6.0);
         let n_max_plus_1 = 2; // field is 6×6
         let mut field = allocate_field(6, 6);
-        let kernel = EncodingKernel { gradient_index: 7 };
+        let kernel = EncodingKernel { color_map_index: 7 };
 
         compute_raw_field(&spec, n_max_plus_1, 0, &kernel, &mut field);
 
@@ -454,8 +670,11 @@ mod tests {
                     is_top_left,
                     "cell ({outer_x},{outer_y}) populated state mismatch"
                 );
-                if let Some((_, k)) = cell {
-                    assert_eq!(*k, 7, "gradient index must come from the kernel");
+                if let Some((_, color_map_index)) = cell {
+                    assert_eq!(
+                        *color_map_index, 7,
+                        "color-map index must come from the kernel"
+                    );
                 }
             }
         }
@@ -466,10 +685,10 @@ mod tests {
         let spec = make_spec(4, 2, 4.0);
         let n_max_plus_1 = 1; // field is 4×2 (no AA grid; block-fill is sparse over 1× field)
         let mut field = allocate_field(4, 2);
-        let kernel = EncodingKernel { gradient_index: 0 };
+        let kernel = EncodingKernel { color_map_index: 0 };
 
         // sampling_level = -1 → block_size = 2; stride = 1 * 2 = 2.
-        // Field cells (0,0), (0,*), (2,0), (2,*) populated iff outer_y % 2 == 0.
+        // Field cells (0,0), (2,0) populated iff outer_x % 2 == 0 and outer_y % 2 == 0.
         compute_raw_field(&spec, n_max_plus_1, -1, &kernel, &mut field);
 
         for (outer_x, col) in field.iter().enumerate() {
@@ -485,7 +704,8 @@ mod tests {
     }
 
     /// Records every point passed to `evaluate` so the test can verify
-    /// the kernel sees the same coordinates a `PixelMapper` would compute.
+    /// the kernel sees the same coordinates a base-resolution `PixelMapper`
+    /// would compute at `sampling_level = 0`.
     struct RecordingKernel {
         seen: std::sync::Mutex<Vec<[f64; 2]>>,
     }
@@ -498,8 +718,11 @@ mod tests {
     }
 
     #[test]
-    fn compute_raw_field_passes_correct_real_space_coords_to_kernel() {
-        // 4×2 image; baseline sampling so each pixel is visited exactly once.
+    fn compute_raw_field_baseline_pixel_coords_match_base_pixel_mapper() {
+        // 4×2 image; baseline sampling so each pixel is visited exactly
+        // once. At sampling_level=0 the upsampled mapper degenerates to
+        // the base-resolution mapper, so the coordinates handed to the
+        // kernel must agree byte-for-byte with PixelMapper::new(&spec).
         let spec = make_spec(4, 2, 8.0);
         let n_max_plus_1 = 1;
         let mut field = allocate_field(4, 2);
@@ -513,9 +736,12 @@ mod tests {
         let mut seen = kernel.seen.lock().unwrap();
         seen.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mut expected: Vec<[f64; 2]> = Vec::new();
-        for px in 0..4u32 {
-            for py in 0..2u32 {
-                expected.push([pixel_map.width.map(px), pixel_map.height.map(py)]);
+        for pixel_index_x in 0..4u32 {
+            for pixel_index_y in 0..2u32 {
+                expected.push([
+                    pixel_map.width.map(pixel_index_x),
+                    pixel_map.height.map(pixel_index_y),
+                ]);
             }
         }
         expected.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -523,15 +749,15 @@ mod tests {
     }
 
     #[test]
-    fn populate_histograms_routes_by_gradient_index() {
+    fn populate_histograms_routes_by_color_map_index() {
         let spec = make_spec(4, 1, 4.0);
         let n_max_plus_1 = 1;
         let mut field = allocate_field(4, 1);
         compute_raw_field(&spec, n_max_plus_1, 0, &AlternatingKernel, &mut field);
 
         let mut histograms = vec![Histogram::new(4, 10.0), Histogram::new(4, 10.0)];
-        for h in &mut histograms {
-            h.reset();
+        for histogram in &mut histograms {
+            histogram.reset();
         }
         populate_histograms(n_max_plus_1, 0, &field, &mut histograms);
 
@@ -549,7 +775,7 @@ mod tests {
         let spec = make_spec(3, 3, 6.0);
         let n_max_plus_1 = 2; // field is 6×6
         let mut field = allocate_field(6, 6);
-        let kernel = EncodingKernel { gradient_index: 0 };
+        let kernel = EncodingKernel { color_map_index: 0 };
         compute_raw_field(&spec, n_max_plus_1, 1, &kernel, &mut field);
 
         let some_count = field
@@ -557,12 +783,13 @@ mod tests {
             .flat_map(|c| c.iter())
             .filter(|c| c.is_some())
             .count();
-        // n=2, so each 2×2 block has 4 populated cells; 3×3 = 9 blocks → 36.
+        // subpixel_count=2, so each 2×2 block has 4 populated cells;
+        // 3×3 = 9 blocks → 36.
         assert_eq!(some_count, 9 * 4);
 
         let mut histograms = vec![Histogram::new(8, 10000.0)];
-        for h in &mut histograms {
-            h.reset();
+        for histogram in &mut histograms {
+            histogram.reset();
         }
         populate_histograms(n_max_plus_1, 1, &field, &mut histograms);
 
@@ -578,8 +805,8 @@ mod tests {
         compute_raw_field(&spec, n_max_plus_1, 0, &AlwaysNoneKernel, &mut field);
 
         let mut histograms = vec![Histogram::new(4, 10.0)];
-        for h in &mut histograms {
-            h.reset();
+        for histogram in &mut histograms {
+            histogram.reset();
         }
         populate_histograms(n_max_plus_1, 0, &field, &mut histograms);
 

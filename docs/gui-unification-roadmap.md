@@ -138,17 +138,35 @@ switch + JSON migration), 8008aff (full-field histogram).
 
 **Phase Three**
 Completed on branch `decouple-scalar-field-and-color-mapping-common-aa`
-in two commits: 56ad860 (Phase 3.1 — `FieldKernel` + core iteration
-helpers, parallel-to-old) and the follow-up that landed Phase 3.2 + 3.3
-together: collapsed `ColorMapKind` to a unified `ColorMap`, dropped
-`normalize_field` (CDF lookup now happens inside `colorize_cell`),
-introduced per-root histograms / CDFs, dropped the `QuadraticMap<T>`
-wrapper, mass-migrated every example/bench/test JSON via
-`scripts/migrate_phase_3_color_maps.py`, restored the DDP regression
-fixture, and added two Newton fixtures. Mandelbrot/Julia/Barnsley/
-Sierpinski hashes invariant; DDP visually identical (constant-color
-gradient) but bit-shift due to cell-type change; Newton hashes new
-(per-root contrast improvement).
+in two initial commits and a four-commit follow-up after PR #170 review:
+
+- 56ad860 — Phase 3.1: `FieldKernel` + core iteration helpers,
+  parallel-to-old.
+- f9905b5 — Phase 3.2 + 3.3 together: collapsed `ColorMapKind` to a
+  unified `ColorMap`, dropped `normalize_field` (CDF lookup now happens
+  inside `colorize_cell`), introduced per-root histograms / CDFs,
+  dropped the `QuadraticMap<T>` wrapper, mass-migrated every
+  example/bench/test JSON, restored the DDP regression fixture, added
+  two Newton fixtures.
+- PR #170 review cleanup (4 commits):
+  1. Renamed the unified outer struct `ColorMap` → `ColorPalette`,
+     introduced `pub type ColorMap = Vec<ColorMapKeyFrame>` for a single
+     color map, renamed the outer Vec from `gradients` to `color_maps`.
+  2. Renamed `flat_color` → `background_color` (palette) and `flat` →
+     `background` (cache).
+  3. Merged `histograms` into `ColorPaletteCache` and replaced the
+     manual three-step refresh with one atomic
+     `refresh_after_compute_pass(palette)` entry point.
+  4. Extracted `SamplePlanner` + `par_for_each_populated_cell{_mut}`
+     traversal helpers, switched the anti-aliasing sub-pixel math to an
+     upsampled `PixelMapper` for internal consistency, expanded
+     single-letter variable names, expanded `AA` → "anti-aliasing" in
+     docs.
+
+Mandelbrot baseline / downsample / Julia baseline / Barnsley / Sierpinski
+hashes invariant throughout. Mandelbrot AA / DDP / Newton hashes
+regenerated once when the sub-pixel math switched in cleanup commit 4;
+visually identical (eyeball-verified at full resolution).
 
 ---
 

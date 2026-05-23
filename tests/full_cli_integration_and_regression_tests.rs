@@ -86,9 +86,17 @@ mod tests {
                 "mandelbrot/default_regression_test",
                 "e731341fb865701eb19ac82123bd66d0c27695b2c6bdfed91b6030e155751283",
             ),
+            // Phase 3 (post-review): the anti-aliasing subpixel coordinates
+            // now come from an upsampled `PixelMapper` instead of a base
+            // mapper plus a hand-computed sub-pixel correction. The new
+            // formula has consistent `width/(W·n − 1)` spacing across all
+            // sub-pixels; the old formula mixed `width/(W-1)` with
+            // `width/W`. Hashes shift by ~1 px near image boundaries for
+            // any fixture with `sampling_level > 0`; baseline and
+            // block-fill fixtures stay invariant.
             (
                 "mandelbrot/anti_aliasing_regression_test",
-                "fb6e39949295146f3d49d80fdeaa2e6d6125473ad217345f2e7c0b6eeb1540cf",
+                "5c4d5ed86f4cbe74f4ef46bb63613746e0597ff88e33f5745b37571b7a1676ba",
             ),
             (
                 "mandelbrot/downsample_interpolation_regression_test",
@@ -106,9 +114,13 @@ mod tests {
             // from `Option<i32>` to `Option<(f32, u32)>` and DDP now
             // routes through the unified colorize cache; output looks
             // visually identical to the legacy white-on-black render.
+            // Hash regenerated again post-review when the AA sub-pixel
+            // math switched to an upsampled `PixelMapper`. Visual output
+            // is unchanged (same swirl pattern); the in/out basin
+            // classification at boundary sub-pixels shifts by ~1 px.
             (
                 "driven_damped_pendulum/default_regression_test",
-                "32cabfccc6fcb179fdad363cd49bd0762089fb1fed0a9302bbb143bd29db7b95",
+                "1ea33ab96e50e47ce09716977681e651df5ff784539bec61370634b0fdb8c7f0",
             ),
             (
                 "serpinsky/default_regression_test",
@@ -117,13 +129,16 @@ mod tests {
             // Newton fixtures added in Phase 3.3 (per-root histograms).
             // Each basin gets its own iteration-count distribution; output
             // is per-basin contrast-enhanced relative to legacy single-CDF.
+            // Hashes regenerated post-review when AA sub-pixel math
+            // switched to an upsampled `PixelMapper`; full-resolution
+            // renders eyeball-verified to show identical basin structure.
             (
                 "newtons_method/roots_of_unity_4_regression_test",
-                "e03f053f8805877106ec4b968cda338d74ded945e7c134900bfaf879d83e2f21",
+                "ea9d9e208eb53f5d10a77fb90b0dd3f60c5934514f5063841bcc681ed9c5f51f",
             ),
             (
                 "newtons_method/cosh_minus_one_regression_test",
-                "0fb4bb9a6ed7856eea5ee0adf50ae5eaa9b3935764719ba6705c371dfe1bf308",
+                "90ed7f68c987263bf3bc3535f72bf8c96062dbce95f87c467245bf4b21aca1df",
             ),
         ];
 
