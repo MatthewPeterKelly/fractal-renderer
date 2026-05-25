@@ -151,9 +151,8 @@ impl SamplePlanner {
 /// receives a mutable reference to the cell plus its decomposed
 /// `(pixel_index, subpixel_index)` from the supplied planner.
 ///
-/// Used by [`compute_raw_field`]; the iteration shape (parallel columns,
-/// sequential rows) matches the existing rayon split semantics so we
-/// don't fight the runtime.
+/// Used by [`compute_raw_field`]; the iteration shape is parallel columns,
+/// with rayon, then sequential row evaluation.
 pub fn par_for_each_populated_cell_mut(
     planner: SamplePlanner,
     field: &mut [Vec<Option<(f32, u32)>>],
