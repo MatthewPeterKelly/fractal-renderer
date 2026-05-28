@@ -4,13 +4,15 @@ use std::sync::{
 };
 
 use egui::{Color32, ColorImage};
-use image::Rgb;
 
 use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
 
 use super::{
     file_io::{FilePrefix, date_time_string, serialize_to_json_or_panic},
-    image_utils::{ImageSpecification, Renderable, create_buffer, write_image_to_file_or_panic},
+    image_utils::{
+        ImageSpecification, Renderable, field_upsample_factor, write_image_to_file_or_panic,
+    },
+    render_pipeline::RenderingPipeline,
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
 };
 
@@ -52,84 +54,80 @@ pub trait RenderWindow {
     fn render_to_file(&self);
 }
 
-/// The `PixelGrid` is a generic implementation of the `RenderWindow`, which
-/// supports all "solve by pixel" fractals. The key idea here is that we can
-/// use generics to improve speed on the "per-pixel" calculations, but then
-/// use runtime polymorphism (`dyn`) on the "once per image" updates for the
-/// `explore` interface. This helps to keep the rendering pipeline efficient.
-#[derive(Clone, Debug)]
+/// Generic `RenderWindow` implementation backed by a `RenderingPipeline`.
+/// All "solve by pixel" fractals run through it. Per-(sub)pixel dispatch is
+/// fully monomorphized over `F: Renderable`; the `dyn` boundary stays on
+/// the GUI side.
 pub struct PixelGrid<F: Renderable> {
-    // The render will write into this buffer, which is locked with a mutex
-    // during rendering. Once complete, it will be copied into the window
-    // pixel-by-pixel in the `draw()` method.
-    display_buffer: Arc<Mutex<Vec<Vec<Rgb<u8>>>>>,
+    // Output `egui::ColorImage` written by the pipeline on the background
+    // thread, then copied into the eframe-supplied texture in `draw`.
+    display_buffer: Arc<Mutex<ColorImage>>,
 
-    // Interprets the UI commands to pan and zoom, translating them into the image
-    // specification used by the renderer.
+    // Interprets UI commands to pan and zoom, translating them into the
+    // image specification used by the renderer.
     view_control: ViewControl,
 
-    // Cache the file prefix so that we can use a consistent directory for writing
-    // images to disk while exploring the fractal.
+    // File prefix for snapshot writes.
     file_prefix: FilePrefix,
 
-    // Measures the render speed on each redraw, and then uses that to adaptively change
-    // the trade-off between render quality and speed. Once the user stops interacting,
-    // the quality will gradually increase, resulting in a progressively better render.
-    // While interacting, this ensures that we have a fast response from the graphics.
+    // Measures render time and adaptively trades render quality for speed
+    // while the user is interacting; ramps quality back up while idle.
     adaptive_quality_regulator: AdaptiveOptimizationRegulator,
 
-    // Encapsulates all details required to render the image.
-    // Wrapped in an `Arc<Mutex<>>` to enable render in a background thread.
-    renderer: Arc<Mutex<F>>,
+    // Pipeline owning the fractal, field, histogram, CDF, and color cache.
+    // Mutex-wrapped so the GUI thread can adjust speed-optimization level
+    // and the background thread can render in parallel.
+    pipeline: Arc<Mutex<RenderingPipeline<F>>>,
 
-    // Cache used to enable dynamically adjusting parameters to hit frame per second target.
+    // Cache of the user's full-quality reference parameters; used by the
+    // regulator to interpolate runtime values back toward the user's
+    // specified state.
     speed_optimizer_cache: F::ReferenceCache,
 
-    // Lock, used to ensure that we only run a single render background task.
+    // Lock ensuring only one background render runs at a time.
     render_task_is_busy: Arc<AtomicBool>,
 
-    // Set to `true` when rendering is complete and the display buffer needs
-    // to be copied to the screen.
+    // Flag set by the background thread when a fresh image is ready in
+    // `display_buffer` and needs to be uploaded to the texture.
     redraw_required: Arc<AtomicBool>,
 
-    // Tracks whether a render has ever been launched for this window instance.
+    // Whether a render has ever been launched on this `PixelGrid`.
     has_started_rendering: bool,
 }
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
 
-fn display_buffer_to_color_image(display_buffer: &[Vec<Rgb<u8>>], image: &mut ColorImage) {
-    let width = image.size[0];
-    // The display buffer is column-major (`buffer[x][y]`). `ColorImage`
-    // pixels are row-major, so transpose as we copy.
-    for (y, row) in image.pixels.chunks_exact_mut(width).enumerate() {
-        for (x, pixel) in row.iter_mut().enumerate() {
-            let rgb = display_buffer[x][y];
-            *pixel = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-        }
-    }
-}
-
 impl<F> PixelGrid<F>
 where
     F: Renderable + Send + Sync + 'static,
 {
+    /// Construct a `PixelGrid` around the given fractal. Allocates the
+    /// pipeline's reusable buffers at the user's full sampling level.
     pub fn new(time: f64, file_prefix: FilePrefix, view_control: ViewControl, renderer: F) -> Self {
         let resolution = view_control.image_specification().resolution;
-        let display_buffer = create_buffer(Rgb([0, 0, 0]), &resolution);
         let center_command = CenterCommand::Target(CenterTargetCommand {
             view_center: view_control.image_specification().center,
             pan_rate: 0.0,
         });
 
-        let renderer = Arc::new(Mutex::new(renderer));
+        let n_max_plus_1 = field_upsample_factor(renderer.render_options().sampling_level);
+        let bin_count = renderer.histogram_bin_count();
+        let hist_max = renderer.histogram_max_value();
+        let lut_count = renderer.lookup_table_count();
+        let speed_optimizer_cache = renderer.reference_cache();
+        let pipeline =
+            RenderingPipeline::new(renderer, n_max_plus_1, bin_count, hist_max, lut_count);
+        let display_buffer = ColorImage::filled(
+            [resolution[0] as usize, resolution[1] as usize],
+            Color32::BLACK,
+        );
 
         let mut pixel_grid = Self {
             display_buffer: Arc::new(Mutex::new(display_buffer)),
             view_control,
             file_prefix,
-            renderer: renderer.clone(),
-            speed_optimizer_cache: renderer.lock().unwrap().reference_cache(),
+            pipeline: Arc::new(Mutex::new(pipeline)),
+            speed_optimizer_cache,
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
             has_started_rendering: false,
@@ -143,32 +141,39 @@ where
         pixel_grid
     }
 
+    /// Whether a background render is currently in flight.
     pub fn render_task_is_busy(&self) -> bool {
         self.render_task_is_busy.load(Ordering::Acquire)
     }
 
+    /// Whether a completed render is waiting to be drawn.
     pub fn redraw_required(&self) -> bool {
         self.redraw_required.load(Ordering::Acquire)
     }
 
+    /// Whether the regulator wants another render even without user input
+    /// (e.g. ramping quality back up after the user stopped panning).
     pub fn adaptive_rendering_required(&self) -> bool {
         !self.adaptive_quality_regulator.is_idle()
     }
 
-    /// Renders the fractal, pixel-by-pixel, on a background thread(s).
+    /// Spawn a background render on the pipeline. The pipeline's mutex
+    /// serializes against the UI thread's parameter edits.
     fn render(&mut self) {
         let display_buffer = self.display_buffer.clone();
-        let renderer = self.renderer.clone();
+        let pipeline = self.pipeline.clone();
         let image_specification = *self.image_specification();
         let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
         let redraw_required = self.redraw_required.clone();
 
         std::thread::spawn(move || {
-            let mut display_buffer_mut = display_buffer.lock().unwrap();
-            let mut renderer_mut = renderer.lock().unwrap();
-            renderer_mut.set_image_specification(image_specification);
-            renderer_mut.render_to_buffer(&mut display_buffer_mut);
-
+            let mut color_image = display_buffer.lock().unwrap();
+            let mut pipeline_mut = pipeline.lock().unwrap();
+            pipeline_mut
+                .fractal_mut()
+                .set_image_specification(image_specification);
+            let sampling_level = pipeline_mut.fractal().render_options().sampling_level;
+            pipeline_mut.render(&mut color_image, sampling_level);
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
         });
@@ -225,9 +230,10 @@ where
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                 // If we reach here, then the background thread is ready to render an image.
-                self.renderer
+                self.pipeline
                     .lock()
                     .unwrap()
+                    .fractal_mut()
                     .set_speed_optimization_level(command, &self.speed_optimizer_cache);
                 // Mark the start of the render operation so that we can collect accurate timing.
                 self.adaptive_quality_regulator
@@ -247,7 +253,7 @@ where
         debug_assert_eq!(image.size, [width, height]);
         debug_assert_eq!(image.pixels.len(), width * height);
         let display_buffer = self.display_buffer.lock().unwrap();
-        display_buffer_to_color_image(&display_buffer, image);
+        image.pixels.copy_from_slice(&display_buffer.pixels);
         self.redraw_required.store(false, Ordering::Release);
     }
 
@@ -260,15 +266,14 @@ where
             &self.image_specification(),
         );
 
-        let mut imgbuf = image::ImageBuffer::new(
-            self.image_specification().resolution[0],
-            self.image_specification().resolution[1],
-        );
-
+        let resolution = self.image_specification().resolution;
+        let mut imgbuf = image::ImageBuffer::new(resolution[0], resolution[1]);
         {
             let display_buffer = self.display_buffer.lock().unwrap();
+            let width = display_buffer.size[0];
             for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-                *pixel = display_buffer[x as usize][y as usize];
+                let c = display_buffer.pixels[(y as usize) * width + (x as usize)];
+                *pixel = image::Rgb([c.r(), c.g(), c.b()]);
             }
         }
 
@@ -280,27 +285,9 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_display_buffer_to_color_image_transposition() {
-        // 3 columns x 2 rows (column-major: buffer[x][y])
-        let display_buffer = vec![
-            vec![Rgb([10, 20, 30]), Rgb([40, 50, 60])],
-            vec![Rgb([70, 80, 90]), Rgb([100, 110, 120])],
-            vec![Rgb([130, 140, 150]), Rgb([160, 170, 180])],
-        ];
-        let mut image = ColorImage::filled([3, 2], Color32::BLACK);
-
-        display_buffer_to_color_image(&display_buffer, &mut image);
-
-        assert_eq!(image.pixels[0], Color32::from_rgb(10, 20, 30));
-        assert_eq!(image.pixels[1], Color32::from_rgb(70, 80, 90));
-        assert_eq!(image.pixels[2], Color32::from_rgb(130, 140, 150));
-        assert_eq!(image.pixels[3], Color32::from_rgb(40, 50, 60));
-        assert_eq!(image.pixels[4], Color32::from_rgb(100, 110, 120));
-        assert_eq!(image.pixels[5], Color32::from_rgb(160, 170, 180));
-    }
-}
+// The previous `display_buffer_to_color_image_transposition` unit test was
+// removed when the pipeline began writing directly into a row-major
+// `ColorImage`; PixelGrid no longer transposes a column-major buffer. There
+// isn't a useful seam to unit-test here today; the production behavior is
+// covered by the CLI pixel-hash regression tests and the manual
+// `cargo run -- explore` smoke tests.

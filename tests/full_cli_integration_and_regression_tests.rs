@@ -75,33 +75,39 @@ mod tests {
         let test_cases = vec![
             (
                 "mandelbrot/default_regression_test",
-                "3b3929d109b890dcbc00eaa9ee502f806d6823636af3c3814b0bbccce740ed7a",
+                "e731341fb865701eb19ac82123bd66d0c27695b2c6bdfed91b6030e155751283",
             ),
             (
                 "mandelbrot/anti_aliasing_regression_test",
-                "fd1bb5829792e963a41e80ced4f576529698a9087140a6da1c328439e05c8f07",
+                "5c4d5ed86f4cbe74f4ef46bb63613746e0597ff88e33f5745b37571b7a1676ba",
             ),
             (
                 "mandelbrot/downsample_interpolation_regression_test",
-                "a314629edf95c6d745f32251bc4600b643be79086820a4ceb48100c17dbf1ac4",
+                "721e538c36b9cc78d62503f263cf51aaf89b1dc7b37ac0c5ae5085b97a1f65d5",
             ),
             (
                 "julia/default_regression_test",
-                "c462813d6ac6e4f631cae981cccd68e6b4744194448e85539d31a5236a7e373b",
+                "69b3b390da75b5bd8f6eeca7afac86cf41864582e2b4514c8f003dd29aef9d11",
             ),
             (
                 "barnsley_fern/default_regression_test",
                 "a4605eabb0ecaec01d3decc4191430143b36e36820a1ec5a186c836ed7364dd4",
             ),
-            // Disabled; Works locally, but not in CI. Details here:
-            // https://github.com/MatthewPeterKelly/fractal-renderer/issues/90
-            // (
-            //     "driven_damped_pendulum/default_regression_test",
-            //     "5f1bbcbe83afdc2ea36b34ce3774e5efc99bec3b426c80524bf0c4efb1097e7e",
-            // ),
+            (
+                "driven_damped_pendulum/default_regression_test",
+                "1ea33ab96e50e47ce09716977681e651df5ff784539bec61370634b0fdb8c7f0",
+            ),
             (
                 "serpinsky/default_regression_test",
                 "d7776c07094689b9c994f69012eeacccebd0167ab6fcec30e67f73f8ca9cd4c5",
+            ),
+            (
+                "newtons_method/roots_of_unity_4_regression_test",
+                "ea9d9e208eb53f5d10a77fb90b0dd3f60c5934514f5063841bcc681ed9c5f51f",
+            ),
+            (
+                "newtons_method/cosh_minus_one_regression_test",
+                "90ed7f68c987263bf3bc3535f72bf8c96062dbce95f87c467245bf4b21aca1df",
             ),
         ];
 

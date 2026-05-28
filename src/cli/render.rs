@@ -1,6 +1,5 @@
 use crate::core::image_utils;
 use crate::fractals::newtons_method::render_newtons_method;
-use crate::fractals::quadratic_map::QuadraticMap;
 use crate::fractals::{
     barnsley_fern::render_barnsley_fern, common::FractalParams, serpinsky::render_serpinsky,
 };
@@ -14,11 +13,11 @@ pub fn render_fractal(
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            image_utils::render(QuadraticMap::new((**inner_params).clone()), file_prefix)
+            image_utils::render((**inner_params).clone(), file_prefix)
         }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
-            image_utils::render(QuadraticMap::new((**inner_params).clone()), file_prefix)
+            image_utils::render((**inner_params).clone(), file_prefix)
         }
         FractalParams::DrivenDampedPendulum(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");

@@ -13,6 +13,7 @@ node_modules/
 
 # Editor:
 .vscode/**/*
+**/*.code-workspace
 # ...except shared workspace settings that should be checked in:
 !.vscode/settings.json
 !.vscode/extensions.json

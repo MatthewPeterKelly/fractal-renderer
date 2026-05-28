@@ -9,11 +9,10 @@
       "max_iteration_count": 500,
       "convergence_tolerance": 1e-8,
       "render_options": {
-        "downsample_stride": 1,
-        "subpixel_antialiasing": 4
+        "sampling_level": 4
       },
       "color": {
-        "cyclic_attractor": [255, 255, 255],
+        "background_color": [255, 255, 255],
         "color_maps": [
           [
             {
@@ -74,8 +73,7 @@
         ]
       },
       "lookup_table_count": 512,
-      "histogram_bin_count": 512,
-      "histogram_sample_count": 30000
+      "histogram_bin_count": 512
     },
     "system": {
       "RootsOfUnity": {

@@ -1,79 +1,238 @@
+use egui::Color32;
 use image::Rgb;
 use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
-use crate::core::interpolation::{InterpolationKeyframe, Interpolator, KeyframeInterpolator};
+use crate::core::histogram::{CumulativeDistributionFunction, Histogram};
+use crate::core::interpolation::{
+    InterpolationKeyframe, Interpolator, KeyframeInterpolator, LinearInterpolator,
+};
 use crate::core::lookup_table::LookupTable;
 
-/**
- * Represents a single "keyframe" of the color map, pairing a
- * "query" with the color that should be produced at that query point.
- */
+/// Represents a single "keyframe" of a color map, pairing a "query" with
+/// the color that should be produced at that query point.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct ColorMapKeyFrame {
-    pub query: f32,       // specify location of this color within the map; on [0,1]
-    pub rgb_raw: [u8; 3], // [R, G, B]
+    /// Location of this color within the color map; on `[0, 1]`.
+    pub query: f32,
+    /// `[R, G, B]` triple, in raw 8-bit channels.
+    pub rgb_raw: [u8; 3],
 }
 
-/// Solid foreground / solid background pair. Used by basin-style fractals
-/// (e.g. driven-damped pendulum) where a per-pixel `Option<i32>` selects one
-/// or the other.
+/// A single color map: a sequence of keyframes interpolated to produce a
+/// color for any query in `[0, 1]`. Used directly by Mandelbrot / Julia /
+/// DDP; one per root for Newton's method.
+pub type ColorMap = Vec<ColorMapKeyFrame>;
+
+/// Bundle of all the color data a fractal needs at render time:
+/// a background color (used when `FieldKernel::evaluate` returns `None`)
+/// plus one or more color maps that the gradient index from each populated
+/// cell routes through.
+///
+/// Mandelbrot, Julia, and DDP carry `color_maps.len() == 1`; Newton's
+/// method carries one color map per root. The `u32` produced by
+/// `FieldKernel::evaluate` indexes into `color_maps` to pick which color
+/// map (and therefore which CDF / LUT) the cell colorizes through.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ForegroundBackground {
-    /// Color used for the "in-set" / zeroth-basin pixel value.
-    pub foreground: [u8; 3],
-    /// Color used for every other pixel value (including non-converged).
-    pub background: [u8; 3],
+pub struct ColorPalette {
+    /// Color used for cells whose `evaluate` returned `None` (Mandelbrot
+    /// in-set, DDP out-of-basin, Newton non-converging).
+    pub background_color: [u8; 3],
+    /// One color map per "channel". Length must be ≥ 1; rejected at
+    /// deserialization otherwise.
+    #[serde(deserialize_with = "deserialize_non_empty_color_maps")]
+    pub color_maps: Vec<ColorMap>,
 }
 
-/// One gradient plus a solid background. Used by escape-time fractals
-/// (Mandelbrot, Julia) where escaped pixels go through the gradient and
-/// non-escaped pixels take the background color.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BackgroundWithColorMap {
-    /// Color used for pixels that did not produce a smooth-iteration value.
-    pub background: [u8; 3],
-    /// Keyframes describing the gradient applied to escaped pixels.
-    pub color_map: Vec<ColorMapKeyFrame>,
+fn deserialize_non_empty_color_maps<'de, D>(deserializer: D) -> Result<Vec<ColorMap>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let color_maps: Vec<ColorMap> = Vec::deserialize(deserializer)?;
+    if color_maps.is_empty() {
+        return Err(serde::de::Error::custom(
+            "ColorPalette.color_maps must contain at least one color map",
+        ));
+    }
+    Ok(color_maps)
 }
 
-/// Multiple gradients plus a solid "didn't converge" color. Used by Newton's
-/// method, where a per-pixel `(smooth_iter, root_index)` picks the gradient.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MultiColorMap {
-    /// Color used when Newton iteration enters a cyclic attractor and never
-    /// converges to a root.
-    pub cyclic_attractor: [u8; 3],
-    /// One gradient per root. The root index selects which gradient applies
-    /// to a given pixel.
-    pub color_maps: Vec<Vec<ColorMapKeyFrame>>,
+/// Allocation-once cache used by the colorize hot path. The pipeline
+/// owns one of these and refreshes it in place each frame.
+///
+/// The cache is the single source of truth for every piece of state the
+/// colorize step reads: per-color-map histograms, per-color-map CDFs,
+/// per-color-map LUTs, and the background color. The pipeline never
+/// touches the CDF / LUT / background fields directly — it fills the
+/// histograms, then calls `refresh_after_compute_pass` which rebuilds
+/// everything downstream atomically. This eliminates the foot-gun where
+/// the CDF could drift out of sync with the LUT or background.
+pub struct ColorPaletteCache {
+    /// One histogram per color map. The pipeline resets these before each
+    /// compute pass via [`ColorPaletteCache::reset_histograms`] and fills
+    /// them in `field_iteration::populate_histograms`. CDF state is
+    /// rebuilt from these on the next [`refresh_after_compute_pass`] call.
+    pub histograms: Vec<Histogram>,
+    /// Per-color-map CDF. Rebuilt from `histograms` inside
+    /// `refresh_after_compute_pass`.
+    cdfs: Vec<CumulativeDistributionFunction>,
+    /// Per-color-map `[0, 1]`-domain lookup table. Refreshed from the
+    /// current keyframes inside `refresh_after_compute_pass`.
+    lookup_tables: Vec<ColorMapLookUpTable>,
+    /// `ColorPalette::background_color` pre-converted to `Color32`.
+    background: Color32,
 }
 
+impl ColorPaletteCache {
+    /// Read-only view of the per-color-map CDFs; the colorize hot path
+    /// reads them directly from `colorize_cell`. Mutation goes through
+    /// [`refresh_after_compute_pass`] only.
+    pub fn cdfs(&self) -> &[CumulativeDistributionFunction] {
+        &self.cdfs
+    }
+
+    /// Reset every histogram bin to zero. Call this between renders, before
+    /// `field_iteration::populate_histograms` fills them again.
+    pub fn reset_histograms(&mut self) {
+        for histogram in &self.histograms {
+            histogram.reset();
+        }
+    }
+
+    /// Atomically rebuild every downstream-visible piece of cache state:
+    ///
+    /// 1. Per-color-map CDFs are rebuilt from `self.histograms` (which the
+    ///    pipeline filled between the prior `reset_histograms` and this
+    ///    call).
+    /// 2. Per-color-map LUTs are refreshed from `palette`'s current
+    ///    keyframes.
+    /// 3. The cached `background` color is refreshed from
+    ///    `palette.background_color`.
+    ///
+    /// One call updates all three so the colorize step can never see a
+    /// stale half-update.
+    pub fn refresh_after_compute_pass(&mut self, palette: &ColorPalette) {
+        debug_assert_eq!(
+            self.cdfs.len(),
+            self.histograms.len(),
+            "ColorPaletteCache CDF / histogram counts must match"
+        );
+        debug_assert_eq!(
+            self.lookup_tables.len(),
+            palette.color_maps.len(),
+            "ColorPaletteCache LUT count must match ColorPalette color_maps length; \
+             color-map count is fixed for the session"
+        );
+        for (cdf, histogram) in self.cdfs.iter_mut().zip(self.histograms.iter()) {
+            cdf.reset(histogram);
+        }
+        for (lut, keyframes) in self.lookup_tables.iter_mut().zip(palette.color_maps.iter()) {
+            let inner = KeyframeColorMap::new(keyframes, LinearInterpolator);
+            lut.reset([0.0, 1.0], &|q: f32| inner.compute_pixel(q));
+        }
+        self.background = Color32::from_rgb(
+            palette.background_color[0],
+            palette.background_color[1],
+            palette.background_color[2],
+        );
+    }
+}
+
+impl ColorPalette {
+    /// Allocate the cache once at pipeline construction.
+    ///
+    /// The CDFs and histograms are allocated against the supplied
+    /// `histogram_bin_count` and `histogram_max_value` so the pipeline can
+    /// reuse them in place across frames; their contents are recomputed
+    /// from each frame's per-color-map histogram via
+    /// [`ColorPaletteCache::refresh_after_compute_pass`].
+    pub fn create_cache(
+        &self,
+        histogram_bin_count: usize,
+        histogram_max_value: f32,
+        lookup_table_count: usize,
+    ) -> ColorPaletteCache {
+        assert!(
+            !self.color_maps.is_empty(),
+            "ColorPalette.color_maps must contain at least one color map"
+        );
+        let histograms: Vec<Histogram> = self
+            .color_maps
+            .iter()
+            .map(|_| Histogram::new(histogram_bin_count, histogram_max_value))
+            .collect();
+        let cdfs = histograms
+            .iter()
+            .map(CumulativeDistributionFunction::new)
+            .collect();
+        let lookup_tables = self
+            .color_maps
+            .iter()
+            .map(|keyframes| {
+                let inner = KeyframeColorMap::new(keyframes, LinearInterpolator);
+                ColorMapLookUpTable::new(lookup_table_count, [0.0, 1.0], &|q: f32| {
+                    inner.compute_pixel(q)
+                })
+            })
+            .collect();
+        let background = Color32::from_rgb(
+            self.background_color[0],
+            self.background_color[1],
+            self.background_color[2],
+        );
+        ColorPaletteCache {
+            histograms,
+            cdfs,
+            lookup_tables,
+            background,
+        }
+    }
+}
+
+/// Per-cell color lookup. Statically dispatched; called inside the
+/// anti-aliasing collapse loop. CDF percentile lookup happens here, in
+/// color space — the field stays raw end-to-end.
+#[inline]
+pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3] {
+    match cell {
+        Some((value, color_map_index)) => {
+            let count = cache.lookup_tables.len();
+            let index = (color_map_index as usize) % count.max(1);
+            let percentile = cache.cdfs()[index].percentile(value);
+            let rgb: Rgb<u8> = cache.lookup_tables[index].compute_pixel(percentile);
+            [rgb[0], rgb[1], rgb[2]]
+        }
+        None => [
+            cache.background.r(),
+            cache.background.g(),
+            cache.background.b(),
+        ],
+    }
+}
+
+/// Trait implemented by anything that maps a query in `[0, 1]` to an RGB
+/// color. Used by `color_swatch` and the editor preview.
 pub trait ColorMapper {
+    /// Produce the color at the given query.
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
 }
 
-/**
- * Simple implementation of a "piecewise linear" color map, where the colors
- * are represented by simple linear interpolation in RGB color space. This is
- * not "strictly correct" from a color standpoint, but it works well enough in
- * practice. For details see:
- * - https://github.com/MatthewPeterKelly/fractal-renderer/pull/71
- * - https://docs.rs/palette/latest/palette/
- *   The `ColorMap` struct is implemented as a KeyframeInterpolator
- */
-pub struct ColorMap<F>
+/// Piecewise-linear color map driven by an interpolator over a list of
+/// keyframes. Used internally to populate `ColorMapLookUpTable`s.
+pub struct KeyframeColorMap<F>
 where
     F: Interpolator<f32, Vector3<f32>>,
 {
     interpolator: KeyframeInterpolator<f32, Vector3<f32>, F>,
 }
 
-impl<F> ColorMap<F>
+impl<F> KeyframeColorMap<F>
 where
     F: Interpolator<f32, Vector3<f32>>,
 {
+    /// Construct a keyframe-driven color map. Keyframes must be non-empty
+    /// and span the unit interval (first query 0.0, last query 1.0).
     pub fn new(keyframes: &[ColorMapKeyFrame], interpolator: F) -> Self {
         assert!(!keyframes.is_empty(), "keyframes must not be empty");
         assert!(
@@ -102,7 +261,7 @@ where
     }
 }
 
-impl<F> ColorMapper for ColorMap<F>
+impl<F> ColorMapper for KeyframeColorMap<F>
 where
     F: Interpolator<f32, Vector3<f32>>,
 {
@@ -115,9 +274,9 @@ where
         ])
     }
 }
-/**
- * Create a new keyframe vector, using the same colors, but uniformly spaced queries.
- */
+
+/// Create a new keyframe vector with the same colors but uniformly spaced
+/// queries.
 pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFrame> {
     let queries = lin_space(0.0..=1.0, old_keys.len());
     let mut new_keys = old_keys.to_vec();
@@ -127,15 +286,16 @@ pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFra
     new_keys
 }
 
-/**
- * Wrapper around a color map that precomputes a look-up table mapping from query
- * to the resulting color. This makes evaluation much faster.
- */
+/// Wrapper around a color map that precomputes a lookup table mapping from
+/// query to the resulting color. Makes evaluation much faster on the hot
+/// path.
 pub struct ColorMapLookUpTable {
+    /// The underlying lookup table, indexed over `[0, 1]`.
     pub table: LookupTable<image::Rgb<u8>>,
 }
 
 impl ColorMapLookUpTable {
+    /// Construct a lookup table from a `ColorMapper`.
     pub fn from_color_map<F: ColorMapper>(
         color_map: &F,
         entry_count: usize,
@@ -145,6 +305,7 @@ impl ColorMapLookUpTable {
         })
     }
 
+    /// Construct a lookup table from an arbitrary closure over the query domain.
     pub fn new<F>(entry_count: usize, query_domain: [f32; 2], color_map: &F) -> ColorMapLookUpTable
     where
         F: Fn(f32) -> image::Rgb<u8>,
@@ -156,6 +317,7 @@ impl ColorMapLookUpTable {
         map
     }
 
+    /// Refresh the table in place, without allocating.
     pub fn reset<F>(&mut self, query_domain: [f32; 2], color_map: &F)
     where
         F: Fn(f32) -> image::Rgb<u8>,
@@ -175,7 +337,7 @@ mod tests {
     use super::*;
     use image::Rgb;
 
-    /// Maps between black and some pre-specified color
+    /// Maps between black and some pre-specified color.
     struct SimpleColorMap {
         red: f32,
         green: f32,
@@ -193,6 +355,21 @@ mod tests {
         }
     }
 
+    /// Two-stop color map from red (`[255, 0, 0]`) at 0.0 to blue
+    /// (`[0, 0, 255]`) at 1.0.
+    fn make_red_to_blue_color_map() -> ColorMap {
+        vec![
+            ColorMapKeyFrame {
+                query: 0.0,
+                rgb_raw: [255, 0, 0],
+            },
+            ColorMapKeyFrame {
+                query: 1.0,
+                rgb_raw: [0, 0, 255],
+            },
+        ]
+    }
+
     #[test]
     fn test_color_map_lookup_table() {
         let simple_color_map = SimpleColorMap {
@@ -205,7 +382,6 @@ mod tests {
             simple_color_map.compute_pixel(query)
         });
 
-        // We only have 40 entries... so we don't actually hit the "perfect middle"
         let mapped_half = 131;
 
         assert_eq!(table.compute_pixel(0.0), Rgb([0, 0, 0]));
@@ -220,7 +396,7 @@ mod tests {
 
         let simple_color_map = SimpleColorMap {
             red: 255.0,
-            green: 0.0, // drop green from the output of the map
+            green: 0.0,
             blue: 255.0,
         };
         table.reset([0.0, 1.0], &|query: f32| {
@@ -236,73 +412,126 @@ mod tests {
     }
 
     #[test]
-    fn test_foreground_background_serde_roundtrip() {
-        let original = ForegroundBackground {
-            foreground: [255, 128, 0],
-            background: [10, 20, 30],
+    fn color_palette_serde_round_trip() {
+        let original = ColorPalette {
+            background_color: [10, 20, 30],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
         let json = serde_json::to_string(&original).unwrap();
-        let parsed: ForegroundBackground = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.foreground, original.foreground);
-        assert_eq!(parsed.background, original.background);
+        let parsed: ColorPalette = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.background_color, original.background_color);
+        assert_eq!(parsed.color_maps.len(), original.color_maps.len());
+        assert_eq!(parsed.color_maps[0].len(), original.color_maps[0].len());
     }
 
     #[test]
-    fn test_background_with_color_map_serde_roundtrip() {
-        let original = BackgroundWithColorMap {
-            background: [0, 0, 0],
-            color_map: vec![
-                ColorMapKeyFrame {
-                    query: 0.0,
-                    rgb_raw: [10, 20, 30],
-                },
-                ColorMapKeyFrame {
-                    query: 1.0,
-                    rgb_raw: [200, 210, 220],
-                },
-            ],
+    fn color_palette_rejects_empty_color_maps_at_deserialization() {
+        let json = r#"{
+            "background_color": [0, 0, 0],
+            "color_maps": []
+        }"#;
+        let result: Result<ColorPalette, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "an empty `color_maps` list must fail to deserialize"
+        );
+    }
+
+    #[test]
+    fn colorize_cell_uses_background_color_for_none() {
+        let palette = ColorPalette {
+            background_color: [9, 9, 9],
+            color_maps: vec![make_red_to_blue_color_map()],
         };
-        let json = serde_json::to_string(&original).unwrap();
-        let parsed: BackgroundWithColorMap = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.background, original.background);
-        assert_eq!(parsed.color_map.len(), original.color_map.len());
-        for (a, b) in parsed.color_map.iter().zip(original.color_map.iter()) {
-            assert_eq!(a.query, b.query);
-            assert_eq!(a.rgb_raw, b.rgb_raw);
+        let cache = palette.create_cache(8, 1.0, 256);
+        assert_eq!(colorize_cell(&cache, None), [9, 9, 9]);
+    }
+
+    /// Populate each histogram in `cache` with a single mid-bucket sample
+    /// so the subsequent `refresh_after_compute_pass` produces a CDF that
+    /// maps value `0.0` → 0.0 (low keyframe) and any value in the rightmost
+    /// bin → 1.0 (high keyframe).
+    fn prime_cdfs_to_unit_distribution(cache: &mut ColorPaletteCache, palette: &ColorPalette) {
+        cache.reset_histograms();
+        for histogram in &cache.histograms {
+            histogram.insert(0.5);
         }
+        cache.refresh_after_compute_pass(palette);
     }
 
     #[test]
-    fn test_multi_color_map_serde_roundtrip() {
-        let original = MultiColorMap {
-            cyclic_attractor: [255, 255, 255],
+    fn colorize_cell_routes_to_correct_color_map() {
+        let palette = ColorPalette {
+            background_color: [42, 42, 42],
             color_maps: vec![
+                make_red_to_blue_color_map(),
                 vec![
                     ColorMapKeyFrame {
                         query: 0.0,
-                        rgb_raw: [1, 2, 3],
+                        rgb_raw: [0, 200, 0],
                     },
                     ColorMapKeyFrame {
                         query: 1.0,
-                        rgb_raw: [4, 5, 6],
+                        rgb_raw: [200, 0, 0],
                     },
                 ],
-                vec![ColorMapKeyFrame {
-                    query: 0.5,
-                    rgb_raw: [7, 8, 9],
-                }],
             ],
         };
-        let json = serde_json::to_string(&original).unwrap();
-        let parsed: MultiColorMap = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.cyclic_attractor, original.cyclic_attractor);
-        assert_eq!(parsed.color_maps.len(), original.color_maps.len());
-        for (a, b) in parsed.color_maps.iter().zip(original.color_maps.iter()) {
-            assert_eq!(a.len(), b.len());
-            for (ka, kb) in a.iter().zip(b.iter()) {
-                assert_eq!(ka.query, kb.query);
-                assert_eq!(ka.rgb_raw, kb.rgb_raw);
-            }
-        }
+        let mut cache = palette.create_cache(4, 1.0, 256);
+        prime_cdfs_to_unit_distribution(&mut cache, &palette);
+
+        // Color map 0 maps low percentiles toward red, high toward blue.
+        let m0_low = colorize_cell(&cache, Some((0.0, 0)));
+        let m0_high = colorize_cell(&cache, Some((1.0, 0)));
+        assert_eq!(m0_low, [255, 0, 0]);
+        assert_eq!(m0_high, [0, 0, 255]);
+
+        // Color map 1 maps low percentiles toward green, high toward red.
+        let m1_low = colorize_cell(&cache, Some((0.0, 1)));
+        let m1_high = colorize_cell(&cache, Some((1.0, 1)));
+        assert_eq!(m1_low, [0, 200, 0]);
+        assert_eq!(m1_high, [200, 0, 0]);
+    }
+
+    #[test]
+    fn colorize_cell_wraps_out_of_range_color_map_index() {
+        let palette = ColorPalette {
+            background_color: [0, 0, 0],
+            color_maps: vec![make_red_to_blue_color_map()],
+        };
+        let mut cache = palette.create_cache(4, 1.0, 256);
+        prime_cdfs_to_unit_distribution(&mut cache, &palette);
+
+        // color-map index 2 wraps to 0 via modulo.
+        let rgb = colorize_cell(&cache, Some((0.0, 2)));
+        assert_eq!(rgb, [255, 0, 0]);
+    }
+
+    #[test]
+    fn refresh_after_compute_pass_picks_up_keyframe_edits() {
+        let mut palette = ColorPalette {
+            background_color: [0, 0, 0],
+            color_maps: vec![make_red_to_blue_color_map()],
+        };
+        let mut cache = palette.create_cache(4, 1.0, 64);
+        // Edit a keyframe and verify the next atomic refresh picks it up
+        // alongside the freshly-binned CDFs.
+        palette.color_maps[0][0].rgb_raw = [50, 60, 70];
+        cache.reset_histograms();
+        cache.histograms[0].insert(0.5);
+        cache.refresh_after_compute_pass(&palette);
+        assert_eq!(colorize_cell(&cache, Some((0.0, 0))), [50, 60, 70]);
+    }
+
+    #[test]
+    fn refresh_after_compute_pass_picks_up_background_color_edits() {
+        let mut palette = ColorPalette {
+            background_color: [1, 2, 3],
+            color_maps: vec![make_red_to_blue_color_map()],
+        };
+        let mut cache = palette.create_cache(4, 1.0, 64);
+        palette.background_color = [99, 100, 101];
+        cache.refresh_after_compute_pass(&palette);
+        assert_eq!(colorize_cell(&cache, None), [99, 100, 101]);
     }
 }

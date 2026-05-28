@@ -8,7 +8,7 @@
 
 use image::Rgb;
 
-use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorMapper};
+use crate::core::color_map::{ColorMapKeyFrame, ColorMapper, KeyframeColorMap};
 use crate::core::eframe_support::wgpu_native_options;
 use crate::core::interpolation::LinearInterpolator;
 
@@ -217,7 +217,7 @@ fn paint_gradient_bar(painter: &egui::Painter, rect: egui::Rect, keyframes: &[Co
         return;
     }
 
-    let color_map = ColorMap::new(keyframes, LinearInterpolator {});
+    let color_map = KeyframeColorMap::new(keyframes, LinearInterpolator {});
     let column_count = (rect.width() as u32).max(2);
     // Render the gradient as adjacent filled rectangles rather than 1px strokes:
     // at fractional DPI, 1-logical-pixel strokes anti-alias across two physical
