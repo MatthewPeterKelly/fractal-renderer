@@ -1,18 +1,26 @@
 # GUI Unification & Color-Sync Roadmap
 
-This document is the canonical roadmap for the multi-phase plan to consolidate
-the project onto a single cross-platform GUI architecture built on
-`eframe`/`egui`, and to deliver a unified interactive experience that combines
-fractal exploration with live color-map editing.
+This document is the canonical roadmap for consolidating the project onto a
+single cross-platform GUI architecture built on `eframe`/`egui`, and for
+delivering a unified interactive experience that combines fractal exploration
+with live color-map editing.
 
 **Audience:** a new agent or contributor picking up the GUI work. This doc is
 self-contained — no prior conversation context is needed.
 
-**Scope:** everything from current state through to the end of "live color
-edits visibly synced into the fractal preview." Out of scope: parameter
-inspector panels, live fractal-type switching, support for fractal types not
-already explorable today (BarnsleyFern, Serpinsky), undo/redo,
-drag-and-drop on keyframes, save-back to the original input JSON.
+**Scope:** everything from the current state (renderer pre-work complete)
+through to "live color edits visibly synced into the fractal preview" plus a
+deliberate, restorable snapshot-to-disk. Out of scope: parameter inspector
+panels, live fractal-type switching, support for fractal types not already
+explorable today (BarnsleyFern, Serpinsky), DDP per-basin coloring, undo/redo,
+drag-and-drop on keyframes, and save-back to the original input JSON.
+
+> **History.** Phases A/B (port `explore` to `eframe`; remove `pixels`; Rust
+> edition 2024 + `eframe` 0.34) and Phases 1–3 (renderer-architecture pre-work:
+> color-map data unification, compute/color split, pipeline unification) have
+> all shipped. See §2 for what that means in practice. The earlier (pre-Phase-3)
+> data shapes are preserved in git history (commits `4199c23`, `0caa21c`,
+> `8008aff`, `56ad860`, `f9905b5`, `7308de0`) and are not reproduced here.
 
 ---
 
@@ -25,8 +33,8 @@ The binary ships with exactly two modes:
 2. **Interactive mode** (`fractal-renderer explore <params.json>`) — a single
    unified GUI window that combines:
    - Fractal preview (pan/zoom/click).
-   - Color-map editor (per-keyframe color + position, multi-gradient tabs for
-     Newton).
+   - Color-map editor (per-keyframe color + position, multi-color-map tabs for
+     Newton's per-root palettes).
    - Live preview updates as colors are edited.
    - Snapshot-to-disk via Space, capturing both the fully-rendered image and
      the synced parameter JSON (the saved JSON, when re-loaded, restores the
@@ -35,24 +43,25 @@ The binary ships with exactly two modes:
 Built entirely on `eframe` (egui's official framework), with a background
 render thread feeding a `TextureHandle` for live updates.
 
-**What disappears over the course of this roadmap:**
+**What still disappears over the remaining phases:**
 
-- The legacy `pixels` crate and direct `winit` usage (already removed in
-  Phases A+B; see §2).
-- The `color_swatch` CLI subcommand and its supporting code.
-- The standalone `color-gui-demo` example (folded into `explore`).
-- The two separate eframe apps ([src/core/user_interface.rs](../src/core/user_interface.rs)
-  and [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)),
-  absorbed into a unified `src/core/interactive/` module.
+- The `color_swatch` CLI subcommand and its supporting code (Phase 6).
+- The standalone `color-gui-demo` example — its useful pieces are folded into
+  `explore` (Phase 6).
+- The legacy explore app ([src/core/user_interface.rs](../src/core/user_interface.rs))
+  and the demo color editor ([src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)),
+  absorbed into a unified `src/core/interactive/` module (Phases 4 and 6).
+
+The `pixels` crate and direct `winit` usage were already removed in Phases A+B.
 
 ---
 
-## 2. Current State (post Phases A+B)
+## 2. What's Already Shipped
 
-Phases A (port explore mode to eframe; remove `pixels`) and B (Rust edition
-2024 + eframe 0.34) have already landed on `main`. The current state:
+The entire renderer architecture this roadmap depends on is **done**. The GUI
+work proper picks up from a clean, unified foundation.
 
-### Dependencies
+### Platform & dependencies
 
 ```toml
 edition = "2024"
@@ -61,200 +70,96 @@ egui = "0.34"
 # pixels and direct winit have been removed entirely.
 ```
 
-### Two independent eframe apps share no infrastructure
+### Unified color + compute architecture
 
-**Explore**
+The three explorable fractal families used to carry structurally different
+color representations (Mandelbrot/Julia: one gradient + flat background; DDP:
+hard-coded white/black; Newton: boundary + attractor colors + a color-map-spec
+enum). **They are now unified** behind one data model (see §3 for full detail):
 
-- **File:** [src/core/user_interface.rs](../src/core/user_interface.rs)
-- **Status:** `eframe::App`; preview-only; full pan/zoom/save behavior
+- A single `ColorPalette` type (`background_color` + `Vec<ColorMap>`, where
+  `ColorMap = Vec<ColorMapKeyFrame>`) lives in
+  [src/core/color_map.rs](../src/core/color_map.rs). Every fractal embeds a
+  `pub color: ColorPalette`.
+- A `FieldKernel::evaluate(point) -> Option<(f32, u32)>` trait
+  ([src/core/field_iteration.rs](../src/core/field_iteration.rs)) is the only
+  per-point math a fractal implements. `Renderable`
+  ([src/core/image_utils.rs](../src/core/image_utils.rs)) adds the housekeeping
+  surface (params, image spec, histogram sizing, `color_palette()` /
+  `color_palette_mut()`).
+- A single `RenderingPipeline<F>`
+  ([src/core/render_pipeline.rs](../src/core/render_pipeline.rs)) owns all
+  reusable buffers and runs the four-step pipeline: `compute_raw_field` →
+  `populate_histograms` → `ColorPaletteCache::refresh_after_compute_pass` →
+  `colorize_collapse_unified`. The field stays raw end-to-end; CDF lookup
+  happens inside `colorize_cell` at colorize time. Newton uses per-root
+  histograms / CDFs.
+- Anti-aliasing and block-fill traversal collapse to a single signed
+  `sampling_level: i32` knob driven by the adaptive regulator (§3.5).
 
-**Color editor**
+### The key consequence for the GUI work
 
-- **File:** [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)
-- **Status:** `eframe::App`; demo widgets only — does not affect renderer
+**All four explorable fractal types already run through one generic app.**
+Mandelbrot, Julia, and DDP dispatch in
+[src/cli/explore.rs](../src/cli/explore.rs) into `user_interface::explore::<F>`;
+Newton's [explore_fractal](../src/fractals/newtons_method.rs) merely picks its
+`SystemType` and calls the **same** `user_interface::explore`. Underneath, every
+type flows through `ExploreApp` → [`PixelGrid<F>`](../src/core/render_window.rs)
+→ `RenderingPipeline<F>`.
 
-Both apps share [src/core/eframe_support.rs](../src/core/eframe_support.rs) for
-`wgpu` setup, but everything else is duplicated.
+So the "unify all four fractal types into one app" goal is **already met at the
+render level**. The remaining work is: (1) reorganize that app into a
+`src/core/interactive/` module and bolt on a color editor panel wired live; (2)
+make Space a deliberate, restorable save; (3) delete the now-dead `color_swatch`
+and demo modules.
 
-### CLI
+Two pieces of Phase-7 plumbing also already exist: `Renderable::color_palette_mut()`
+is defined (currently `#[allow(dead_code)]`), and because the field is raw and
+the CDFs derive from it (not from the keyframes), a color-only re-render is just
+"refresh the LUTs and re-walk the field" — no recompute, no CDF rebuild needed.
 
-[src/cli/args.rs](../src/cli/args.rs) defines three subcommands: `Render`,
-`Explore`, `ColorSwatch`. This roadmap focuses primarily on modifications to
-`Explore`, while preserving functionality of `Render`. The `ColorSwatch` mode
-will be removed. The `Explore` subcommand dispatches in
-[src/cli/explore.rs](../src/cli/explore.rs) on the `FractalParams` variant:
-Mandelbrot/Julia/DDP go through generic `PixelGrid<F>`; Newton has its own
-explore path in [src/fractals/newtons_method.rs:461](../src/fractals/newtons_method.rs#L461).
-BarnsleyFern and Serpinsky panic with "ERROR: Parameter type does not yet
-implement RenderWindow" — they are intentionally out of scope for `explore`.
+### Phase status at a glance
 
-### Color-map representations (the central problem this roadmap addresses)
+| Phase | Title                                      | Status                           |
+| ----- | ------------------------------------------ | -------------------------------- |
+| A     | Port `explore` to eframe; remove pixels    | ✅ shipped (`81df7b6`)           |
+| B     | Rust edition 2024 + eframe 0.34            | ✅ shipped (`0c67ddd`)           |
+| 1     | Color-map data unification                 | ✅ shipped (`9a2e51b`)           |
+| 2     | Compute / color split                      | ✅ shipped (`4199c23`…`8008aff`) |
+| 3     | Pipeline unification & per-root colors     | ✅ shipped (`56ad860`…`7308de0`) |
+| 4     | Unified `interactive` module + live editor | ⬜ next (§5)                     |
+| 5     | Gated, restorable Space-as-save            | ⬜ §5                            |
+| 6     | CLI + cleanup (retire dead code)           | ⬜ §5                            |
+| 7     | Polish                                     | ⬜ §5 (opportunistic)            |
 
-The three explorable fractal families today use structurally different color
-representations:
+Phases 4 → 6 are sequential; each is a self-contained PR, bisectable and
+independently revertible. Phase 7 is opportunistic.
 
-**Mandelbrot, Julia**
-
-- **Representation:** `ColorMapParams` = 1 gradient + 1 flat background ([src/fractals/quadratic_map.rs:19](../src/fractals/quadratic_map.rs#L19))
-
-**Driven-damped pendulum**
-
-- **Representation:** No color params at all — hard-coded white/black in `render_point` ([src/fractals/driven_damped_pendulum.rs:38-44](../src/fractals/driven_damped_pendulum.rs#L38-L44))
-
-**Newton's method**
-
-- **Representation:** `CommonParams` with `boundary_set_color_rgb` + `cyclic_attractor_color_rgb` + `ColorMapSpec` enum (FullColorSpec or GrayscaleSpec) ([src/fractals/newtons_method.rs:204-266](../src/fractals/newtons_method.rs#L204-L266))
-  Unifying these is Phase 1.
-
----
-
-## 3. Phase Roadmap Summary
-
-| Phase | Title                                  | Blast radius                                                                              |
-| ----- | -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| 1     | Color-map data unification             | All fractal params + every example/test JSON file                                         |
-| 2     | Compute / color split                  | `Renderable` trait + new `RenderingPipeline` + JSON migration to `sampling_level`         |
-| 3     | Pipeline unification & per-root colors | Lift AA logic into core; collapse `ColorMapKind` to one shape; per-root histograms / CDFs |
-| 4     | Unified `FractalApp` shell             | New `src/core/interactive/` module; preview only                                          |
-| 5     | Color editor panel                     | Editor widget + layout wiring                                                             |
-| 6     | CLI + cleanup + Space-as-save          | Delete legacy modules; extend snapshot behavior                                           |
-| 7     | Live color sync                        | `RenderingPipeline::recolorize_only` + dirty flags                                        |
-| 8     | Polish                                 | Contents TBD post-Phase-7 measurement                                                     |
-
-Phases 1, 2, and 3 are renderer-architecture pre-work; the GUI work proper
-starts at Phase 4. Phases 4 → 7 are sequential. Phase 8 is opportunistic.
-
-Each phase is a self-contained PR, bisectable, independently revertible.
-
-### Status:
-
-**Phase One**
-Completed in 9a2e51b19a6baa7d119351d77902dba5c8aa171b.
-
-**Phase Two**
-Completed on branch `decouple-scalar-field-calculation-from-color-rendering`
-in three commits: 4199c23 (machinery, parallel-to-old), 0caa21c (runtime
-switch + JSON migration), 8008aff (full-field histogram).
-
-**Phase Three**
-Completed on branch `decouple-scalar-field-and-color-mapping-common-aa`
-in two initial commits and a four-commit follow-up after PR #170 review:
-
-- 56ad860 — Phase 3.1: `FieldKernel` + core iteration helpers,
-  parallel-to-old.
-- f9905b5 — Phase 3.2 + 3.3 together: collapsed `ColorMapKind` to a
-  unified `ColorMap`, dropped `normalize_field` (CDF lookup now happens
-  inside `colorize_cell`), introduced per-root histograms / CDFs,
-  dropped the `QuadraticMap<T>` wrapper, mass-migrated every
-  example/bench/test JSON, restored the DDP regression fixture, added
-  two Newton fixtures.
-- PR #170 review cleanup (4 commits):
-  1. Renamed the unified outer struct `ColorMap` → `ColorPalette`,
-     introduced `pub type ColorMap = Vec<ColorMapKeyFrame>` for a single
-     color map, renamed the outer Vec from `gradients` to `color_maps`.
-  2. Renamed `flat_color` → `background_color` (palette) and `flat` →
-     `background` (cache).
-  3. Merged `histograms` into `ColorPaletteCache` and replaced the
-     manual three-step refresh with one atomic
-     `refresh_after_compute_pass(palette)` entry point.
-  4. Extracted `SamplePlanner` + `par_for_each_populated_cell{_mut}`
-     traversal helpers, switched the anti-aliasing sub-pixel math to an
-     upsampled `PixelMapper` for internal consistency, expanded
-     single-letter variable names, expanded `AA` → "anti-aliasing" in
-     docs.
-
-Mandelbrot baseline / downsample / Julia baseline / Barnsley / Sierpinski
-hashes invariant throughout. Mandelbrot AA / DDP / Newton hashes
-regenerated once when the sub-pixel math switched in cleanup commit 4;
-visually identical (eyeball-verified at full resolution).
+BarnsleyFern and Serpinsky remain out of scope: they panic in
+[cli::explore::explore_fractal](../src/cli/explore.rs) with "Parameter type does
+not yet implement RenderWindow", their params are not color-migrated, and they
+do not implement `FieldKernel` / `Renderable`.
 
 ---
 
-## 4. Hard Constraints & Cross-Platform Learnings
-
-These are preserved from cross-platform work during Phases A+B. They remain
-relevant to any GUI work going forward.
-
-### 4.1 Border / line artifacts at panel boundaries
-
-**Symptom:** thin white or gray lines appear between `SidePanel` and
-`CentralPanel` when the window is maximized or fullscreen, especially at
-fractional DPI.
-
-**Root causes (multiple):**
-
-1. Default `SidePanel` draws a 1px separator line via
-   `visuals.widgets.noninteractive.bg_stroke` (gray(60) in dark theme).
-   → Fix: `show_separator_line(false)` + set `bg_stroke = Stroke::NONE`.
-2. Default `panel_fill = gray(27)` against black background shows 1px gaps at
-   panel seams due to `rect.shrink(1.0)` in egui's panel drawing code.
-   → Fix: set `panel_fill = Color32::BLACK` and override each panel with
-   `Frame::none().fill(Color32::BLACK)`.
-3. Manual 1-logical-pixel strokes at fractional x-positions anti-alias across
-   two physical pixels (e.g. `paint_gradient_bar` using `line_segment`).
-   → Fix: use `painter.rect_filled` with contiguous rectangles instead.
-
-Both existing apps already apply these fixes; the unified app must too.
-
-### 4.2 Resize event drops on WSL/XWayland
-
-**Symptom:** window appears not to resize, or content stops updating when the
-user drags the window edge.
-
-**Mitigation:** call `ctx.request_repaint_after(IDLE_TICK)` at the end of
-every `update()` so eframe re-polls surface size every ~100ms. Already
-implemented in both apps (see [src/core/user_interface.rs:259](../src/core/user_interface.rs#L259)).
-
-### 4.3 egui panel width locking
-
-`SidePanel::exact_width(w)` clamps `width_range` to `w..=w`, making the panel
-non-resizable even though the resize drag handle still renders. **Use
-`default_width(w).width_range(min..=max)` instead.**
-
-### 4.4 Adaptive device limits
-
-`wgpu_core` rejects requests for limits the GPU doesn't expose
-(`max_color_attachments`, etc.). Virtualized and software drivers
-(WSL/XWayland, llvmpipe) routinely expose only 2-4. Solution lives in
-[src/core/eframe_support.rs](../src/core/eframe_support.rs): clone the
-adapter's own limits into the device descriptor. Both existing apps go through
-this helper; the unified app must too.
-
-### 4.5 Wgpu version coupling (no longer load-bearing, but worth knowing)
-
-`wgpu_core` exports `#[no_mangle]` C symbols. Two versions in the same binary
-→ linker error. This is why `pixels` had to be removed before `eframe` could
-be upgraded. The dep tree is now clean (`eframe 0.34` only); future
-upgrades within the eframe family are unconstrained.
-
----
-
-## 5. Data Model
-
-> **Phase-2 vs Phase-3 note.** Phase 2 shipped with three concrete
-> `ColorMapKind` variants (`ForegroundBackground`, `BackgroundWithColorMap`,
-> `MultiColorMap`), three different `Cell` shapes, and a four-phase pipeline
-> with a `normalize_field` step that CDF-rewrote the field in place. Phase 3
-> collapses all of that. The data model below describes the **post-Phase-3**
-> end state. The earlier shape is preserved in commits 4199c23 / 0caa21c /
-> 8008aff for reference.
+## 3. Data Model
 
 A single uniform color-palette type, a single uniform cell shape, and a
-four-phase pipeline serve every fractal family. Per-fractal customization
-reduces to one method (`evaluate(point) -> Cell`) plus static config.
+four-step pipeline serve every fractal family. Per-fractal customization reduces
+to one method (`FieldKernel::evaluate(point) -> Option<(f32, u32)>`) plus static
+config.
 
-The field shape is `Vec<Vec<Cell>>` with `Cell = Option<(f32, u32)>` — the
-`f32` is the raw scalar value (smooth iteration count, basin marker, etc.)
-and the `u32` is the _color-map index_ picking which color map to colorize
-through. Mandelbrot/Julia/DDP always emit color-map index 0; Newton emits
-the root index. The field stays raw end-to-end — there is no
-`normalize_field` pass; CDF percentile lookup happens inside
-`colorize_cell`.
+The field shape is `Vec<Vec<Option<(f32, u32)>>>` — the `f32` is the raw scalar
+value (smooth iteration count, basin marker, etc.) and the `u32` is the
+_color-map index_ picking which color map to colorize through.
+Mandelbrot/Julia/DDP always emit color-map index 0; Newton emits the root index.
+The field stays raw end-to-end — there is no normalize pass; CDF percentile
+lookup happens inside `colorize_cell`.
 
-### 5.1 The unified `ColorPalette` type
+### 3.1 The unified `ColorPalette` type
 
-A single color map is itself a `Vec<ColorMapKeyFrame>`, so the outer
-container is "a palette of color maps plus a background":
+A single color map is itself a `Vec<ColorMapKeyFrame>`, so the outer container is
+"a palette of color maps plus a background":
 
 ```rust
 /// A single color map: the keyframes that get interpolated to colorize
@@ -267,24 +172,23 @@ pub struct ColorPalette {
     /// in-set, DDP out-of-basin, Newton non-converging).
     pub background_color: [u8; 3],
     /// One color map per "channel". Mandelbrot/Julia/DDP have
-    /// `len() == 1`; Newton has one entry per root. The `u32` in each cell
-    /// indexes into this vec.
+    /// `color_maps.len() == 1`; Newton has one entry per root. The `u32` in
+    /// each cell indexes into this vec. Must be non-empty (enforced at
+    /// deserialization).
     pub color_maps: Vec<ColorMap>,
 }
 ```
 
-DDP's degenerate "all foreground" case is encoded as a single-color-map
-palette whose color map is constant (the foreground color repeated at
-`query=0.0` and `query=1.0`).
+DDP's degenerate "all foreground" case is encoded as a single-color-map palette
+whose color map is constant (the foreground color repeated at `query=0.0` and
+`query=1.0`), via a `#[serde(default)]` on the DDP params.
 
-The old `ColorMapKind` trait collapses to a single impl on `ColorPalette`.
-With one impl the trait carries no weight, so it is dropped —
-`ColorPalette` exposes `create_cache` as an inherent method, and the
-pipeline operates over a concrete `ColorPalette` rather than a generic
-parameter. The cache itself owns the per-color-map histograms and exposes
-a single atomic `refresh_after_compute_pass` entry point that rebuilds
-every downstream-visible piece of state at once, so the colorize step
-can never observe a half-updated cache.
+`ColorPalette` exposes `create_cache` as an inherent method; the pipeline
+operates over a concrete `ColorPalette` (no generic parameter, no trait). The
+cache owns the per-color-map histograms and exposes a single atomic
+`refresh_after_compute_pass` entry point that rebuilds every downstream-visible
+piece of state at once, so the colorize step can never observe a half-updated
+cache.
 
 ```rust
 impl ColorPalette {
@@ -304,7 +208,7 @@ pub struct ColorPaletteCache {
     pub histograms: Vec<Histogram>,
     // Private: rebuilt atomically by `refresh_after_compute_pass`.
     cdfs: Vec<CumulativeDistributionFunction>,
-    luts: Vec<ColorMapLookUpTable>,
+    lookup_tables: Vec<ColorMapLookUpTable>,
     background: Color32,
 }
 
@@ -319,36 +223,25 @@ impl ColorPaletteCache {
 
     /// Rebuild CDFs from `self.histograms`, refresh LUTs from `palette`'s
     /// current keyframes, and refresh the cached `background` color.
-    /// Allocation-free; re-runs after keyframe edits (Phase 7).
+    /// Allocation-free; re-runs after keyframe edits (Phase 4 live sync).
     pub fn refresh_after_compute_pass(&mut self, palette: &ColorPalette);
 }
 
 /// Per-cell colorize. Statically dispatched, called inside the AA-collapse
 /// loop. CDF lookup + LUT lookup happen here, in color space.
 #[inline]
-pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3] {
-    match cell {
-        Some((value, color_map_index)) => {
-            let index = color_map_index as usize;
-            let percentile = cache.cdfs[index].percentile(value);
-            cache.luts[index].lookup(percentile)
-        }
-        None => [cache.background.r(), cache.background.g(), cache.background.b()],
-    }
-}
+pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8; 3];
 ```
 
-### 5.2 The `Renderable` / `FieldKernel` split
+### 3.2 The `Renderable` / `FieldKernel` split
 
 `FieldKernel` is the small surface every fractal must implement —
 domain-specific scalar evaluation at one point. `Renderable` extends it with
-housekeeping (params, image spec, diagnostics). All AA / block-fill
-iteration logic lives in core helpers generic over `K: FieldKernel`; no
-fractal duplicates the parallel-iter skeleton.
+housekeeping. All AA / block-fill iteration logic lives in core helpers generic
+over `K: FieldKernel`; no fractal duplicates the parallel-iter skeleton.
 
 ```rust
-/// Domain-specific per-point evaluation. Each fractal implements exactly
-/// this much of the math.
+/// Domain-specific per-point evaluation.
 pub trait FieldKernel: Sync + Send {
     /// Evaluate the scalar field at one real-space point.
     /// Returns `Some((value, color_map_index))` or `None` for "no value".
@@ -357,7 +250,7 @@ pub trait FieldKernel: Sync + Send {
 
 /// Pipeline plumbing. Adds the things every fractal needs that aren't
 /// per-point math.
-pub trait Renderable: FieldKernel + SpeedOptimizer {
+pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
     type Params: Serialize + Debug;
 
     fn image_specification(&self) -> &ImageSpecification;
@@ -366,7 +259,7 @@ pub trait Renderable: FieldKernel + SpeedOptimizer {
     fn params(&self) -> &Self::Params;
     fn write_diagnostics<W: Write>(&self, writer: &mut W) -> io::Result<()>;
     fn color_palette(&self) -> &ColorPalette;
-    fn color_palette_mut(&mut self) -> &mut ColorPalette;  // used in Phase 7
+    fn color_palette_mut(&mut self) -> &mut ColorPalette; // already present; used by Phase 4 live sync
 
     /// Histogram capacity in bins per color map.
     fn histogram_bin_count(&self) -> usize;
@@ -377,92 +270,79 @@ pub trait Renderable: FieldKernel + SpeedOptimizer {
 }
 ```
 
-The hot path is generic over `F: Renderable`. Dispatch happens once, at the
-top of [src/cli/explore.rs](../src/cli/explore.rs) where `match
-fractal_params { … }` selects the concrete `F` to instantiate. From there
+The hot path is generic over `F: Renderable`. Dispatch happens once, in the
+`match fractal_params { … }` at the top of
+[src/cli/explore.rs](../src/cli/explore.rs) (and Newton's inner
+`SystemType` match) that selects the concrete `F` to instantiate. From there
 inward every call site is monomorphized.
 
-### 5.3 The four-phase `RenderingPipeline`
+### 3.3 The four-step `RenderingPipeline`
 
 A single top-level orchestrator, parameterized by `F: Renderable`, owns all
-reusable buffers. The pipeline is four steps long; only step (a) is
-fractal-specific — the rest is shared core code:
+reusable buffers. Only step (a) is fractal-specific — the rest is shared core
+code:
 
 ```rust
 pub struct RenderingPipeline<F: Renderable> {
     fractal: F,
     field: Vec<Vec<Option<(f32, u32)>>>,
-    /// Owns histograms + CDFs + LUTs + background. Refreshed atomically
-    /// inside `refresh_after_compute_pass`.
-    color_cache: ColorPaletteCache,
+    color_cache: ColorPaletteCache, // histograms + CDFs + LUTs + background
     n_max_plus_1: usize,
 }
 
 impl<F: Renderable> RenderingPipeline<F> {
     pub fn render(&mut self, out: &mut egui::ColorImage, sampling_level: i32) {
         // (a) Fill the field with raw values via the fractal's FieldKernel.
-        core::field_iteration::compute_raw_field(
+        field_iteration::compute_raw_field(
             self.fractal.image_specification(),
             self.n_max_plus_1, sampling_level, &self.fractal, &mut self.field);
 
         // (b) Bin into the cache's per-color-map histograms.
         self.color_cache.reset_histograms();
-        core::field_iteration::populate_histograms(
+        field_iteration::populate_histograms(
             self.n_max_plus_1, sampling_level, &self.field,
             &mut self.color_cache.histograms);
 
-        // (c) Atomically rebuild CDFs (from the just-filled histograms),
-        // LUTs (from the palette's keyframes), and the background color.
+        // (c) Atomically rebuild CDFs (from histograms), LUTs (from keyframes),
+        // and the background color.
         self.color_cache.refresh_after_compute_pass(self.fractal.color_palette());
 
         // (d) Walk field; CDF + LUT lookup per cell; AA-average per output pixel.
-        core::field_iteration::colorize_collapse_unified(
+        field_iteration::colorize_collapse_unified(
             &self.color_cache, &self.field,
             self.n_max_plus_1, sampling_level, out);
     }
 }
 ```
 
-There is no `normalize_field` pass and no per-cell `apply_cdf`. The field
-stays raw; the CDF lookup happens inside `colorize_cell` at colorize time.
-This means:
+This shape is what makes live color editing cheap (Phase 4):
 
-- **Keyframe edits** invalidate only the LUTs (and optionally the
-  `background_color`). Re-run a focused refresh + (d); skip (a)/(b)/(c).
-  Phase 7 lives here.
-- **No race between normalize and colorize**: the field is only ever
-  written by (a) and only ever read by (b)/(d).
-- **Per-root histograms come for free**: Newton naturally bins into
-  separate histograms per root, so each basin gets its own CDF over its own
-  iteration-count distribution. The other fractals trivially reduce to a
-  single histogram.
+- **Keyframe edits** invalidate only the LUTs (and optionally the background).
+  Re-run a focused refresh + (d); skip (a)/(b) and the CDF rebuild. The
+  `recolorize_only` fast path lives here.
+- **No race between compute and colorize**: the field is only ever written by
+  (a) and only ever read by (b)/(d).
+- **Per-root histograms come for free**: Newton bins into separate histograms
+  per root; the others reduce to a single histogram.
 
-`colorize_collapse` is a generic free function (not a trait method): it
-walks the row-major output `egui::ColorImage` and per output pixel reads
-the corresponding `(n+1)²` block of the field, calls `colorize_cell` per
-subpixel, and averages. Per-pixel hot path: zero allocation, zero `dyn`.
+### 3.4 Allocation strategy
 
-### 5.4 Allocation strategy
+All buffers are allocated **once per session** (or per window resize), never per
+frame:
 
-All buffers are allocated **once per session** (or per window resize) on
-`RenderingPipeline::new` / `resize`, never per frame:
-
-- `field` is sized for `(n_max+1)·W × (n_max+1)·H` where `n_max+1` derives
-  from the user's JSON `sampling_level` (positive AA values cap field
-  size). Reallocated only on window resize.
-- `histograms` (one per color map) and `color_cache` (containing
-  per-color-map CDFs and LUTs) are independent of resolution; each is
-  allocated once and reset/refreshed in place. Per-color-map vec lengths
-  are determined at construction from
-  `fractal.color_palette().color_maps.len()`.
+- `field` is sized for `(n_max+1)·W × (n_max+1)·H` where `n_max+1` derives from
+  the user's JSON `sampling_level`. Reallocated only on window resize.
+- The per-color-map `histograms`, CDFs, and LUTs are resolution-independent;
+  each is allocated once and reset/refreshed in place. Their vec lengths come
+  from `fractal.color_palette().color_maps.len()` at construction.
 - The output `egui::ColorImage` is owned by `PixelGrid`, sized to `[W, H]`,
   reallocated only on resize.
 
 Per-frame allocations: zero. Per-(sub)pixel allocations: zero.
 
-### 5.5 The `sampling_level` model
+### 3.5 The `sampling_level` model
 
-`RenderOptions` collapses today's `subpixel_antialiasing: u32` and
+`RenderOptions` collapses the old `subpixel_antialiasing: u32` and
 `downsample_stride: usize` into a single `sampling_level: i32`:
 
 | `sampling_level` | Field cells per output pixel | Output pixels per field cell | Mode                    |
@@ -472,258 +352,309 @@ Per-frame allocations: zero. Per-(sub)pixel allocations: zero.
 | `−n` (n > 0)     | sparse                       | `(n+1)²`                     | Block-fill (downsample) |
 
 The JSON-supplied `sampling_level` is the **maximum** the pipeline ever uses
-(the cap that determines field buffer size). The
+(the cap that determines field-buffer size). The
 `AdaptiveOptimizationRegulator` drives the **runtime** value passed to
 `RenderingPipeline::render`: at full quality it equals the user value; under
 interactive load it drops toward 0 and into the negative range as needed.
+Block-fill is nearest-neighbor / zero-order hold.
 
-Block-fill is nearest-neighbor / zero-order hold — today's bilinear
-interpolation between sparse samples is dropped in Phase 2.2. Users see
-`(n+1)²`-pixel blocks while interactive; full-resolution returns when
-quality climbs back to baseline.
-
-### 5.6 Why a single uniform color-palette type
+### 3.6 Why one uniform color-palette type
 
 A single `ColorPalette` shape with `Vec<ColorMap>` keeps:
 
 - **All AA / block-fill iteration in core.** Three core helpers
-  (`compute_raw_field`, `populate_histograms`, `colorize_collapse_unified`)
-  each consume the same `Vec<Vec<Option<(f32, u32)>>>` field and the same
-  `&ColorPaletteCache`. No fractal code touches the parallel-iter skeleton.
-- **The colorize hot path allocation-free.** The cache is reused in place;
-  no per-render `Vec` construction.
-- **One LUT shape, one CDF shape, one cell shape.** Mandelbrot/Julia/DDP
-  reduce to `color_maps.len() == 1`; Newton uses N>1. There is no
-  "single-color-map fast path" — N=1 is the same path as N=many, just with
-  a unit-length vec.
-- **The editor static** (Phase 5): the editor widget operates on a single
+  (`compute_raw_field`, `populate_histograms`, `colorize_collapse_unified`) each
+  consume the same `Vec<Vec<Option<(f32, u32)>>>` field and the same
+  `&ColorPaletteCache`. No fractal touches the parallel-iter skeleton.
+- **The colorize hot path allocation-free.** The cache is reused in place.
+- **One LUT shape, one CDF shape, one cell shape.** Mandelbrot/Julia/DDP reduce
+  to `color_maps.len() == 1`; Newton uses N>1. N=1 is the same path as N=many,
+  just with a unit-length vec.
+- **The editor static** (Phase 4): the editor widget operates on a single
   concrete `ColorPalette` type. Per-fractal customization lives in the
   per-fractal renderer, not the editor.
 
-The earlier (pre-Phase-3) shape had three separate `ColorMapKind` impls,
-three different `Cell` types, and a `normalize_field` pass that CDF-rewrote
-the field. That shape carried duplicated AA-iteration logic into every
-fractal because the cell type varied per fractal. Phase 3 unifies the cell
-type, which lets the AA iteration sit in one place — generic over the
-concrete fractal's `FieldKernel::evaluate`, not over a varying `Cell` type.
+---
+
+## 4. Hard Constraints & Cross-Platform Learnings
+
+These are preserved from cross-platform work during Phases A+B. They remain
+relevant to any GUI work going forward. The current explore app
+([src/core/user_interface.rs](../src/core/user_interface.rs)) and the shared
+[src/core/eframe_support.rs](../src/core/eframe_support.rs) already apply them;
+the unified `interactive` module must carry them forward.
+
+### 4.1 Border / line artifacts at panel boundaries
+
+**Symptom:** thin white or gray lines appear between `SidePanel` and
+`CentralPanel` when the window is maximized or fullscreen, especially at
+fractional DPI.
+
+**Root causes (multiple):**
+
+1. Default `SidePanel` draws a 1px separator line via
+   `visuals.widgets.noninteractive.bg_stroke` (gray(60) in dark theme).
+   → Fix: `show_separator_line(false)` + set `bg_stroke = Stroke::NONE`.
+2. Default `panel_fill = gray(27)` against black background shows 1px gaps at
+   panel seams due to `rect.shrink(1.0)` in egui's panel drawing code.
+   → Fix: set `panel_fill = Color32::BLACK` and override each panel with
+   `Frame::NONE.fill(Color32::BLACK)`.
+3. Manual 1-logical-pixel strokes at fractional x-positions anti-alias across
+   two physical pixels (e.g. a gradient bar drawn with `line_segment`).
+   → Fix: use `painter.rect_filled` with contiguous rectangles instead (the
+   technique in `color_map_editor_ui::paint_gradient_bar`).
+
+### 4.2 Resize event drops on WSL/XWayland
+
+**Symptom:** window appears not to resize, or content stops updating when the
+user drags the window edge.
+
+**Mitigation:** call `ctx.request_repaint_after(IDLE_TICK)` at the end of every
+`update()` so eframe re-polls surface size every ~100ms. Already implemented in
+the explore app.
+
+### 4.3 egui panel width locking
+
+`SidePanel::exact_width(w)` clamps `width_range` to `w..=w`, making the panel
+non-resizable even though the resize drag handle still renders. **Use
+`default_width(w).width_range(min..=max)` instead.**
+
+### 4.4 Adaptive device limits
+
+`wgpu_core` rejects requests for limits the GPU doesn't expose
+(`max_color_attachments`, etc.). Virtualized and software drivers
+(WSL/XWayland, llvmpipe) routinely expose only 2–4. Solution lives in
+[src/core/eframe_support.rs](../src/core/eframe_support.rs): clone the adapter's
+own limits into the device descriptor. Every interactive entry point goes
+through `wgpu_native_options`; the unified app must too.
+
+### 4.5 Wgpu version coupling (no longer load-bearing, but worth knowing)
+
+`wgpu_core` exports `#[no_mangle]` C symbols. Two versions in the same binary →
+linker error. This is why `pixels` had to be removed before `eframe` could be
+upgraded. The dep tree is now clean (`eframe 0.34` only); future upgrades within
+the eframe family are unconstrained.
 
 ---
 
-## 6. Phase Detail
+## 5. Remaining Work — the PR Sequence
 
-### Phase 1 — Color-map data unification
+Four PRs remain. Each is a self-contained, bisectable PR. The editor is wired
+**live from the first PR** — there is no intermediate "edit a copy that does
+nothing" step, because `color_palette_mut()` already exists and the raw-field
+architecture makes a color-only re-render trivial (§3.3).
 
-**Goal:** introduce the per-variant concrete color-map structs and embed each
-fractal type's matching struct directly in its params. JSON schema migrates
-accordingly. No GUI work, no trait changes (Phase 2 handles trait wiring).
+| PR      | Title                                            | Blast radius                                                       |
+| ------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| Phase 4 | Unified `interactive` module + live color editor | New `src/core/interactive/`; `recolorize_only`; `color_dirty` flag |
+| Phase 5 | Gated, restorable Space-as-save                  | Save state machine; full-`FractalParams` serialization             |
+| Phase 6 | CLI + cleanup (retire dead code)                 | Delete `color_swatch`, demo example, demo editor module            |
+| Phase 7 | Polish                                           | Contents TBD post-Phase-5 measurement                              |
 
-**Files touched:**
+### Phase 4 — Unified `interactive` module + live color editor
 
-- [src/core/color_map.rs](../src/core/color_map.rs) — define
-  `ForegroundBackground`, `BackgroundWithColorMap`, `MultiColorMap` concrete
-  structs (per §5.1). Optionally define the `UnifiedColorMap` boundary-only
-  enum and `From` impls (per §5.4); skip if no caller materializes for them
-  in this phase.
-- [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs) — replace
-  `ColorMapParams.keyframes` and `background_color_rgb` with `pub color: BackgroundWithColorMap`.
-  The other `ColorMapParams` fields
-  (`lookup_table_count`, `histogram_bin_count`, `histogram_sample_count`) are
-  not color data and stay on `QuadraticMapParams` directly (or move into a
-  sibling struct — implementer's choice).
-- [src/fractals/mandelbrot.rs](../src/fractals/mandelbrot.rs),
-  [src/fractals/julia.rs](../src/fractals/julia.rs) — automatic via the
-  `QuadraticMapParams` trait change.
-- [src/fractals/driven_damped_pendulum.rs](../src/fractals/driven_damped_pendulum.rs)
-  — add `pub color: ForegroundBackground` field with
-  `#[serde(default = "ddp_default_color")]`. Default is
-  `ForegroundBackground { foreground: [255,255,255], background: [0,0,0] }`,
-  matching the previously hard-coded values. Replace the literal
-  `Rgb([255,255,255])` / `Rgb([0,0,0])` in `render_point` with reads from the
-  field.
-- [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs) —
-  replace `boundary_set_color_rgb`, `cyclic_attractor_color_rgb`, and
-  `color_map_spec` in `CommonParams` with a single `pub color: MultiColorMap`
-  field. **Drop `GrayscaleSpec` and `GrayscaleKeyframeSpec` entirely**,
-  including the `to_color_map_vec` expansion logic. The `ColorMapSpec` enum
-  is removed (its `FullColorSpec` variant becomes redundant once
-  `MultiColorMap` is the embedded type).
-- Every JSON file under [examples/](../examples/), [benches/](../benches/),
-  and [tests/param_files/](../tests/param_files/) that references a fractal
-  whose schema changed. The
-  [examples/explore-newton-roots-of-unity-4/params.json](../examples/explore-newton-roots-of-unity-4/params.json)
-  file (and its render counterpart) currently use `GrayscaleSpec`; expand by
-  hand into 4 explicit per-root gradients.
-- [tests/example_parameter_validation_tests.rs](../tests/example_parameter_validation_tests.rs)
-  — verify still passes against migrated JSONs.
+**Goal:** move the explore app into a new `src/core/interactive/` module, add
+the right-side color editor panel, and wire edits to the preview live. After
+this PR, `explore <params.json>` shows the fractal on the left and an editable
+color palette on the right; editing a keyframe recolors the preview within a
+frame or two. Pan/zoom/click/Space all behave as today (the new Space flow is
+Phase 5).
 
-**Verification:** `cargo test` — pixel-hash regression tests in
-[tests/full_cli_integration_and_regression_tests.rs](../tests/full_cli_integration_and_regression_tests.rs)
-must remain unchanged (color computation is logically identical, only the
-schema moved).
-
-**Static-typing invariant:** each fractal embeds its concrete color-map
-struct directly. There is no enum wrapper at the params level and no runtime
-"is this the right variant" check. Wrong-shape JSON fails serde
-deserialization with a structured error before any fractal object is
-constructed; once construction succeeds, the type is permanently fixed.
-
-### Phase 2 — Compute / color split
-
-**Goal:** factor `Renderable` so per-pixel scalar computation is separated
-from colorization. Hoist histogram, CDF, and lookup-table state into a
-top-level `RenderingPipeline<F>` per §5.3. Replace the two-axis
-`(subpixel_antialiasing, downsample_stride)` knob with a unified signed
-`sampling_level: i32`. Land an intentional pixel-hash bump for
-Mandelbrot/Julia/Newton when the histogram switches from a sub-sample grid
-to the full field — DDP unaffected.
-
-**Status: shipped.** See commits 4199c23 / 0caa21c / 8008aff on branch
-`decouple-scalar-field-calculation-from-color-rendering`. The detailed plan
-file (`phase-2-detailed-plan.md`) was deleted post-merge.
-
-**Architectural deviations from the original spec, preserved here for
-reference:**
-
-- The "bit-equivalent to the old path" claim for 2.1 was impossible given
-  the `[0,1]`-domain LUT chosen for Phase-7 cache-validity reasons. The 2.1
-  equivalence test ran with a tolerance of `MAX_GRADIENT_DIFF = 32`
-  per-channel for gradient fractals; DDP stayed strict.
-- All Mandelbrot/Julia pixel hashes regenerated in 2.2 (not just the
-  downsample fixture as predicted). DDP/Barnsley/Sierpinski unchanged.
-
-These deviations are now moot because Phase 3 replaces the `ColorMapKind`
-trait + per-cell `apply_cdf` shape entirely.
-
-### Phase 3 — Pipeline unification & per-root colors
-
-**Status: shipped.** Two commits on branch
-`decouple-scalar-field-and-color-mapping-common-aa`:
-56ad860 (3.1 machinery, parallel-to-old) and the follow-up that
-collapsed the trait surface, dropped `normalize_field`, switched to
-per-root histograms / CDFs, and migrated every fixture JSON.
-
-**Goal:** finish what Phase 2 started. Lift all AA / block-fill iteration
-out of per-fractal code and into core. Collapse the three `ColorMapKind`
-variants into one `ColorMap` shape. Drop the `normalize_field` pipeline
-phase entirely; CDF lookup happens at colorize time. Switch Newton to
-per-root histograms (one CDF per root over its own iteration-count
-distribution).
-
-**Detailed plan:** see [phase-3-detailed-plan.md](phase-3-detailed-plan.md)
-for trait shapes, file lists, commit-by-commit verification, and the JSON
-migration script.
-
-**Implementation deviations from the planned commit boundary:** the
-plan sketched three commits (3.1/3.2/3.3) but called the boundaries
-"final breakdown TBD". The actual ship was two commits because the
-3.2/3.3 work was deeply intertwined: dropping the per-fractal iteration
-methods (3.2) requires the field cell type to be uniform, which is
-exactly what the `ColorMapKind` collapse (3.3) provides. Splitting them
-would have required either a temporary lossy bridging layer (per-fractal
-`Option<(f32, u32)>` → variant-specific cell type) or duplicating the
-trait surface for one commit. Either option was uglier than landing the
-two together. The `QuadraticMap<T>` wrapper was also dropped here (open
-question §13.1) — Mandelbrot and Julia now implement `Renderable` /
-`FieldKernel` / `SpeedOptimizer` via blanket impls over
-`T: QuadraticMapParams`.
-
-**Why now (vs. shipping with Phase 2):** the Phase 2 review surfaced that
-the AA / block-fill iteration logic was duplicated across all three
-fractals — every fractal's `compute_raw_field` / `populate_histogram` /
-`normalize_field` had the same `if sampling_level >= 0 / else` skeleton, the
-same `outer_x % n_max_plus_1` index arithmetic, and the same parallel-iter
-boilerplate. The fix needed to land before the GUI work in §4-§7 because
-the GUI editor (Phase 5+) depends on the unified `ColorMap` shape.
-
-**Pixel-hash impact:**
-
-- Mandelbrot/Julia: invariant. With one root, per-root histogram = today's
-  single histogram; moving CDF lookup from normalize-pass to colorize-time
-  is mathematically a no-op.
-- DDP: hashes regenerated once. DDP is now histogrammed (it was a no-op
-  before); the resulting image is identical because the gradient is
-  constant-color, but the bit-level encoding shifts because the field type
-  changes from `Option<i32>` to `Option<(f32, u32)>`.
-- Newton: hashes regenerated once. Per-root CDFs are a real algorithmic
-  improvement — each basin gets its own iteration-count distribution.
-
-**Sketched commit structure (final breakdown TBD):**
-
-- **3.1 — Add `FieldKernel` trait + core iteration helpers, parallel-to-old.**
-  New `src/core/field_iteration.rs` with `compute_raw_field`,
-  `populate_histograms`, and the existing `colorize_collapse` (moved from
-  `render_pipeline.rs`). Unit-test all three with synthetic kernels. Old
-  per-fractal `compute_raw_field` etc. retained.
-- **3.2 — Migrate fractals to `FieldKernel`; delete per-fractal duplicates.**
-  Each fractal implements only `evaluate(point) -> Option<(f32, u32)>`.
-  Pixel hashes invariant for Mandelbrot/Julia (still using current
-  `ColorMapKind` machinery).
-- **3.3 — Collapse `ColorMapKind` variants to one `ColorMap` type.**
-  Drop `ForegroundBackground`, `BackgroundWithColorMap`, `MultiColorMap` as
-  separate types. Drop `normalize_field` from the pipeline; move CDF lookup
-  into `colorize_cell`. Per-root histograms for Newton. Mass JSON migration
-  via `scripts/migrate_phase_3_color_maps.py`. Regenerate DDP and Newton
-  pixel hashes (Mandelbrot/Julia stay invariant).
-
-### Phase 4 — Unified `FractalApp` shell
-
-**Goal:** introduce a new `src/core/interactive/` module hosting a single
-`eframe::App` that handles all four explorable fractal types. Preview only;
-no color editor yet. `Cargo run -- explore <params.json>` continues to work
-across Mandelbrot, Julia, DDP, and Newton — same pan/zoom/click/save
-behavior as today's explore mode.
+This is the largest PR; split it into reviewable commits — (1) module reorg,
+no behavior change; (2) editor widget; (3) live-sync plumbing; (4) key remaps.
 
 **Files touched:**
 
-- [src/core/mod.rs](../src/core/mod.rs) — add `pub mod interactive;`.
-- `src/core/interactive/mod.rs` — new; re-exports public API.
-- `src/core/interactive/app.rs` — new; the `FractalApp<F: Renderable>` struct
-  and its `eframe::App` impl. Lifted from
-  [src/core/user_interface.rs](../src/core/user_interface.rs) with no
-  behavior changes.
-- [src/cli/explore.rs](../src/cli/explore.rs) — dispatch on `FractalParams`
-  variant, calling `interactive::run::<F>(...)` instead of
-  `user_interface::explore::<F>(...)`. Newton's separate
-  [src/fractals/newtons_method.rs:461](../src/fractals/newtons_method.rs#L461)
-  `explore_fractal` similarly retargets.
+- **New `src/core/interactive/mod.rs`** — module root; re-exports `explore`.
+- **New `src/core/interactive/app.rs`** — `FractalApp<F: Renderable>`, lifted
+  from `ExploreApp` in [src/core/user_interface.rs](../src/core/user_interface.rs).
+  Layout: `CentralPanel` (preview) + `SidePanel::right` (editor). Holds an
+  `EditorState`. Visuals per §4.1 (`panel_fill = BLACK`, `bg_stroke = NONE`,
+  `Frame::NONE.fill(BLACK)` on both panels).
+- **New `src/core/interactive/editor.rs`** — the palette editor (full widget
+  spec in §6):
 
-The old [src/core/user_interface.rs](../src/core/user_interface.rs) stays
-in tree at this phase to keep diffs reviewable; it gets deleted in Phase 6.
-
-**Visuals:** `panel_fill = BLACK`, `bg_stroke = NONE`, `Frame::NONE.fill(BLACK)`
-on every panel — matches current explore mode and avoids border artifacts
-(§4.1).
-
-**Verification:** manual smoke-test all four fractal types on various platforms.
-
-### Phase 5 — Color editor panel
-
-**Goal:** add the right-side color editor panel to `FractalApp`. Editor
-displays the loaded color map and allows local mutation of a **cached
-copy**. The fractal preview is not affected by edits — that's Phase 7.
-
-**Files touched:**
-
-- `src/core/interactive/editor.rs` — new. Defines a `show_editor` function
-  on the unified `ColorMap` type:
   ```rust
-  impl ColorMap {
-      pub fn show_editor(&mut self, ui: &mut egui::Ui, state: &mut EditorState) -> bool;
+  /// Render the editor for `palette`, mutating it in place. Returns `true`
+  /// if any keyframe / fraction / background color changed this frame.
+  pub fn show_palette_editor(
+      palette: &mut ColorPalette,
+      ui: &mut egui::Ui,
+      state: &mut EditorState,
+  ) -> bool;
+
+  pub struct EditorState {
+      pub selected_keyframe: Option<usize>,
+      pub active_color_map: usize,
   }
   ```
-  When `gradients.len() == 1` the tab strip is suppressed; otherwise a
-  per-gradient tab strip selects which gradient the keyframe widgets edit.
-  Shared widget helpers (`show_swatch`, `show_gradient_segment`, fraction
-  renormalization) live as free functions in this module.
-- `src/core/interactive/app.rs` — extend layout: `SidePanel::right` for
-  the editor, `CentralPanel` for the preview. `FractalApp<F>` gains
-  `editor_color_map: ColorMap` (a clone of the renderer's color map) and a
-  small `EditorState` for selection (selected keyframe index, active
-  gradient tab). Calls
-  `self.editor_color_map.show_editor(ui, &mut self.editor_state)` in the
-  panel.
 
-**Layout:**
+  Tab strip suppressed when `color_maps.len() == 1`; otherwise "Root 0", "Root
+  1", … select which color map the keyframe widgets edit. Lift the artifact-free
+  gradient bar from `color_map_editor_ui::paint_gradient_bar` (open question
+  §12.3) rather than rewriting it.
+
+- **Delete [src/core/user_interface.rs](../src/core/user_interface.rs)** (its
+  content moves into `interactive/`). Update
+  [src/core/mod.rs](../src/core/mod.rs): remove `pub mod user_interface;`, add
+  `pub mod interactive;`.
+- **[src/cli/explore.rs](../src/cli/explore.rs)** and Newton's
+  [explore_fractal](../src/fractals/newtons_method.rs) — retarget the
+  `user_interface::explore` calls to `interactive::explore`.
+- **[src/core/render_pipeline.rs](../src/core/render_pipeline.rs)** — add a
+  color-only re-render entry point:
+  ```rust
+  /// Re-colorize the existing field after a keyframe edit. Skips (a)/(b);
+  /// refreshes LUTs + background, then re-walks the field. The histograms
+  /// still hold the last compute pass's counts (they are only reset at the
+  /// start of a full `render`), so `refresh_after_compute_pass` reproduces
+  /// identical CDFs — correct and cheap.
+  pub fn recolorize_only(&mut self, out: &mut egui::ColorImage, sampling_level: i32);
+  ```
+  (Optional: a leaner `ColorPaletteCache::refresh_luts_and_background` that skips
+  the CDF rebuild entirely. Either is correct; benchmark before optimizing.)
+- **[src/core/render_window.rs](../src/core/render_window.rs)** — `PixelGrid`
+  gains `color_dirty: Arc<AtomicBool>` and a private `recolorize()` mirroring
+  `render()` but calling `recolorize_only`. In `update()`, when `color_dirty` is
+  set (and no render is busy and no view change is pending) spawn a recolorize
+  task; view/field changes take priority. Stash `initial_color_palette:
+ColorPalette` (cloned in `new`) so `reset()` can restore it (R-resets-colors,
+  §6.3).
+- **Key remaps (§6.3) in `app.rs`:** remove the Esc-as-quit binding; `Esc`
+  clears `selected_keyframe` (no-op when nothing selected); `Delete` removes the
+  selected keyframe (no-op on the first/last anchors); `R` resets view **and**
+  palette; `Q` / `Ctrl+C` quit. When `show_palette_editor` returns `true`, write
+  through `color_palette_mut()`, set `color_dirty`, and `ctx.request_repaint()`.
+
+**Verification:** `cargo test` — pixel-hash regression tests unchanged (no
+render-math change). Manual smoke-test all four fractals: pan/zoom/click/Space
+still work; editing a keyframe recolors the preview live; Newton shows one tab
+per root; `Esc` clears selection (does **not** quit); `Delete` removes a
+non-anchor keyframe; `R` resets view + colors.
+
+### Phase 5 — Gated, restorable Space-as-save
+
+**Goal:** replace today's fire-and-forget snapshot with the deliberate "publish
+this exact state" flow specified in §7 — input locked, forced to full quality,
+and writing a **reloadable** parameter file alongside the PNG.
+
+**Files touched:**
+
+- **`src/core/interactive/app.rs`** — implement the §7.2 state machine: on
+  Space, set `save_in_progress`, draw the overlay, suppress all input, force the
+  `AdaptiveOptimizationRegulator` to level 0 (caching the prior level so the next
+  user interaction restores responsiveness), trigger a full-quality render, block
+  (overlay up) until it completes, then write JSON + PNG, then unlock.
+- **[src/core/render_window.rs](../src/core/render_window.rs)** — replace/extend
+  `render_to_file` with a snapshot path that serializes a **reloadable
+  `FractalParams`** (the tagged enum) plus the PNG, not just the
+  `image_specification` as today.
+
+**Design wrinkle (must be solved here):** the saved JSON must round-trip through
+`explore <saved.json>`, i.e. it must be the tagged
+[`FractalParams`](../src/fractals/common.rs) shape (`{"Mandelbrot": { … }}`).
+But `interactive::explore::<F>` is monomorphized over the **inner** `F::Params`
+and the `FractalParams` variant tag is dropped at the
+[src/cli/explore.rs](../src/cli/explore.rs) dispatch. Thread the variant back
+through — e.g. pass a `rewrap: fn(F::Params) -> FractalParams` (or a variant
+discriminant) from the dispatch site, which already knows the concrete type,
+into `interactive::explore` / `FractalApp`. The serialized params must also
+reflect the live `image_specification` and the current (possibly edited)
+`ColorPalette`. (Note: today's headless `render` writes the bare inner params,
+not a tagged `FractalParams`; closing this gap for the snapshot is part of this
+phase.)
+
+**Verification:** edit colors, press Space → (a) overlay appears, (b) input
+locks during the render, (c) a timestamped JSON + PNG land on disk, (d) `explore
+<saved.json>` restores the exact view + colors + quality + fractal type, and the
+reloaded preview matches the saved PNG.
+
+### Phase 6 — CLI + cleanup (retire dead code)
+
+**Goal:** delete the dead `color_swatch` path and the demo modules now that
+`explore` subsumes them.
+
+**Files touched (deletions):**
+
+- [src/cli/color_swatch.rs](../src/cli/color_swatch.rs) — delete.
+- [src/cli/args.rs](../src/cli/args.rs) — remove the `ColorSwatch` variant from
+  `CommandsEnum`.
+- [src/cli/mod.rs](../src/cli/mod.rs) — remove `pub mod color_swatch;`.
+- [src/main.rs](../src/main.rs) — remove the `ColorSwatch` dispatch arm and the
+  `use cli::color_swatch::generate_color_swatch` import.
+- [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs) —
+  delete; its useful gradient-bar technique was lifted into
+  `interactive/editor.rs` in Phase 4.
+- [src/core/mod.rs](../src/core/mod.rs) — remove the deleted module decl.
+- [examples/color-gui-demo/](../examples/color-gui-demo/) and
+  [examples/visualize-color-swatch-rainbow/](../examples/visualize-color-swatch-rainbow/)
+  — delete.
+- [examples/common/mod.rs](../examples/common/mod.rs) — drop the
+  `color_swatch::generate_color_swatch` and `color_map_editor_ui::run_color_editor`
+  imports and any helper functions that reference them.
+
+**Verification:** `cargo build` / `cargo test` green;
+[tests/example_parameter_validation_tests.rs](../tests/example_parameter_validation_tests.rs)
+still globs cleanly after the example deletions.
+
+### Phase 7 — Polish
+
+Contents to be defined post-Phase-5 measurement. Likely candidates:
+
+- Debouncing rapid slider drags if `colorize_collapse_unified` proves expensive
+  at large resolutions.
+- Visual feedback for the selected keyframe (border, highlight).
+- Color picker UX refinements (RGB vs HSV, eyedropper, swatch history).
+- Whether to feed color edits into the adaptive regulator's `user_interaction`
+  signal (§8.3).
+- Tuning the defensive `request_repaint_after` cadence.
+
+---
+
+## 6. Color Editor Widget Spec
+
+### 6.1 Single-color-map editor (used by each tab)
+
+**Read-only displays:**
+
+- Vertical sequence of color cells, one per keyframe. Each cell is a small
+  filled rectangle (~32×32px) showing the keyframe's RGB. Selectable.
+- A horizontal gradient bar showing the full color map as currently configured.
+  Read-only — no drag-to-edit, no click-to-insert.
+
+**Mutable handles:**
+
+- Between each pair of adjacent keyframes: a `+` button and a `DragValue`
+  showing the _fraction_ of the gradient occupied by that segment (the
+  difference between the two adjacent keyframe positions).
+- Inline color picker (egui's `color_picker_color32`), permanently visible at
+  the bottom of the panel.
+
+**Interactions:**
+
+- **Click a color cell** → that keyframe becomes the selected keyframe. The
+  inline color picker switches to editing its color. Live: every picker change
+  writes into the keyframe's `rgb_raw`.
+- **`Delete` key** while a keyframe is selected → that keyframe is removed;
+  selection clears; the picker returns to idle. The first and last keyframes
+  (positions 0.0 and 1.0) are anchors and cannot be deleted (`Delete` is a no-op
+  on them).
+- **`Escape` key** → clears keyframe selection. Picker returns to idle.
+  **`Escape` does not exit the application.**
+- **`+` button** between two adjacent keyframes → inserts a new keyframe at the
+  midpoint of that segment. Default color: linearly interpolated between the two
+  adjacent keyframes (so insertion is initially invisible until the user edits
+  the new keyframe). The `+` button does not appear before the first keyframe or
+  after the last.
+- **Edit a fraction `DragValue`** → that fraction adopts the new value; the
+  _other_ fractions are scaled proportionally so the sum stays 1.0; keyframe
+  positions are recomputed from the resulting fractions. Each fraction is clamped
+  to `[ε, 1.0]` (with `ε ≈ 0.001`) to prevent any segment from collapsing to
+  zero width.
+
+### 6.2 Layout
+
+The unified `ColorPalette` always renders the same widget shape:
 
 ```
 ┌─────────────────────────────────────────────┬──────────────────────┐
@@ -732,238 +663,67 @@ copy**. The fractal preview is not affected by edits — that's Phase 7.
 │                                             │ [Newton tabs only:]  │
 │                                             │ │Root 0│Root 1│...│  │
 │                                             │ ───────────────────  │
-│         (fractal preview, central)          │ Flat colors:         │
-│                                             │  [swatch] background │
+│         (fractal preview, central)          │ Background:          │
+│                                             │  [swatch]            │
 │                                             │ ───────────────────  │
 │                                             │ Keyframes:           │
 │                                             │  [color cell #0]     │
 │                                             │  [+] [0.25]          │
 │                                             │  [color cell #1]     │
-│                                             │  [+] [0.30]          │
 │                                             │  ...                 │
 │                                             │ ───────────────────  │
 │                                             │ [gradient bar]       │
 │                                             │ ───────────────────  │
-│                                             │                      │
 │                                             │ [color picker]       │
-│                                             │                      │
 └─────────────────────────────────────────────┴──────────────────────┘
 ```
 
-Detailed widget spec is in §7.
-
-**Local-cache lifecycle:** `editor_color_map: ColorMap` is initialized at
-startup as a clone of `renderer.color_map()`. All editor widgets mutate only
-this cache. The renderer continues to use its own (immutable, in this phase)
-color map. Edits do not survive window close (no save-back to disk;
-Space-as-save in Phase 6 captures the cache to a fresh timestamped JSON).
-
-### Phase 6 — CLI + cleanup + extended Space-as-save
-
-**Goal:** retire dead code paths; extend snapshot behavior to capture color
-edits.
-
-**Files touched (deletions):**
-
-- [src/cli/color_swatch.rs](../src/cli/color_swatch.rs) — delete entirely.
-- [src/cli/args.rs](../src/cli/args.rs) — remove `ColorSwatch` variant from
-  `CommandsEnum`.
-- [src/cli/mod.rs](../src/cli/mod.rs) — remove `pub mod color_swatch;`.
-- [src/main.rs](../src/main.rs) — remove `ColorSwatch` dispatch arm and the
-  `use cli::color_swatch::generate_color_swatch` import.
-- [examples/visualize-color-swatch-rainbow/](../examples/visualize-color-swatch-rainbow/) — delete.
-- [examples/color-gui-demo/](../examples/color-gui-demo/) — delete (its
-  functionality is now part of `explore`).
-- [examples/common/mod.rs](../examples/common/mod.rs) — delete
-  `color_swatch_example_from_string` and `color_editor_example_from_string`.
-- [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs) —
-  delete; absorbed into `src/core/interactive/editor.rs`.
-- [src/core/user_interface.rs](../src/core/user_interface.rs) — delete;
-  absorbed into `src/core/interactive/app.rs`.
-- [src/core/mod.rs](../src/core/mod.rs) — remove deleted module decls.
-
-**Files touched (extension):**
-
-- `src/core/interactive/app.rs` — implement the new Space-as-save behavior
-  (full spec in §8). At this phase, "sync color map back into renderer"
-  is a one-shot copy from `editor_color_map` into the renderer's params
-  before the snapshot render — Phase 7 turns this into a continuous flow.
-- [src/core/render_window.rs](../src/core/render_window.rs) — `PixelGrid`
-  may need an explicit "render at full quality, then notify" entry point to
-  support the save flow (the existing `render_to_file` path can be retained
-  or rewired; implementer's choice).
-
-**Verification:** all CI green. Manual smoke-test of Space-as-save: load
-example, edit colors, press Space, verify (a) overlay appears, (b) controls
-locked during render, (c) timestamped JSON + PNG written to disk, (d)
-re-loading the saved JSON via `cargo run -- explore <saved.json>` reproduces
-the exact GUI state including colors.
-
-### Phase 7 — Live color sync
-
-**Goal:** color edits in the editor panel cause the fractal preview to
-re-colorize live (target: <1 frame latency at 1080p).
-
-**Approach:** `RenderingPipeline` owns the raw field buffer plus the
-per-gradient CDFs that persist across renders. Phase 7 adds two dirty flags
-so the pipeline can run only steps (d)+(e) when keyframes change, and the
-full (a)→(e) sequence when the viewport changes. Because the field stays
-raw and the CDFs are computed from the field (not the keyframes), keyframe
-edits don't invalidate the CDFs — the recolorize fast path is exactly
-"refresh LUTs + walk field again."
-
-**Files touched:**
-
-- [src/core/image_utils.rs](../src/core/image_utils.rs) — add
-  `color_map_mut(&mut self) -> &mut ColorMap` to `Renderable`.
-- [src/core/render_pipeline.rs](../src/core/render_pipeline.rs):
-  - Add a `recolorize_only(&mut self, out, sampling_level)` method that
-    runs `refresh_cache` + `colorize_collapse` against the existing field
-    (skipping (a)/(b)/(c)).
-- [src/core/render_window.rs](../src/core/render_window.rs) — extend
-  `PixelGrid<F>` to:
-  - Add `Arc<AtomicBool>` `field_dirty` (set on viewport change, triggers
-    full pipeline) and `Arc<AtomicBool>` `color_dirty` (set on keyframe
-    edit, triggers `recolorize_only`).
-  - In `update()`, dispatch the appropriate background task based on which
-    flag is set, with `field_dirty` taking priority if both are set.
-- `src/core/interactive/app.rs` — wire editor edits: when the editor
-  mutates a keyframe / fraction / flat color, write the change into
-  `renderer.color_map_mut()`, set `color_dirty`, call `ctx.request_repaint()`.
-- `src/core/interactive/editor.rs` — `show_editor` already returns whether
-  anything changed (per Phase 5); the app uses that boolean to gate
-  `color_dirty`.
-
-**Editor cache transition:** the separate `editor_color_map: ColorMap` from
-Phase 5 becomes redundant. The editor now mutates `renderer.color_map_mut()`
-directly. The app retains only editor _selection_ state (selected keyframe
-index, active gradient tab) — the data lives on the renderer.
-
-**AA on re-colorize.** The cached field in `RenderingPipeline` is at
-whatever upsampling factor the most recent (a)→(c) pass produced. Color
-edits replay (d)+(e) at the same upsampling factor, so AA-quality
-re-colorize during full-quality runs comes for free. During interactive
-sampling (stride > 1, sparse field), re-colorize naturally honors the same
-stride.
-
-**Adaptive quality regulator interaction:** color edits trigger only
-re-colorize, not re-compute, so the regulator's compute-quality scaling is not
-mechanically engaged by them. Whether color edits should also feed the
-`user_interaction = true` signal (so the regulator stays in "interactive
-mode" and defers expensive idle-time recomputes) is a UX-feel decision to
-make once Phase 7 is functional. The regulator self-tunes from observed
-compute time, so neither choice is structurally wrong.
-
-**Verification:** manual interactive testing — drag fraction sliders, click
-keyframe colors, verify the preview updates within a frame or two. Benchmark
-`colorize_collapse` over a representative populated field at 1920×1080 to
-confirm it stays under one frame at 24Hz; if not, Phase 8 must include
-tweaks to the adaptive quality scaling to make the UI feel smooth.
-
-### Phase 8 — Polish
-
-Contents to be defined post-Phase-7 measurement. Likely candidates:
-
-- Debouncing rapid slider drags if `colorize` proves expensive at large
-  resolutions.
-- Tuning the defensive `request_repaint_after` cadence.
-- Visual feedback for the selected keyframe (border, highlight).
-- Color picker UX refinements (RGB vs HSV, eyedropper, swatch history).
-- Whether to feed color edits into the adaptive regulator's
-  `user_interaction` signal.
-
----
-
-## 7. Color Editor Widget Spec
-
-### 7.1 Single-gradient editor (used by each gradient tab)
-
-**Read-only displays:**
-
-- Vertical sequence of color cells, one per keyframe. Each cell is a small
-  filled rectangle (~32×32px) showing the keyframe's RGB. Selectable.
-- A horizontal gradient bar showing the full gradient as currently
-  configured. Read-only — no drag-to-edit, no click-to-insert.
-
-**Mutable handles:**
-
-- Between each pair of adjacent keyframes: a `+` button and a `DragValue`
-  showing the _fraction_ of the gradient occupied by that segment (the
-  difference between the two adjacent keyframe positions).
-- Inline color picker (egui's `color_picker_color32`), permanently visible
-  at the bottom of the panel.
-
-**Interactions:**
-
-- **Click a color cell** → that keyframe becomes the selected keyframe.
-  The inline color picker switches to editing its color. Live: every picker
-  change writes into the keyframe's `rgb_raw`.
-- **`Delete` key** while a keyframe is selected → that keyframe is removed
-  from the gradient; selection clears; the picker returns to its idle state.
-  The first and last keyframes (positions 0.0 and 1.0) are anchors and
-  cannot be deleted (`Delete` is a no-op on them).
-- **`Escape` key** → clears keyframe selection. Picker returns to its idle
-  state. **`Escape` does not exit the application.**
-- **`+` button** between two adjacent keyframes → inserts a new keyframe at
-  the midpoint of that segment. Default color: linearly interpolated between
-  the two adjacent keyframes (so insertion is initially invisible until the
-  user edits the new keyframe). The `+` button does not appear before the
-  first keyframe or after the last.
-- **Edit a fraction `DragValue`** → that fraction adopts the new value; the
-  _other_ fractions are scaled proportionally so the sum stays 1.0; the
-  keyframe positions are recomputed from the resulting fractions. Each
-  fraction is clamped to `[ε, 1.0]` (with `ε ≈ 0.001`) to prevent any
-  segment from collapsing to zero width.
-
-### 7.2 Layout
-
-The unified `ColorPalette` always renders the same widget shape:
-
-- One color picker row at top labeled per-fractal (`Background` for
-  Mandelbrot/Julia/DDP; `Cyclic attractor` for Newton) that edits
+- One color picker row at top, labeled per-fractal (`Background` for
+  Mandelbrot/Julia/DDP; `Cyclic attractor` for Newton), that edits
   `background_color`.
-- A tab strip (one tab per entry in `color_maps`). When
-  `color_maps.len() == 1` the tab strip is suppressed and the lone color
-  map's editor renders directly. Otherwise tabs are labeled "Root 0",
-  "Root 1", … and the active tab shows the single-color-map editor for
-  that color map. Switching tabs resets keyframe selection.
+- A tab strip with one tab per entry in `color_maps`. When `color_maps.len() ==
+1` the tab strip is suppressed and the lone color map's editor renders
+  directly. Otherwise tabs are "Root 0", "Root 1", … and the active tab shows
+  the single-color-map editor for that color map. Switching tabs resets keyframe
+  selection.
 
-### 7.3 Application keys (interactive mode)
+### 6.3 Application keys (interactive mode)
 
 | Key                 | Behavior                                                                         |
 | ------------------- | -------------------------------------------------------------------------------- |
 | Arrow keys          | Pan view (existing).                                                             |
 | W / S               | Zoom in / out (existing).                                                        |
 | A / D (with no W/S) | Fast zoom in / out (existing).                                                   |
-| R                   | Reset to initial view (existing) and color map (new)                             |
+| R                   | Reset to initial view (existing) and color palette (new).                        |
 | Mouse left-click    | Recenter view on clicked point in the fractal preview (existing).                |
-| Space               | Save snapshot — see §8.                                                          |
+| Space               | Save snapshot — see §7.                                                          |
 | Q                   | Exit application.                                                                |
 | Ctrl+C              | Exit application (terminal default).                                             |
 | Esc                 | Clear keyframe selection. **No-op when no keyframe is selected.** Does not exit. |
-| Delete              | Remove selected keyframe (no-op for first/last).                                 |
+| Delete              | Remove selected keyframe (no-op for first/last anchors).                         |
 
-The Esc-as-quit binding present in today's [src/core/user_interface.rs:216](../src/core/user_interface.rs#L216)
-must be removed.
+The Esc-as-quit binding in today's
+[src/core/user_interface.rs](../src/core/user_interface.rs) must be removed
+during Phase 4.
 
-### 7.4 Out of scope
+### 6.4 Out of scope
 
 - Drag-and-drop on the gradient bar or color cells.
 - Arrow-key / Tab navigation between keyframes (click only).
 - Undo / redo.
-- Adding or removing entire gradients (e.g. changing Newton's root count).
-- Reordering keyframes (positions are derived from fractions, which are
-  positive, so order is stable).
+- Adding or removing entire color maps (e.g. changing Newton's root count).
+- Reordering keyframes (positions are derived from positive fractions, so order
+  is stable).
 
 ---
 
-## 8. Space-as-Save Spec
+## 7. Space-as-Save Spec
 
-Pressing Space initiates a deliberate "publish this exact state" action.
-Unlike today's fire-and-forget snapshot, the new flow is gated on a
-full-quality render and locks input (with user feedback) until complete.
+Pressing Space initiates a deliberate "publish this exact state" action. Unlike
+today's fire-and-forget snapshot, the new flow is gated on a full-quality render
+and locks input (with user feedback) until complete.
 
-### 8.1 State machine
+### 7.1 State machine
 
 ```
 Idle ──Space pressed──► Saving ──save complete──► Idle
@@ -974,253 +734,211 @@ Idle ──Space pressed──► Saving ──save complete──► Idle
                           └── re-render in flight
 ```
 
-### 8.2 Step sequence
+### 7.2 Step sequence
 
-1. **Lock & overlay.** Set `save_in_progress = true`. Display a feedback
-   overlay (translucent panel, "Saving snapshot…"). All input is suppressed
-   for the duration: pan/zoom keys, click-to-center, Space (debouncing
-   double-press), Esc, color edits.
-2. **Force quality to default.** Reset
-   `AdaptiveOptimizationRegulator` so the next render uses
-   `speed_optimization_level = 0.0`. The field will be computed at full
-   user-specified quality, not whatever degraded state interactive use had
-   pushed it to. Consider caching the current value of the quality so that it
-   can immediately be restored on the next user interaction to enable quick response.
-3. **Sync color map.** Push the editor's current color map (which in Phase 7
-   _is_ `renderer.color_map_mut()`; in Phase 6 was a separate
-   `editor_color_map: ColorMap` cache) into the renderer's params for
+1. **Lock & overlay.** Set `save_in_progress = true`. Display a feedback overlay
+   (translucent panel, "Saving snapshot…"). All input is suppressed for the
+   duration: pan/zoom keys, click-to-center, Space (debouncing double-press),
+   Esc, color edits.
+2. **Force quality to default.** Reset `AdaptiveOptimizationRegulator` so the
+   next render uses full user-specified quality, not whatever degraded state
+   interactive use pushed it to. Cache the current value so the next user
+   interaction restores responsiveness immediately.
+3. **Sync color palette.** In Phase 4+, the editor already mutates
+   `renderer.color_palette_mut()` directly, so the renderer's params are
+   current; this step just confirms there are no pending edits to flush before
    serialization.
-4. **Render to GUI.** Background thread runs `compute_field` (full quality)
-   followed by `color_map().colorize_into(...)` and swaps the result into
-   the preview texture. The save flow blocks (overlay still up) until the
-   render is complete.
-5. **Save params to disk.** Serialize the now-synced `FractalParams`
-   (including the embedded concrete color-map struct and the current
-   view-control's `image_specification`) to `<prefix>_<datetime>.json`. The
-   filename pattern matches today's
-   [src/core/render_window.rs:255-261](../src/core/render_window.rs#L255-L261).
+4. **Render to GUI.** Background thread runs the full pipeline at full quality
+   and swaps the result into the preview texture. The save flow blocks (overlay
+   up) until the render completes.
+5. **Save params to disk.** Serialize the now-synced **tagged `FractalParams`**
+   (including the embedded `ColorPalette` and the current
+   `image_specification`) to `<prefix>_<datetime>.json`. See the §5 Phase-5
+   design wrinkle: the variant tag must be threaded back in for the file to be
+   reloadable.
 6. **Save image to disk.** Write the just-rendered buffer to
    `<prefix>_<datetime>.png`. Pixels match what's on screen.
 7. **Unlock.** Clear `save_in_progress`; remove overlay; resume input.
 
-### 8.3 Restorability invariant
+### 7.3 Restorability invariant
 
-Calling `cargo run -- explore <saved.json>` on the file produced by step 5
-must restore the GUI to _exactly_ the state it was in when Space was pressed:
-the same view bounds, the same color map (including any edits), the same
-render quality parameters, the same fractal type. The pixel hash of the rendered preview
-should match the saved PNG.
+Calling `cargo run -- explore <saved.json>` on the file produced by step 5 must
+restore the GUI to _exactly_ the state it was in when Space was pressed: the
+same view bounds, the same color palette (including any edits), the same render
+quality parameters, the same fractal type. The pixel hash of the rendered
+preview should match the saved PNG.
 
-### 8.4 Comparison to current behavior
+### 7.4 Comparison to current behavior
 
-Today's Space ([src/core/render_window.rs:254-280](../src/core/render_window.rs#L254-L280))
-snapshots whatever the display buffer happens to contain, allowing the user
-to keep interacting during the write. The new flow is the opposite: deliberate
-"publish this exact state" gated on a full-quality render. The user accepts
-a brief block in exchange for guaranteed fidelity between what's on screen,
-what's written to disk, and what re-loads next time.
+Today's Space ([src/core/render_window.rs](../src/core/render_window.rs),
+`render_to_file`) snapshots whatever the display buffer happens to contain and
+writes only the `image_specification` — so the saved JSON is **not** a reloadable
+params file. The new flow is the opposite: deliberate "publish this exact state"
+gated on a full-quality render, writing a fully reloadable params file. The user
+accepts a brief block in exchange for guaranteed fidelity between what's on
+screen, what's written to disk, and what re-loads next time.
 
 ---
 
-## 9. Threading & Adaptive Quality
+## 8. Threading & Adaptive Quality
 
-### 9.1 Thread layout
+### 8.1 Thread layout
 
-- **UI thread:** eframe app — layout, input, editor mutations.
+- **UI thread:** the eframe app — layout, input, editor mutations.
 - **Background thread:** `PixelGrid` worker — runs `RenderingPipeline::render`
-  and `recolorize_only`. The existing `Arc<Mutex<RenderingPipeline<F>>>` plus
-  `Arc<AtomicBool>` flags pattern stays. Phase 7 adds a `color_dirty` flag
-  alongside the existing `redraw_required` and `render_task_is_busy` flags.
+  and (Phase 4+) `recolorize_only`. The existing `Arc<Mutex<RenderingPipeline<F>>>`
+  plus `Arc<AtomicBool>` flags pattern stays. Phase 4 adds a `color_dirty` flag
+  alongside the existing `render_task_is_busy` and `redraw_required` flags.
 
-### 9.2 Render trigger matrix
+### 8.2 Render trigger matrix
 
-| Event                 | What runs                                | Quality                              |
-| --------------------- | ---------------------------------------- | ------------------------------------ |
-| Pan / zoom / click    | Full pipeline (a)→(e)                    | `sampling_level` per regulator       |
-| Color edit (Phase 7+) | `recolorize_only`: `refresh_cache` + (e) | Honors current cached-field upsample |
-| Space pressed         | Full pipeline (a)→(e)                    | Forced to user JSON `sampling_level` |
-| Idle (no interaction) | Adaptive regulator may trigger upgrade   | `sampling_level` climbing → full     |
+| Event                 | What runs                              | Quality                              |
+| --------------------- | -------------------------------------- | ------------------------------------ |
+| Pan / zoom / click    | Full pipeline (a)→(d)                  | `sampling_level` per regulator       |
+| Color edit (Phase 4+) | `recolorize_only`: refresh LUTs + (d)  | Honors current cached-field upsample |
+| Space pressed         | Full pipeline (a)→(d)                  | Forced to user JSON `sampling_level` |
+| Idle (no interaction) | Adaptive regulator may trigger upgrade | `sampling_level` climbing → full     |
 
-### 9.3 Adaptive regulator
+When both `color_dirty` and a view change are pending, the view change (full
+pipeline) takes priority — it regenerates the field that a recolorize would
+otherwise re-walk.
+
+### 8.3 Adaptive regulator
 
 Stays unchanged from today's
 [src/core/render_quality_fsm.rs](../src/core/render_quality_fsm.rs). The
-`user_interaction = true` signal continues to come from view changes. Whether
-to also feed color edits into this signal is **deferred to Phase 8** — the
-regulator self-tunes from observed compute time, so the choice doesn't change
-the architecture, only the UX feel of "how aggressively does quality bounce
-back up after the user stops dragging a slider."
+`user_interaction = true` signal continues to come from view changes. Whether to
+also feed color edits into this signal is **deferred to Phase 7** — the
+regulator self-tunes from observed compute time, so the choice doesn't change the
+architecture, only the UX feel of "how aggressively does quality bounce back up
+after the user stops dragging a slider."
 
-### 9.4 Static-dispatch invariant
+### 8.4 Static-dispatch invariant
 
 The renderer hot path is fully monomorphized over `F: Renderable`. The core
 iteration helpers (`compute_raw_field`, `populate_histograms`,
-`colorize_collapse`) are generic over `K: FieldKernel` and instantiated once
-per fractal at compile time. There is no `dyn Renderable`, no runtime
-variant check on the per-(sub)pixel hot path. The only runtime dispatch in
-the system is the single `match fractal_params { … }` in
-[src/cli/explore.rs](../src/cli/explore.rs) that selects which concrete `F`
-to instantiate at startup.
-
-Per-frame allocations: zero. Per-(sub)pixel allocations: zero. All buffers
-(field, per-gradient histograms, per-gradient CDFs, per-gradient LUTs,
-output `ColorImage`) are owned by `RenderingPipeline` or `PixelGrid` and
-reused in place across renders.
-
-### 9.5 BarnsleyFern and Serpinsky
-
-Continue to panic in `cli::explore::explore_fractal` with "Parameter type does
-not yet implement RenderWindow." Out of scope for this entire roadmap. Their
-params structs are not migrated (Phase 1) and they do not implement
-`Renderable` / `FieldKernel` (Phases 2/3).
+`colorize_collapse_unified`) are generic over `K: FieldKernel` and instantiated
+once per fractal at compile time. There is no `dyn Renderable` and no runtime
+variant check on the per-(sub)pixel hot path. The only runtime dispatch is the
+`match fractal_params { … }` (and Newton's inner `SystemType` match) at startup
+that selects which concrete `F` to instantiate. Per-frame and per-(sub)pixel
+allocations are zero; all buffers are owned by `RenderingPipeline` / `PixelGrid`
+and reused in place.
 
 ---
 
-## 10. Testing Strategy
+## 9. Testing Strategy
 
 **Bar:** strong unit tests on logical pieces; manual smoke testing on the GUI
-itself. Snapshot or behavioral GUI tests are not required for this roadmap
-but may be added later if a particular bug class becomes recurring.
+itself. Snapshot or behavioral GUI tests are not required for this roadmap but
+may be added later if a particular bug class becomes recurring.
 
-### 10.1 What to unit-test (mandatory)
+### 9.1 What to unit-test (mandatory)
 
-- `colorize_cell` correctness on the unified `ColorPalette`:
-  - All-`None` field → all output pixels equal `background_color`.
-  - Single-keyframe color maps (constant-color).
-  - Boundary keyframe values (0.0 and 1.0) at LUT endpoints.
-  - Multi-color-map routing: cells with `color_map_index = k` colorize
-    through `color_maps[k]`, not color map 0.
-  - Empty `color_maps`: rejected at deserialization or construction with a
-    structured error; not reachable on the colorize hot path.
-- Core iteration helpers in `src/core/field_iteration.rs` against
-  synthetic `FieldKernel` impls:
-  - Positive `sampling_level = r`: writes exactly the `(r+1)²` cells per
-    output-pixel block.
-  - Block-fill `sampling_level = -m`: writes only the top-left cell of
-    each `(m+1) × (m+1)` output-pixel block.
-  - Histogram populate: counts equal number of `Some(_)` cells; routing
-    to `histograms[k]` matches the cell's gradient index.
-  - Compute receives the right `(re, im)` per subpixel (assert against
-    `LinearPixelMap`).
-- Fraction renormalization: edit one fraction in a 4-keyframe gradient,
-  assert the others scale proportionally and the resulting positions match
-  expectations. Edge cases: edit to ε, edit to 1−ε, edit to 0 (clamped),
-  edit to 1.0 (clamped).
-- Keyframe insertion: `+` between two existing keyframes produces the
-  expected midpoint position and the expected interpolated color.
-- Keyframe deletion: removing the second keyframe in a 3-keyframe gradient
-  preserves positions 0.0 and 1.0 of the anchors and removes the middle one.
-- serde round-trip for `ColorMap`.
-- DDP `#[serde(default)]` shim: an existing pre-Phase-1 DDP JSON
-  (re-created in a test fixture) still parses and produces the
-  hard-coded white/black colors via the degenerate single-keyframe
-  gradient.
+- `colorize_cell` correctness on the unified `ColorPalette` (already covered in
+  [color_map.rs](../src/core/color_map.rs) tests): all-`None` field →
+  background; single-keyframe constant-color maps; boundary keyframe values;
+  multi-color-map routing (`color_map_index = k` colorizes through
+  `color_maps[k]`); empty `color_maps` rejected at deserialization.
+- Core iteration helpers in
+  [field_iteration.rs](../src/core/field_iteration.rs) against synthetic
+  `FieldKernel` impls (already covered): positive / zero / negative
+  `sampling_level` traversal; histogram routing; subpixel-to-real-space mapping.
+- **New for Phase 4:**
+  - Fraction renormalization: edit one fraction in a 4-keyframe color map,
+    assert the others scale proportionally and positions match. Edge cases:
+    edit to ε, to 1−ε, to 0 (clamped), to 1.0 (clamped).
+  - Keyframe insertion: `+` between two keyframes yields the expected midpoint
+    position and interpolated color.
+  - Keyframe deletion: removing the middle of three preserves the 0.0/1.0
+    anchors and drops the middle one.
+  - `recolorize_only` equivalence: after a full `render`, calling
+    `recolorize_only` with the same palette produces a byte-identical output
+    image (the recolorize fast path is a no-op when keyframes are unchanged).
 
-### 10.2 What to manually smoke-test (mandatory each phase)
+### 9.2 What to manually smoke-test (mandatory each phase)
 
-Per the per-phase PR checklist (§12). Same matrix as today: Windows native,
-WSL2/XWayland, native Linux, mac.
+Per the per-phase PR checklist (§11.3). Same matrix as today: Windows native,
+WSL2/XWayland, native Linux, macOS.
 
-### 10.3 What to leave for later
+### 9.3 What to leave for later
 
 - egui snapshot tests on the editor panel rendering (would require
   `egui_kittest` or similar dev-dep).
-- Synthetic-input behavioral tests (e.g. "click keyframe 2, press Delete,
-  assert N-1 keyframes").
-- Performance regression tests for `colorize_collapse` (initially
-  benchmarked manually in Phase 7; promote to a criterion benchmark if it
-  becomes a recurring concern).
+- Synthetic-input behavioral tests (e.g. "click keyframe 2, press Delete, assert
+  N−1 keyframes").
+- A criterion benchmark for `colorize_collapse_unified` — add it only if live
+  recolorize latency becomes a recurring concern (Phase 7).
 
 ---
 
-## 11. Risks & De-risk
+## 10. Risks & De-risk
 
-**JSON migration misses a file**
+**Editor mutation corrupts the palette shape**
 
-- **Phase:** 1
-- **Mitigation:** `tests/example_parameter_validation_tests.rs` glob covers all JSONs; CI catches missed migrations.
+- **Phase:** 4
+- **Mitigation:** the editor never adds/removes whole color maps; keyframe
+  insert/delete preserve the 0.0/1.0 anchors; fraction edits renormalize and
+  clamp to `[ε, 1]`. Unit-tested per §9.1.
 
-**Schema migration changes pixel hashes**
+**Live recolorize too slow at high resolution**
 
-- **Phase:** 1
-- **Mitigation:** Pixel-hash regression tests gate the PR; if hashes change, the migration changed semantics — bug.
+- **Phase:** 4, 7
+- **Mitigation:** the recolorize path skips compute/histogram/CDF entirely
+  (refresh LUTs + re-walk). Benchmark over a representative populated field at
+  1920×1080 / 2K if it feels laggy; debounce or downsample-while-dragging falls
+  to Phase 7.
 
-**Compute/color split breaks pixel hashes unintentionally**
+**Saved JSON isn't reloadable**
 
-- **Phase:** 2.1, 2.2
-- **Mitigation:** 2.1 keeps the old path live and verifies bit equivalence
-  via a dedicated test before any runtime path moves. 2.2 deletes the old
-  path only after that gate passes. The single hash bump in 2.2 (block-fill
-  vs linear interpolation) affects exactly one fixture and is documented
-  in the commit.
+- **Phase:** 5
+- **Mitigation:** the snapshot must serialize the tagged `FractalParams`, not
+  the bare inner params (see the §5 Phase-5 design wrinkle). Verify by reloading
+  the saved file via `explore <saved.json>` and confirming the preview matches
+  the saved PNG (§7.3).
 
-**Histogram-source change in 2.3 produces visually wrong output**
+**Save flow races with an in-flight interactive render**
 
-- **Phase:** 2.3
-- **Mitigation:** Manually eyeball-verify 2-3 PNGs per fractal family
-  against the prior versions before regenerating expected hashes. If a
-  family's output looks structurally wrong, debug before committing — do
-  not blindly accept the new hash.
+- **Phase:** 5
+- **Mitigation:** the save state machine locks input and forces a fresh
+  full-quality render before writing; it does not snapshot a degraded buffer.
 
-**Phase 3 refactor accidentally shifts Mandelbrot/Julia pixel hashes**
+**Tab count drifts from `color_maps.len()`**
 
-- **Phase:** 3
-- **Mitigation:** Phase 3 should be invariant for Mandelbrot/Julia. Any
-  hash regression on those families is a bug — investigate before
-  regenerating. See [phase-3-detailed-plan.md](phase-3-detailed-plan.md)
-  for the per-commit invariance gate.
+- **Phase:** 4
+- **Mitigation:** the tab strip is a pure view of `color_maps.iter().enumerate()`;
+  no separately stored count.
 
-**Per-root histograms produce structurally wrong Newton output**
+**Editor state desync after tab switch**
 
-- **Phase:** 3
-- **Mitigation:** Manually eyeball-verify Newton PNGs against prior
-  versions before regenerating hashes. The intended visual change is
-  per-basin contrast improvement, not loss of structure.
-
-**`colorize_collapse` too slow at 2k to be live**
-
-- **Phase:** 7
-- **Mitigation:** Benchmark over a representative populated field at 2K early in Phase 7. Falls back to Phase 8 work.
-
-**Gradient-tab count drifts from `gradients.len()`**
-
-- **Phase:** 5, 7
-- **Mitigation:** Tab strip is a pure view of `gradients.iter().enumerate()`; no separately stored count.
-
-**Editor state desync after gradient-tab switch**
-
-- **Phase:** 5, 7
-- **Mitigation:** Selection state resets on tab change (specified in §7.2).
-
-**Adaptive regulator behaves badly during color editing**
-
-- **Phase:** 7, 8
-- **Mitigation:** Regulator self-tunes; if behavior is wrong, Phase 8 adjusts whether color edits feed `user_interaction`.
+- **Phase:** 4
+- **Mitigation:** selection state resets on tab change (§6.2).
 
 A wrong-shape color map cannot reach the renderer at runtime: there is one
-`ColorMap` type, validated at JSON deserialization. Empty `gradients` is
-the only construction-time hazard, and is rejected at construction with a
-structured error.
+`ColorPalette` type, validated at JSON deserialization (empty `color_maps` is
+rejected there and again at cache construction).
 
 ---
 
-## 12. Working Practices
+## 11. Working Practices
 
-### 12.1 CI checks (per [CLAUDE.md](../CLAUDE.md))
+### 11.1 CI checks (per [CLAUDE.md](../CLAUDE.md))
 
 Before every commit:
 
 ```bash
-cargo fmt
-cargo clippy -- -D warnings
+cargo fmt                    # CI checks with --check
+cargo clippy -- -D warnings  # zero warnings
 cargo test
-cargo bench --no-run
+cargo bench --no-run         # benchmarks must compile
+npm run fmt:check            # Prettier formatting for JSON and Markdown
 ```
 
 Pre-commit hooks in [.claude/settings.json](../.claude/settings.json) enforce
-these automatically when committing via Claude Code.
+these automatically when committing via Claude Code. Run `npm run fmt` to
+auto-format JSON/Markdown.
 
-### 12.2 Branch / commit conventions
+### 11.2 Branch / commit conventions
 
 - Branches: `feature/description`, `fix/description`, `perf/description`,
   `refactor/description`.
@@ -1230,65 +948,71 @@ these automatically when committing via Claude Code.
 - Include attribution for AI-assisted commits.
 - Never push or open PRs without explicit user confirmation.
 
-### 12.3 Per-phase PR checklist
+### 11.3 Per-phase PR checklist
 
-- [ ] All CI green locally (fmt, clippy, test, bench --no-run).
-- [ ] Unit tests added for new pure-logic pieces (per §10.1).
-- [ ] Pixel-hash regression tests pass unchanged where applicable
-      (Phases 1, 2, 3 especially — Phase 3 is invariant for
-      Mandelbrot/Julia, regenerated for DDP/Newton).
-- [ ] Manual smoke-test on various platforms (WSL, windows, mac, linux).
+- [ ] All CI green locally (fmt, clippy, test, bench --no-run, `npm run fmt:check`).
+- [ ] Unit tests added for new pure-logic pieces (per §9.1).
+- [ ] Pixel-hash regression tests pass unchanged (Phase 4 changes no
+      render-math, so all hashes hold; investigate any drift as a bug).
+- [ ] Manual smoke-test on various platforms (WSL, Windows, macOS, Linux).
 - [ ] If a hot path changed: `cargo bench` comparison before/after.
-- [ ] If JSON schema changed: every example JSON re-loads and produces the
-      same image hash (or a documented and intended pixel difference).
+- [ ] If a saved file's schema changed (Phase 5): a saved JSON re-loads via
+      `explore` and reproduces the captured state.
 - [ ] Doc updates: this roadmap reflects what was actually shipped (move
       in-progress phases to "done" or amend if scope shifted).
 
 ---
 
-## 13. Open Questions for the Implementer
+## 12. Open Questions for the Implementer
 
-These do not block any phase but should be decided as the relevant phase
-lands.
+These do not block any phase but should be decided as the relevant phase lands.
 
-1. **Drop the `QuadraticMap<T>` wrapper.** After Phase 2 it contains only
-   `fractal_params: T`. Cleaner to impl `Renderable` / `FieldKernel`
-   directly on `T: QuadraticMapParams + ...`. Recommendation: yes, fold in
-   during Phase 3.
-2. **Active gradient tab on switch.** When the active tab changes, reset
-   keyframe selection. Recommended.
+1. ~~**Drop the `QuadraticMap<T>` wrapper.**~~ **Resolved in Phase 3.**
+   Mandelbrot and Julia now implement `Renderable` / `FieldKernel` /
+   `SpeedOptimizer` via blanket impls over `T: QuadraticMapParams`; the wrapper
+   is gone.
+2. **Active tab on switch.** When the active color-map tab changes, reset
+   keyframe selection. Recommended; specified in §6.2.
 3. **Reuse of `paint_gradient_bar`.** The current
-   [src/core/color_map_editor_ui.rs:215-241](../src/core/color_map_editor_ui.rs#L215-L241)
-   already implements an artifact-free gradient bar. Keep it; lift into
-   `src/core/interactive/editor.rs` rather than rewriting.
+   [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs) already
+   implements an artifact-free gradient bar. Lift it into
+   `src/core/interactive/editor.rs` in Phase 4 rather than rewriting; delete the
+   demo module in Phase 6.
 4. **Color edits → adaptive regulator?** Whether to feed color edits into
-   `user_interaction = true`. Defer to Phase 8 measurement.
-5. **DDP basin coloring richness.** Today DDP collapses all non-zero basins
-   into one "background" bucket. After Phase 3 it has one constant-color
-   gradient. Future work could expose per-basin colors by emitting the
-   basin index as the gradient index in `evaluate` and shipping per-basin
-   gradients in the JSON. Out of scope for this roadmap.
+   `user_interaction = true`. Defer to Phase 7 measurement.
+5. **`recolorize_only` granularity.** Whether to add a dedicated
+   `refresh_luts_and_background` (skipping the CDF rebuild) or just re-call
+   `refresh_after_compute_pass` (CDFs rebuild identically from the retained
+   histograms). Benchmark before optimizing; the simpler reuse is the default.
+6. **DDP basin coloring richness.** DDP currently collapses all non-zero basins
+   into one constant-color map. Future work could expose per-basin colors by
+   emitting the basin index as the color-map index in `evaluate` and shipping
+   per-basin color maps in the JSON. Out of scope for this roadmap.
 
 ---
 
-## 14. Quick Start for a New Agent
+## 13. Quick Start for a New Agent
 
 1. Read this doc end-to-end.
-2. Read [src/core/user_interface.rs](../src/core/user_interface.rs) and
-   [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs)
-   to understand the two existing eframe apps you're unifying.
-3. Read [src/core/render_window.rs](../src/core/render_window.rs) to
-   understand `PixelGrid` and the existing background-render pattern.
-4. Read [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs),
+2. Read [src/core/user_interface.rs](../src/core/user_interface.rs) — the
+   current explore app you're lifting into `src/core/interactive/`.
+3. Read [src/core/render_window.rs](../src/core/render_window.rs) to understand
+   `PixelGrid`, the `RenderWindow` trait, and the background-render pattern
+   (`render_task_is_busy` / `redraw_required` flags).
+4. Read [src/core/render_pipeline.rs](../src/core/render_pipeline.rs) and
+   [src/core/field_iteration.rs](../src/core/field_iteration.rs) to understand
+   the four-step pipeline you'll add `recolorize_only` to.
+5. Read [src/core/color_map.rs](../src/core/color_map.rs) for the `ColorPalette`
+   / `ColorMap` / `ColorPaletteCache` types the editor mutates, and
+   [src/core/color_map_editor_ui.rs](../src/core/color_map_editor_ui.rs) for the
+   `paint_gradient_bar` technique to lift.
+6. Skim [src/fractals/quadratic_map.rs](../src/fractals/quadratic_map.rs),
    [src/fractals/driven_damped_pendulum.rs](../src/fractals/driven_damped_pendulum.rs),
-   and [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs)
-   to understand the per-fractal `Renderable` / `ColorMapKind` shapes
-   currently in tree (post Phase 2).
-5. Confirm `cargo test` passes on `main`. Pick the next phase that hasn't
-   landed.
-6. Re-read §6's detail for that phase. Re-read §11 for risks specific to
-   that phase. If you're picking up Phase 3, also read
-   [phase-3-detailed-plan.md](phase-3-detailed-plan.md). Make a small
-   first commit to keep the diff reviewable.
+   and [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs) to see
+   how each embeds `ColorPalette` and implements `Renderable` / `FieldKernel`.
+7. Confirm `cargo test` passes on `main`. Start Phase 4 (§5). Make a small first
+   commit (the module reorg, no behavior change) to keep the diff reviewable.
+8. Re-read §5 for that phase's detail, §6/§7 for the widget and save specs, and
+   §10 for phase-specific risks.
 
 Good luck.
