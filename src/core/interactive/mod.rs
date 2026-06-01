@@ -5,5 +5,6 @@
 //! alongside the preview; this module is the home for both.
 
 pub mod app;
+pub mod editor;
 
 pub use app::explore;
