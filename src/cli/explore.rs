@@ -1,7 +1,7 @@
 use std::any::type_name;
 
 use crate::{
-    core::{file_io::FilePrefix, user_interface},
+    core::{file_io::FilePrefix, interactive},
     fractals::{common::FractalParams, newtons_method},
 };
 
@@ -17,7 +17,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            user_interface::explore(
+            interactive::explore(
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),
@@ -26,7 +26,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
 
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
-            user_interface::explore(
+            interactive::explore(
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),
@@ -35,7 +35,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
 
         FractalParams::DrivenDampedPendulum(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
-            user_interface::explore(
+            interactive::explore(
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),

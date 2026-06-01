@@ -123,7 +123,7 @@ fn any_control_key_held(ctx: &egui::Context) -> bool {
 }
 
 /// eframe application that drives the interactive fractal explorer.
-struct ExploreApp<F: Renderable> {
+struct FractalApp<F: Renderable> {
     render_window: PixelGrid<F>,
     stopwatch: Stopwatch,
     texture: egui::TextureHandle,
@@ -133,7 +133,7 @@ struct ExploreApp<F: Renderable> {
     display_image: ColorImage,
 }
 
-impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
+impl<F: Renderable + Send + Sync + 'static> FractalApp<F> {
     fn new(
         cc: &eframe::CreationContext<'_>,
         file_prefix: FilePrefix,
@@ -206,7 +206,7 @@ impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
     }
 }
 
-impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
+impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         [0.0, 0.0, 0.0, 1.0]
     }
@@ -283,7 +283,7 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
         "Fractal Explorer",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(ExploreApp::new(
+            Ok(Box::new(FractalApp::new(
                 cc,
                 file_prefix,
                 image_specification,
