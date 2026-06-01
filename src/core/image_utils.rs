@@ -260,11 +260,9 @@ pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
     /// indices that `FieldKernel::evaluate` is allowed to emit.
     fn color_palette(&self) -> &ColorPalette;
 
-    /// Mutable access to the color palette. Used by Phase 7 live keyframe
-    /// edits; holds no semantic difference from `color_palette` today, the
-    /// editor flow just needs a path to mutate keyframes through the
-    /// renderer.
-    #[allow(dead_code)]
+    /// Mutable access to the color palette. The interactive render paths use
+    /// it to sync the editor's edited palette into the fractal before each
+    /// render / recolorize pass.
     fn color_palette_mut(&mut self) -> &mut ColorPalette;
 }
 

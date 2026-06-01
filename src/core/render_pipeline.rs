@@ -134,6 +134,36 @@ impl<F: Renderable> RenderingPipeline<F> {
         );
     }
 
+    /// Re-colorize the existing field after a keyframe edit, without
+    /// recomputing the fractal. Skips steps (a) and (b): the field still
+    /// holds the last compute pass's raw values and the histograms still
+    /// hold that pass's counts (they are only zeroed at the start of a full
+    /// `render`). `refresh_after_compute_pass` therefore rebuilds identical
+    /// CDFs while picking up the palette's edited keyframes and background,
+    /// and step (d) re-walks the field through the refreshed LUTs.
+    ///
+    /// `sampling_level` must match the value the last `render` used, so the
+    /// colorize pass walks the same populated sub-rectangle of the field.
+    pub fn recolorize_only(&mut self, out: &mut ColorImage, sampling_level: i32) {
+        debug_assert!(
+            sampling_level < (self.n_max_plus_1 as i32),
+            "runtime sampling_level cannot exceed the cap baked into the field buffer"
+        );
+        // (c) Rebuild CDFs (identically, from the retained histograms), LUTs
+        // (from the edited keyframes), and the background color.
+        self.color_cache
+            .refresh_after_compute_pass(self.fractal.color_palette());
+
+        // (d) Walk the existing field; CDF + LUT lookup per cell; AA-average.
+        colorize_collapse_unified(
+            &self.color_cache,
+            &self.field,
+            self.n_max_plus_1,
+            sampling_level,
+            out,
+        );
+    }
+
     /// Reference to the underlying fractal — used to read params for
     /// snapshot / diagnostics.
     pub fn fractal(&self) -> &F {
@@ -144,5 +174,143 @@ impl<F: Renderable> RenderingPipeline<F> {
     /// to push view changes and speed-optimization edits.
     pub fn fractal_mut(&mut self) -> &mut F {
         &mut self.fractal
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Write};
+
+    use egui::{Color32, ColorImage};
+
+    use crate::core::color_map::{ColorMap, ColorMapKeyFrame, ColorPalette};
+    use crate::core::field_iteration::FieldKernel;
+    use crate::core::image_utils::{ImageSpecification, RenderOptions, Renderable, SpeedOptimizer};
+
+    use super::*;
+
+    /// Minimal `Renderable` test double. `evaluate` returns a deterministic
+    /// raw value for half the plane (routed through color map 0) and `None`
+    /// for the rest, exercising both the colorized and background branches.
+    struct TestFractal {
+        image_specification: ImageSpecification,
+        render_options: RenderOptions,
+        palette: ColorPalette,
+    }
+
+    impl FieldKernel for TestFractal {
+        fn evaluate(&self, point: [f64; 2]) -> Option<(f32, u32)> {
+            if point[0] < 0.0 {
+                None
+            } else {
+                Some((point[0] as f32, 0))
+            }
+        }
+    }
+
+    impl SpeedOptimizer for TestFractal {
+        type ReferenceCache = RenderOptions;
+        fn reference_cache(&self) -> Self::ReferenceCache {
+            self.render_options
+        }
+        fn set_speed_optimization_level(&mut self, _level: f64, _cache: &Self::ReferenceCache) {}
+    }
+
+    impl Renderable for TestFractal {
+        type Params = RenderOptions;
+        fn image_specification(&self) -> &ImageSpecification {
+            &self.image_specification
+        }
+        fn render_options(&self) -> &RenderOptions {
+            &self.render_options
+        }
+        fn set_image_specification(&mut self, image_specification: ImageSpecification) {
+            self.image_specification = image_specification;
+        }
+        fn write_diagnostics<W: Write>(&self, _writer: &mut W) -> io::Result<()> {
+            Ok(())
+        }
+        fn params(&self) -> &Self::Params {
+            &self.render_options
+        }
+        fn histogram_bin_count(&self) -> usize {
+            16
+        }
+        fn histogram_max_value(&self) -> f32 {
+            2.0
+        }
+        fn lookup_table_count(&self) -> usize {
+            256
+        }
+        fn color_palette(&self) -> &ColorPalette {
+            &self.palette
+        }
+        fn color_palette_mut(&mut self) -> &mut ColorPalette {
+            &mut self.palette
+        }
+    }
+
+    fn red_to_blue() -> ColorMap {
+        vec![
+            ColorMapKeyFrame {
+                query: 0.0,
+                rgb_raw: [255, 0, 0],
+            },
+            ColorMapKeyFrame {
+                query: 1.0,
+                rgb_raw: [0, 0, 255],
+            },
+        ]
+    }
+
+    fn test_pipeline() -> RenderingPipeline<TestFractal> {
+        let fractal = TestFractal {
+            image_specification: ImageSpecification {
+                resolution: [8, 6],
+                center: [0.0, 0.0],
+                width: 4.0,
+            },
+            render_options: RenderOptions { sampling_level: 0 },
+            palette: ColorPalette {
+                background_color: [7, 8, 9],
+                color_maps: vec![red_to_blue()],
+            },
+        };
+        RenderingPipeline::new(fractal, 1, 16, 2.0, 256)
+    }
+
+    /// After a full `render`, `recolorize_only` with an unchanged palette must
+    /// reproduce a byte-identical image: it rebuilds identical CDFs from the
+    /// retained histograms and re-walks the same field.
+    #[test]
+    fn recolorize_only_matches_render_when_palette_unchanged() {
+        let mut pipeline = test_pipeline();
+        let mut rendered = ColorImage::filled([8, 6], Color32::BLACK);
+        let mut recolorized = ColorImage::filled([8, 6], Color32::BLACK);
+
+        pipeline.render(&mut rendered, 0);
+        pipeline.recolorize_only(&mut recolorized, 0);
+
+        assert_eq!(rendered.pixels, recolorized.pixels);
+    }
+
+    /// A keyframe edit followed by `recolorize_only` (no recompute) must
+    /// change the output, and must match a full `render` performed after the
+    /// same edit — confirming the fast path picks up palette edits correctly.
+    #[test]
+    fn recolorize_only_picks_up_keyframe_edits() {
+        let mut pipeline = test_pipeline();
+        let mut rendered = ColorImage::filled([8, 6], Color32::BLACK);
+        pipeline.render(&mut rendered, 0);
+
+        pipeline.fractal_mut().color_palette_mut().color_maps[0][0].rgb_raw = [0, 255, 0];
+
+        let mut recolorized = ColorImage::filled([8, 6], Color32::BLACK);
+        pipeline.recolorize_only(&mut recolorized, 0);
+        assert_ne!(rendered.pixels, recolorized.pixels);
+
+        let mut fully_rerendered = ColorImage::filled([8, 6], Color32::BLACK);
+        pipeline.render(&mut fully_rerendered, 0);
+        assert_eq!(recolorized.pixels, fully_rerendered.pixels);
     }
 }
