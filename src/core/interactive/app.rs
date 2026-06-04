@@ -255,7 +255,9 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
         }
 
         // `R` resets the view and the color palette to their initial state.
-        if ctx.input(|i| i.key_down(Key::R)) {
+        // Edge-triggered (like Space): holding the key should reset once, not
+        // re-clone the palette and re-mark the preview dirty every frame.
+        if ctx.input(|i| i.key_pressed(Key::R)) {
             self.render_window.reset();
             self.editor_state.selected_keyframe = None;
         }

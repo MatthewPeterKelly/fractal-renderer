@@ -149,6 +149,19 @@ impl<F: Renderable> RenderingPipeline<F> {
             sampling_level < (self.n_max_plus_1 as i32),
             "runtime sampling_level cannot exceed the cap baked into the field buffer"
         );
+        // Mirror `render`'s defensive checks: the field and output must still
+        // match the fractal's spec (a resize would invalidate both, and a
+        // color-only pass must never be called against a stale buffer).
+        let spec = *self.fractal.image_specification();
+        debug_assert_eq!(
+            self.field.len(),
+            (spec.resolution[0] as usize) * self.n_max_plus_1,
+            "field outer dim must match (n_max+1)·W"
+        );
+        debug_assert_eq!(
+            out.size,
+            [spec.resolution[0] as usize, spec.resolution[1] as usize]
+        );
         // (c) Rebuild CDFs (identically, from the retained histograms), LUTs
         // (from the edited keyframes), and the background color.
         self.color_cache

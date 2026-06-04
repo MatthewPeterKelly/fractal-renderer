@@ -187,16 +187,12 @@ where
     /// Editor's source-of-truth color palette. The interactive app locks
     /// this each frame to draw and mutate the palette; edits are picked up by
     /// the next render / recolorize, which copies it into the fractal.
-    // Wired into the editor panel in the next commit.
-    #[allow(dead_code)]
     pub fn palette(&self) -> &Arc<Mutex<ColorPalette>> {
         &self.palette
     }
 
     /// Signal that the palette was edited and the preview needs a color-only
     /// re-render. Drained by the next `update`.
-    // Wired into the editor panel in the next commit.
-    #[allow(dead_code)]
     pub fn mark_color_dirty(&self) {
         self.color_dirty.store(true, Ordering::Release);
     }
@@ -314,6 +310,11 @@ where
                 self.has_started_rendering = true;
                 self.render();
                 launched_full_render = true;
+                // The full render clones the current (possibly just-edited)
+                // palette into the fractal, so it already satisfies any
+                // pending color edit. Clear the flag to avoid a redundant
+                // recolorize firing the moment this render completes.
+                self.color_dirty.store(false, Ordering::Release);
             }
         }
 

@@ -196,36 +196,45 @@ pub fn set_segment_fraction(map: &mut ColorMap, segment: usize, new_value: f32) 
     if keyframe_count < 2 || segment + 1 >= keyframe_count {
         return;
     }
-    let mut fractions: Vec<f32> = (0..keyframe_count - 1)
+    let old_fractions: Vec<f32> = (0..keyframe_count - 1)
         .map(|i| map[i + 1].query - map[i].query)
         .collect();
-    let other_count = fractions.len() - 1;
-    // Leave room for every other segment to retain at least MIN_FRACTION.
+    let other_count = old_fractions.len() - 1;
+    // Clamp the edited segment so the others can each still hold MIN_FRACTION.
     let max_value = (1.0 - MIN_FRACTION * other_count as f32).max(MIN_FRACTION);
     let new_value = new_value.clamp(MIN_FRACTION, max_value);
     let remaining = 1.0 - new_value;
-    let old_others_sum: f32 = fractions
+
+    // Give every other segment a MIN_FRACTION floor, then split the surplus in
+    // proportion to the old widths. The result sums to exactly 1.0 by
+    // construction, so there is no later normalization pass to push a floored
+    // segment back below the minimum — the invariant genuinely holds.
+    let surplus = (remaining - MIN_FRACTION * other_count as f32).max(0.0);
+    let old_others_sum: f32 = old_fractions
         .iter()
         .enumerate()
         .filter(|(i, _)| *i != segment)
         .map(|(_, f)| *f)
         .sum();
-    for (i, fraction) in fractions.iter_mut().enumerate() {
-        if i == segment {
-            *fraction = new_value;
-        } else if old_others_sum > 0.0 {
-            *fraction = (*fraction * remaining / old_others_sum).max(MIN_FRACTION);
-        } else {
-            *fraction = remaining / other_count as f32;
-        }
-    }
-    // Normalize away any drift introduced by the MIN_FRACTION clamps, then
-    // rebuild positions from the cumulative sum. Anchors stay at 0.0 / 1.0.
-    let total: f32 = fractions.iter().sum();
+    let new_fractions: Vec<f32> = old_fractions
+        .iter()
+        .enumerate()
+        .map(|(i, &old)| {
+            if i == segment {
+                new_value
+            } else if old_others_sum > 0.0 {
+                MIN_FRACTION + surplus * (old / old_others_sum)
+            } else {
+                MIN_FRACTION + surplus / other_count as f32
+            }
+        })
+        .collect();
+
+    // Rebuild positions from the cumulative sum. Anchors stay at 0.0 / 1.0.
     let mut query = 0.0;
     for i in 0..keyframe_count - 1 {
         map[i].query = query;
-        query += fractions[i] / total;
+        query += new_fractions[i];
     }
     map[keyframe_count - 1].query = 1.0;
 }
@@ -338,6 +347,28 @@ mod tests {
         assert!(map[0].query < map[1].query);
         assert!(map[1].query < map[2].query);
         assert!(map[2].query < map[3].query);
+    }
+
+    #[test]
+    fn set_fraction_keeps_every_segment_above_min_with_unequal_widths() {
+        // Highly unequal segments: a tiny middle segment that proportional
+        // rescaling alone (followed by a normalization pass) could shrink
+        // below MIN_FRACTION. The floor-plus-surplus construction must keep
+        // every segment >= MIN_FRACTION and the positions strictly monotonic.
+        let mut map = map_with_queries(&[0.0, 0.6, 0.6 + MIN_FRACTION, 1.0]);
+        set_segment_fraction(&mut map, 0, 0.95);
+        let q = queries(&map);
+        let segments: Vec<f32> = q.windows(2).map(|w| w[1] - w[0]).collect();
+        for segment in &segments {
+            assert!(
+                *segment >= MIN_FRACTION - 1e-6,
+                "segment {segment} fell below MIN_FRACTION",
+            );
+        }
+        // Fractions still sum to 1.0 (positions span the unit interval).
+        assert!((q[0] - 0.0).abs() < 1e-6);
+        assert!((q[3] - 1.0).abs() < 1e-6);
+        assert!((segments.iter().sum::<f32>() - 1.0).abs() < 1e-5);
     }
 
     #[test]
