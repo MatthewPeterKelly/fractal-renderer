@@ -9,9 +9,10 @@ use crate::core::color_map::ColorPalette;
 use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
 
 use super::{
-    file_io::{FilePrefix, date_time_string, serialize_to_json_or_panic},
+    file_io::{FilePrefix, date_time_string, write_file_or_panic},
     image_utils::{
-        ImageSpecification, Renderable, field_upsample_factor, write_image_to_file_or_panic,
+        ImageSpecification, Renderable, color_image_to_rgb8, field_upsample_factor,
+        write_image_to_file_or_panic,
     },
     render_pipeline::RenderingPipeline,
     view_control::{CenterCommand, CenterTargetCommand, ViewControl, ZoomVelocityCommand},
@@ -48,12 +49,29 @@ pub trait RenderWindow {
     ///   resolution. Its row-major pixel buffer is overwritten in place with
     ///   the latest fractal colors.
     fn draw(&self, image: &mut ColorImage);
-
-    /// Saves the current rendered content to a file.
-    ///
-    /// This may also serialize additional data such as rendering parameters.
-    fn render_to_file(&self);
 }
+
+/// State of the gated Space-as-save flow (Phase 5 of the GUI roadmap): a
+/// deliberate "publish this exact state" action that forces a full-quality
+/// render before writing a reloadable params JSON + a matching PNG.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SaveState {
+    /// No save in progress.
+    Idle,
+    /// Space pressed; waiting for the render worker to be free so a forced
+    /// full-quality render can be launched.
+    Pending,
+    /// A full-quality save render is in flight; the snapshot is written to
+    /// disk once it completes.
+    Rendering,
+}
+
+/// Boxed closure that wraps a fractal's inner params into a reloadable, tagged
+/// `FractalParams` JSON string for the Space-as-save snapshot. It is `dyn`
+/// (off the render hot path) so `core` need not name the
+/// `fractals::FractalParams` enum; the dispatch site that picked the concrete
+/// variant supplies it.
+pub type SnapshotSerializer<F> = Box<dyn Fn(&<F as Renderable>::Params) -> String>;
 
 /// Generic `RenderWindow` implementation backed by a `RenderingPipeline`.
 /// All "solve by pixel" fractals run through it. Per-(sub)pixel dispatch is
@@ -115,6 +133,15 @@ pub struct PixelGrid<F: Renderable> {
 
     // Whether a render has ever been launched on this `PixelGrid`.
     has_started_rendering: bool,
+
+    // Serializes the current fractal params into a reloadable, tagged
+    // `FractalParams` JSON string for the Space-as-save snapshot. Boxed so
+    // `core` need not depend on the `fractals::FractalParams` enum; supplied
+    // by the dispatch site that knows the concrete variant.
+    serialize_snapshot: SnapshotSerializer<F>,
+
+    // Drives the gated Space-as-save flow (see `SaveState`).
+    save_state: SaveState,
 }
 
 const TARGET_RENDER_FRAMES_PER_SECOND: f64 = 24.0;
@@ -125,7 +152,17 @@ where
 {
     /// Construct a `PixelGrid` around the given fractal. Allocates the
     /// pipeline's reusable buffers at the user's full sampling level.
-    pub fn new(time: f64, file_prefix: FilePrefix, view_control: ViewControl, renderer: F) -> Self {
+    ///
+    /// `serialize_snapshot` wraps the fractal's inner params back into a
+    /// reloadable, tagged `FractalParams` JSON string for the Space-as-save
+    /// snapshot (kept out of `core` so the layering stays `fractals → core`).
+    pub fn new(
+        time: f64,
+        file_prefix: FilePrefix,
+        view_control: ViewControl,
+        renderer: F,
+        serialize_snapshot: SnapshotSerializer<F>,
+    ) -> Self {
         let resolution = view_control.image_specification().resolution;
         let center_command = CenterCommand::Target(CenterTargetCommand {
             view_center: view_control.image_specification().center,
@@ -158,6 +195,8 @@ where
             initial_color_palette,
             last_sampling_level: Arc::new(AtomicI32::new(0)),
             has_started_rendering: false,
+            serialize_snapshot,
+            save_state: SaveState::Idle,
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 1.0 / TARGET_RENDER_FRAMES_PER_SECOND,
             ),
@@ -195,6 +234,45 @@ where
     /// re-render. Drained by the next `update`.
     pub fn mark_color_dirty(&self) {
         self.color_dirty.store(true, Ordering::Release);
+    }
+
+    /// Whether a gated Space-as-save snapshot is currently being produced.
+    /// While true, the interactive app locks input and shows a "Saving…"
+    /// overlay.
+    pub fn is_saving(&self) -> bool {
+        self.save_state != SaveState::Idle
+    }
+
+    /// Begin a gated Space-as-save: the next `update` calls force a
+    /// full-quality render and then write a reloadable params JSON + a
+    /// matching PNG. No-op if a save is already in progress (this debounces a
+    /// double Space press).
+    pub fn request_save(&mut self) {
+        if self.save_state == SaveState::Idle {
+            self.save_state = SaveState::Pending;
+        }
+    }
+
+    /// Serialize the current (full-quality, palette- and view-synced) fractal
+    /// params to a timestamped reloadable JSON and write the on-screen buffer
+    /// to a matching PNG. Called once the forced save render completes.
+    fn write_snapshot(&self) {
+        let datetime = date_time_string();
+        let json = {
+            let pipeline = self.pipeline.lock().unwrap();
+            (self.serialize_snapshot)(pipeline.fractal().params())
+        };
+        write_file_or_panic(
+            self.file_prefix
+                .full_path_with_suffix(&format!("_{datetime}.json")),
+            &json,
+        );
+        let imgbuf = color_image_to_rgb8(&self.display_buffer.lock().unwrap());
+        write_image_to_file_or_panic(
+            self.file_prefix
+                .full_path_with_suffix(&format!("_{datetime}.png")),
+            |f| imgbuf.save(f),
+        );
     }
 
     /// Spawn a background render on the pipeline. The pipeline's mutex
@@ -281,6 +359,47 @@ where
         // (2) the adaptive quality regulator reports that the render quality needs to be modified
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
 
+        // Gated Space-as-save flow. While active it takes over scheduling
+        // entirely and never calls the adaptive regulator, so the regulator
+        // is *frozen* across the save: interaction resumes afterward at its
+        // exact pre-save responsiveness (rather than the roadmap's
+        // reset-and-cache, which is equivalent in effect). `view_control` is
+        // still advanced above each frame, so resuming never sees a time jump.
+        match self.save_state {
+            SaveState::Pending => {
+                // Wait for any in-flight render to finish, then launch a
+                // forced full-quality save render. Forcing level 0.0 both
+                // guarantees image fidelity *and* restores the user's
+                // reference params, so the serialized params are full-quality
+                // rather than whatever degraded state interaction left behind.
+                if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
+                    self.redraw_required.store(false, Ordering::Release);
+                    self.pipeline
+                        .lock()
+                        .unwrap()
+                        .fractal_mut()
+                        .set_speed_optimization_level(0.0, &self.speed_optimizer_cache);
+                    self.has_started_rendering = true;
+                    self.render();
+                    self.save_state = SaveState::Rendering;
+                }
+                return false;
+            }
+            SaveState::Rendering => {
+                if self.redraw_required.load(Ordering::Acquire)
+                    && !self.render_task_is_busy.load(Ordering::Acquire)
+                {
+                    self.write_snapshot();
+                    self.save_state = SaveState::Idle;
+                    // Report the completed full-quality frame so the app
+                    // uploads it to the preview texture.
+                    return true;
+                }
+                return false;
+            }
+            SaveState::Idle => {}
+        }
+
         // If redraw is required, it tells us that the previous rendering operation has
         // completed. Capture this timing *before* possibly launching a new render, so that
         // the measured period is associated with the correct command.
@@ -344,33 +463,6 @@ where
         let display_buffer = self.display_buffer.lock().unwrap();
         image.pixels.copy_from_slice(&display_buffer.pixels);
         self.redraw_required.store(false, Ordering::Release);
-    }
-
-    fn render_to_file(&self) {
-        let datetime = date_time_string();
-
-        serialize_to_json_or_panic(
-            self.file_prefix
-                .full_path_with_suffix(&format!("_{datetime}.json")),
-            &self.image_specification(),
-        );
-
-        let resolution = self.image_specification().resolution;
-        let mut imgbuf = image::ImageBuffer::new(resolution[0], resolution[1]);
-        {
-            let display_buffer = self.display_buffer.lock().unwrap();
-            let width = display_buffer.size[0];
-            for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-                let c = display_buffer.pixels[(y as usize) * width + (x as usize)];
-                *pixel = image::Rgb([c.r(), c.g(), c.b()]);
-            }
-        }
-
-        write_image_to_file_or_panic(
-            self.file_prefix
-                .full_path_with_suffix(&format!("_{datetime}.png")),
-            |f| imgbuf.save(f),
-        );
     }
 }
 

@@ -173,9 +173,9 @@ pub trait QuadraticMapParams: Serialize + Clone + Debug + Sync + Send {
 
     /// Access the color map parameters.
     fn color_map_params(&self) -> &ColorMapParams;
-    /// Mutable access to the color map parameters. Used by the live editor
-    /// flow (Phase 7) to mutate keyframes through the renderer.
-    #[allow(dead_code)]
+    /// Mutable access to the color map parameters. Reached via
+    /// `Renderable::color_palette_mut` when the interactive render path syncs
+    /// the editor's edited palette into the renderer before a pass.
     fn color_map_params_mut(&mut self) -> &mut ColorMapParams;
 
     /// Access to the rendering options:
