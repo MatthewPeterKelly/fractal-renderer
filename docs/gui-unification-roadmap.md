@@ -128,8 +128,8 @@ the CDFs derive from it (not from the keyframes), a color-only re-render is just
 | 2     | Compute / color split                      | ✅ shipped (`4199c23`…`8008aff`) |
 | 3     | Pipeline unification & per-root colors     | ✅ shipped (`56ad860`…`7308de0`) |
 | 4     | Unified `interactive` module + live editor | ✅ shipped (`89f4512`…`ffd733d`) |
-| 5     | Gated, restorable Space-as-save            | ⬜ next (§5)                     |
-| 6     | CLI + cleanup (retire dead code)           | ⬜ §5                            |
+| 5     | Gated, restorable Space-as-save            | ✅ shipped (`8266096`)           |
+| 6     | CLI + cleanup (retire dead code)           | ⬜ next (§5)                     |
 | 7     | Polish                                     | ⬜ §5 (opportunistic)            |
 
 Phases 4 → 6 are sequential; each is a self-contained PR, bisectable and
@@ -447,7 +447,7 @@ architecture makes a color-only re-render trivial (§3.3).
 | PR      | Title                                               | Blast radius                                                       |
 | ------- | --------------------------------------------------- | ------------------------------------------------------------------ |
 | Phase 4 | ✅ Unified `interactive` module + live color editor | New `src/core/interactive/`; `recolorize_only`; `color_dirty` flag |
-| Phase 5 | Gated, restorable Space-as-save                     | Save state machine; full-`FractalParams` serialization             |
+| Phase 5 | ✅ Gated, restorable Space-as-save                  | Save state machine; full-`FractalParams` serialization             |
 | Phase 6 | CLI + cleanup (retire dead code)                    | Delete `color_swatch`, demo example, demo editor module            |
 | Phase 7 | Polish                                              | Contents TBD post-Phase-5 measurement                              |
 
@@ -550,7 +550,39 @@ still work; editing a keyframe recolors the preview live; Newton shows one tab
 per root; `Esc` clears selection (does **not** quit); `Delete` removes a
 non-anchor keyframe; `R` resets view + colors.
 
-### Phase 5 — Gated, restorable Space-as-save
+### Phase 5 — Gated, restorable Space-as-save — ✅ shipped
+
+**Shipped** in `8266096`. Both the interactive Space-save and the headless
+`render` sidecar now write a reloadable, pretty-printed, tagged `FractalParams`
+JSON. Round-trip unit tests (`fractals::common`) guard reloadability per
+variant. Deviations from the plan below, all intentional and documented per
+[the deviations convention](../docs/gui-unification-roadmap.md):
+
+- **`rewrap` is a capturing closure returning a JSON `String`, not
+  `fn(F::Params) -> FractalParams`.** Newton's `Renderable::Params` is
+  `CommonParams`, which does **not** contain the `system`; a plain fn pointer
+  could not reconstruct `FractalParams::NewtonsMethod`. The dispatch site (which
+  picked the concrete system) captures it in a closure and re-injects it.
+  Returning a `String` (built by the `fractals`-layer `*_snapshot_json` helpers)
+  also keeps `core` free of any `FractalParams` reference, preserving the
+  `fractals → core` layering.
+- **The save state machine lives in `PixelGrid` (`render_window.rs`), not
+  `app.rs`.** `PixelGrid` owns the render worker, regulator, pipeline, and file
+  prefix, so the FSM (`SaveState::{Idle, Pending, Rendering}`) and serialization
+  belong there; `app.rs` keeps only the input-lock + "Saving…" overlay and the
+  `request_save` / `is_saving` calls.
+- **The regulator is frozen across the save, not reset-and-cached.** The FSM
+  returns before any regulator call, so the regulator resumes at its exact
+  pre-save state (same "responsiveness restored" effect, no extra field).
+  Forcing `set_speed_optimization_level(0.0)` directly on the fractal both
+  guarantees a full-quality image _and_ restores the user's reference
+  convergence/sampling params in the struct `params()` serializes — required so
+  a snapshot taken after degraded interaction still records full-quality params.
+- **Headless `render` was fixed in the same change** (the §5 note below): its
+  sidecar JSON is now the tagged, reloadable shape too, not the bare inner
+  params.
+
+The original plan follows, for reference.
 
 **Goal:** replace today's fire-and-forget snapshot with the deliberate "publish
 this exact state" flow specified in §7 — input locked, forced to full quality,
@@ -907,19 +939,21 @@ WSL2/XWayland, native Linux, macOS.
   1920×1080 / 2K if it feels laggy; debounce or downsample-while-dragging falls
   to Phase 7.
 
-**Saved JSON isn't reloadable**
+**Saved JSON isn't reloadable** — ✅ resolved (Phase 5)
 
 - **Phase:** 5
-- **Mitigation:** the snapshot must serialize the tagged `FractalParams`, not
-  the bare inner params (see the §5 Phase-5 design wrinkle). Verify by reloading
-  the saved file via `explore <saved.json>` and confirming the preview matches
-  the saved PNG (§7.3).
+- **Mitigation:** the snapshot serializes the tagged `FractalParams` (via the
+  `*_snapshot_json` closures), not the bare inner params. Newton's `system` is
+  re-injected at the dispatch site (it is absent from `CommonParams`).
+  Round-trip unit tests in `fractals::common` assert each variant reloads, and
+  the system is asserted preserved.
 
-**Save flow races with an in-flight interactive render**
+**Save flow races with an in-flight interactive render** — ✅ resolved (Phase 5)
 
 - **Phase:** 5
-- **Mitigation:** the save state machine locks input and forces a fresh
-  full-quality render before writing; it does not snapshot a degraded buffer.
+- **Mitigation:** the `SaveState` machine waits for the worker to be free, then
+  forces a fresh full-quality render before writing; it never snapshots a
+  degraded buffer.
 
 **Tab count drifts from `color_maps.len()`**
 
@@ -1028,8 +1062,8 @@ These do not block any phase but should be decided as the relevant phase lands.
    [src/fractals/driven_damped_pendulum.rs](../src/fractals/driven_damped_pendulum.rs),
    and [src/fractals/newtons_method.rs](../src/fractals/newtons_method.rs) to see
    how each embeds `ColorPalette` and implements `Renderable` / `FieldKernel`.
-7. Confirm `cargo test` passes on `main`. Start Phase 4 (§5). Make a small first
-   commit (the module reorg, no behavior change) to keep the diff reviewable.
+7. Confirm `cargo test` passes on `main`. Phases 4 and 5 have shipped; the next
+   unstarted PR is Phase 6 (CLI + cleanup, §5). Keep each PR bisectable.
 8. Re-read §5 for that phase's detail, §6/§7 for the widget and save specs, and
    §10 for phase-specific risks.
 
