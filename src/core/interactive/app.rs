@@ -13,6 +13,7 @@ use crate::core::{
     eframe_support::wgpu_native_options,
     file_io::FilePrefix,
     image_utils::{ImageSpecification, PixelMapper, Renderable},
+    interactive::editor::{EditorState, delete_keyframe, show_palette_editor},
     render_window::{PixelGrid, RenderWindow},
     stopwatch::Stopwatch,
     view_control::{
@@ -39,6 +40,12 @@ const ACTIVE_TICK: Duration = Duration::from_millis(10);
 /// responsive to silently-dropped resize / input events on WSL/XWayland
 /// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
 const IDLE_TICK: Duration = Duration::from_millis(100);
+
+/// Default width of the color-editor side panel, in logical pixels.
+const EDITOR_PANEL_WIDTH: f32 = 260.0;
+/// Resize bounds for the editor side panel. `size_range` (rather than a
+/// fixed exact width) keeps the panel user-resizable (§4.3 of the roadmap).
+const EDITOR_PANEL_WIDTH_RANGE: std::ops::RangeInclusive<f32> = 180.0..=520.0;
 
 fn direction_from_key_pair(neg: bool, pos: bool) -> ScalarDirection {
     if neg == pos {
@@ -123,7 +130,7 @@ fn any_control_key_held(ctx: &egui::Context) -> bool {
 }
 
 /// eframe application that drives the interactive fractal explorer.
-struct ExploreApp<F: Renderable> {
+struct FractalApp<F: Renderable> {
     render_window: PixelGrid<F>,
     stopwatch: Stopwatch,
     texture: egui::TextureHandle,
@@ -131,9 +138,11 @@ struct ExploreApp<F: Renderable> {
     /// fractal image is ready. Allocated once to keep texture uploads off the
     /// allocator on the hot path.
     display_image: ColorImage,
+    /// Selection state for the color-editor side panel.
+    editor_state: EditorState,
 }
 
-impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
+impl<F: Renderable + Send + Sync + 'static> FractalApp<F> {
     fn new(
         cc: &eframe::CreationContext<'_>,
         file_prefix: FilePrefix,
@@ -170,6 +179,7 @@ impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
             stopwatch,
             texture,
             display_image,
+            editor_state: EditorState::default(),
         }
     }
 
@@ -206,20 +216,69 @@ impl<F: Renderable + Send + Sync + 'static> ExploreApp<F> {
     }
 }
 
-impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
+impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         [0.0, 0.0, 0.0, 1.0]
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if ctx.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Q)) {
+        // Quit: `Q`, or `Ctrl+C` (terminal default). `Esc` no longer quits —
+        // it clears the keyframe selection instead.
+        if ctx.input(|i| i.key_pressed(Key::Q) || (i.modifiers.ctrl && i.key_pressed(Key::C))) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
 
-        if ctx.input(|i| i.key_down(Key::R)) {
+        // `Esc` clears the keyframe selection (no-op when nothing selected).
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            self.editor_state.selected_keyframe = None;
+        }
+
+        // `Delete` removes the selected keyframe (no-op on the 0.0 / 1.0
+        // anchors), then triggers a color-only re-render.
+        if ctx.input(|i| i.key_pressed(Key::Delete))
+            && let Some(selected) = self.editor_state.selected_keyframe
+        {
+            let active = self.editor_state.active_color_map;
+            let mut deleted = false;
+            {
+                let mut palette = self.render_window.palette().lock().unwrap();
+                if active < palette.color_maps.len() {
+                    deleted = delete_keyframe(&mut palette.color_maps[active], selected);
+                }
+            }
+            if deleted {
+                self.editor_state.selected_keyframe = None;
+                self.render_window.mark_color_dirty();
+            }
+        }
+
+        // `R` resets the view and the color palette to their initial state.
+        // Edge-triggered (like Space): holding the key should reset once, not
+        // re-clone the palette and re-mark the preview dirty every frame.
+        if ctx.input(|i| i.key_pressed(Key::R)) {
             self.render_window.reset();
+            self.editor_state.selected_keyframe = None;
+        }
+
+        let mut palette_changed = false;
+        egui::Panel::right("color_editor")
+            .default_size(EDITOR_PANEL_WIDTH)
+            .size_range(EDITOR_PANEL_WIDTH_RANGE)
+            .show_separator_line(false)
+            .frame(
+                Frame::NONE
+                    .fill(Color32::BLACK)
+                    .inner_margin(egui::Margin::symmetric(8, 4)),
+            )
+            .show_inside(ui, |ui| {
+                let mut palette = self.render_window.palette().lock().unwrap();
+                palette_changed = show_palette_editor(&mut palette, ui, &mut self.editor_state);
+            });
+        if palette_changed {
+            self.render_window.mark_color_dirty();
+            ctx.request_repaint();
         }
 
         let click = egui::CentralPanel::default()
@@ -266,9 +325,13 @@ impl<F: Renderable + 'static> eframe::App for ExploreApp<F> {
 /// - Arrow keys: pan the view.
 /// - `W` / `S`: zoom in / out. Hold `A` / `D` (with no W/S) for a fast zoom.
 /// - Left click: recenter the view on the clicked point.
-/// - `R`: reset to the initial view.
+/// - `R`: reset to the initial view and color palette.
 /// - `Space`: save the current frame to disk (alongside its parameter JSON).
-/// - `Esc` / `Q`: exit.
+/// - Click a keyframe in the editor to edit its color; `+` inserts, the drag
+///   values set segment widths.
+/// - `Esc`: clear the keyframe selection. `Delete`: remove the selected
+///   keyframe.
+/// - `Q` / `Ctrl+C`: exit.
 pub fn explore<F: Renderable + Send + Sync + 'static>(
     file_prefix: FilePrefix,
     image_specification: ImageSpecification,
@@ -283,7 +346,7 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
         "Fractal Explorer",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(ExploreApp::new(
+            Ok(Box::new(FractalApp::new(
                 cc,
                 file_prefix,
                 image_specification,

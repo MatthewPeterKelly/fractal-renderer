@@ -10,8 +10,8 @@ use crate::core::{
         self, ImageSpecification, RenderOptions, Renderable, SpeedOptimizer,
         scale_down_parameter_for_speed, scale_up_parameter_for_speed,
     },
+    interactive,
     interpolation::ClampedLogInterpolator,
-    user_interface,
 };
 
 // Its often more efficient to compute both the value of a complex function
@@ -369,7 +369,7 @@ pub fn explore_fractal(
     match &params.system {
         SystemType::RootsOfUnity(system_params) => {
             file_prefix.create_and_step_into_sub_directory("roots_of_unity");
-            user_interface::explore(
+            interactive::explore(
                 file_prefix,
                 params.params.image_specification,
                 NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
@@ -377,7 +377,7 @@ pub fn explore_fractal(
         }
         SystemType::CoshMinusOne(system_params) => {
             file_prefix.create_and_step_into_sub_directory("cosh_minus_one");
-            user_interface::explore(
+            interactive::explore(
                 file_prefix,
                 params.params.image_specification,
                 NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),

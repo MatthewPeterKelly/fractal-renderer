@@ -1,10 +1,11 @@
 use std::sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
 };
 
 use egui::{Color32, ColorImage};
 
+use crate::core::color_map::ColorPalette;
 use crate::core::render_quality_fsm::AdaptiveOptimizationRegulator;
 
 use super::{
@@ -91,6 +92,27 @@ pub struct PixelGrid<F: Renderable> {
     // `display_buffer` and needs to be uploaded to the texture.
     redraw_required: Arc<AtomicBool>,
 
+    // Set by the editor (UI thread) when a keyframe / background edit needs
+    // a color-only re-render. Drained by `update`, which spawns a
+    // `recolorize` task (a full view render takes priority).
+    color_dirty: Arc<AtomicBool>,
+
+    // Editor's source-of-truth color palette, held in its own lightweight
+    // mutex so the UI thread can read/mutate it every frame without ever
+    // locking the (long-held) pipeline mutex. Synced into the fractal at the
+    // start of each render / recolorize. See the Phase-4 roadmap deviation
+    // note: this avoids freezing the editor during a long render.
+    palette: Arc<Mutex<ColorPalette>>,
+
+    // The palette the fractal was constructed with; restored by `reset` so
+    // `R` returns to the initial colors as well as the initial view.
+    initial_color_palette: ColorPalette,
+
+    // Runtime `sampling_level` of the most recently completed full render.
+    // `recolorize` reuses it so the color-only pass walks the same populated
+    // sub-rectangle of the field that the last compute pass filled.
+    last_sampling_level: Arc<AtomicI32>,
+
     // Whether a render has ever been launched on this `PixelGrid`.
     has_started_rendering: bool,
 }
@@ -115,6 +137,7 @@ where
         let hist_max = renderer.histogram_max_value();
         let lut_count = renderer.lookup_table_count();
         let speed_optimizer_cache = renderer.reference_cache();
+        let initial_color_palette = renderer.color_palette().clone();
         let pipeline =
             RenderingPipeline::new(renderer, n_max_plus_1, bin_count, hist_max, lut_count);
         let display_buffer = ColorImage::filled(
@@ -130,6 +153,10 @@ where
             speed_optimizer_cache,
             render_task_is_busy: Arc::new(AtomicBool::new(false)),
             redraw_required: Arc::new(AtomicBool::new(false)),
+            color_dirty: Arc::new(AtomicBool::new(false)),
+            palette: Arc::new(Mutex::new(initial_color_palette.clone())),
+            initial_color_palette,
+            last_sampling_level: Arc::new(AtomicI32::new(0)),
             has_started_rendering: false,
             adaptive_quality_regulator: AdaptiveOptimizationRegulator::new(
                 1.0 / TARGET_RENDER_FRAMES_PER_SECOND,
@@ -157,23 +184,62 @@ where
         !self.adaptive_quality_regulator.is_idle()
     }
 
+    /// Editor's source-of-truth color palette. The interactive app locks
+    /// this each frame to draw and mutate the palette; edits are picked up by
+    /// the next render / recolorize, which copies it into the fractal.
+    pub fn palette(&self) -> &Arc<Mutex<ColorPalette>> {
+        &self.palette
+    }
+
+    /// Signal that the palette was edited and the preview needs a color-only
+    /// re-render. Drained by the next `update`.
+    pub fn mark_color_dirty(&self) {
+        self.color_dirty.store(true, Ordering::Release);
+    }
+
     /// Spawn a background render on the pipeline. The pipeline's mutex
     /// serializes against the UI thread's parameter edits.
     fn render(&mut self) {
         let display_buffer = self.display_buffer.clone();
         let pipeline = self.pipeline.clone();
+        let palette = self.palette.clone();
         let image_specification = *self.image_specification();
         let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
         let redraw_required = self.redraw_required.clone();
+        let last_sampling_level = self.last_sampling_level.clone();
 
         std::thread::spawn(move || {
             let mut color_image = display_buffer.lock().unwrap();
             let mut pipeline_mut = pipeline.lock().unwrap();
+            *pipeline_mut.fractal_mut().color_palette_mut() = palette.lock().unwrap().clone();
             pipeline_mut
                 .fractal_mut()
                 .set_image_specification(image_specification);
             let sampling_level = pipeline_mut.fractal().render_options().sampling_level;
             pipeline_mut.render(&mut color_image, sampling_level);
+            last_sampling_level.store(sampling_level, Ordering::Release);
+            render_task_is_busy.store(false, Ordering::Release);
+            redraw_required.store(true, Ordering::Release);
+        });
+    }
+
+    /// Spawn a background color-only re-render: sync the edited palette into
+    /// the fractal and re-walk the existing field (no recompute). Reuses the
+    /// last full render's `sampling_level` so it walks the same populated
+    /// cells.
+    fn recolorize(&mut self) {
+        let display_buffer = self.display_buffer.clone();
+        let pipeline = self.pipeline.clone();
+        let palette = self.palette.clone();
+        let render_task_is_busy = Arc::clone(&self.render_task_is_busy);
+        let redraw_required = self.redraw_required.clone();
+        let sampling_level = self.last_sampling_level.load(Ordering::Acquire);
+
+        std::thread::spawn(move || {
+            let mut color_image = display_buffer.lock().unwrap();
+            let mut pipeline_mut = pipeline.lock().unwrap();
+            *pipeline_mut.fractal_mut().color_palette_mut() = palette.lock().unwrap().clone();
+            pipeline_mut.recolorize_only(&mut color_image, sampling_level);
             render_task_is_busy.store(false, Ordering::Release);
             redraw_required.store(true, Ordering::Release);
         });
@@ -190,6 +256,8 @@ where
     fn reset(&mut self) {
         self.view_control.reset();
         self.adaptive_quality_regulator.reset();
+        *self.palette.lock().unwrap() = self.initial_color_palette.clone();
+        self.color_dirty.store(true, Ordering::Release);
     }
 
     fn update(
@@ -226,6 +294,7 @@ where
             .render_required(user_interaction);
         let fallback_command = (user_interaction || !self.has_started_rendering).then_some(0.0);
 
+        let mut launched_full_render = false;
         if let Some(command) = render_required.or(fallback_command) {
             // If we need to render, poll the render background thread to see if it is available...
             if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
@@ -240,8 +309,28 @@ where
                     .begin_rendering(time, command);
                 self.has_started_rendering = true;
                 self.render();
+                launched_full_render = true;
+                // The full render clones the current (possibly just-edited)
+                // palette into the fractal, so it already satisfies any
+                // pending color edit. Clear the flag to avoid a redundant
+                // recolorize firing the moment this render completes.
+                self.color_dirty.store(false, Ordering::Release);
             }
         }
+
+        // Color-only re-render after a palette edit. A full view render takes
+        // priority — it regenerates the field a recolorize would re-walk — so
+        // only recolorize when none was launched this tick and the worker is
+        // free. If the worker is busy the dirty flag persists and we retry.
+        if !launched_full_render
+            && self.has_started_rendering
+            && self.color_dirty.load(Ordering::Acquire)
+            && !self.render_task_is_busy.swap(true, Ordering::Acquire)
+        {
+            self.color_dirty.store(false, Ordering::Release);
+            self.recolorize();
+        }
+
         // Redraw is required if a completed background render is waiting to be drawn.
         redraw_required
     }

@@ -127,8 +127,8 @@ the CDFs derive from it (not from the keyframes), a color-only re-render is just
 | 1     | Color-map data unification                 | ✅ shipped (`9a2e51b`)           |
 | 2     | Compute / color split                      | ✅ shipped (`4199c23`…`8008aff`) |
 | 3     | Pipeline unification & per-root colors     | ✅ shipped (`56ad860`…`7308de0`) |
-| 4     | Unified `interactive` module + live editor | ⬜ next (§5)                     |
-| 5     | Gated, restorable Space-as-save            | ⬜ §5                            |
+| 4     | Unified `interactive` module + live editor | ✅ shipped (`89f4512`…`ffd733d`) |
+| 5     | Gated, restorable Space-as-save            | ⬜ next (§5)                     |
 | 6     | CLI + cleanup (retire dead code)           | ⬜ §5                            |
 | 7     | Polish                                     | ⬜ §5 (opportunistic)            |
 
@@ -444,14 +444,32 @@ Four PRs remain. Each is a self-contained, bisectable PR. The editor is wired
 nothing" step, because `color_palette_mut()` already exists and the raw-field
 architecture makes a color-only re-render trivial (§3.3).
 
-| PR      | Title                                            | Blast radius                                                       |
-| ------- | ------------------------------------------------ | ------------------------------------------------------------------ |
-| Phase 4 | Unified `interactive` module + live color editor | New `src/core/interactive/`; `recolorize_only`; `color_dirty` flag |
-| Phase 5 | Gated, restorable Space-as-save                  | Save state machine; full-`FractalParams` serialization             |
-| Phase 6 | CLI + cleanup (retire dead code)                 | Delete `color_swatch`, demo example, demo editor module            |
-| Phase 7 | Polish                                           | Contents TBD post-Phase-5 measurement                              |
+| PR      | Title                                               | Blast radius                                                       |
+| ------- | --------------------------------------------------- | ------------------------------------------------------------------ |
+| Phase 4 | ✅ Unified `interactive` module + live color editor | New `src/core/interactive/`; `recolorize_only`; `color_dirty` flag |
+| Phase 5 | Gated, restorable Space-as-save                     | Save state machine; full-`FractalParams` serialization             |
+| Phase 6 | CLI + cleanup (retire dead code)                    | Delete `color_swatch`, demo example, demo editor module            |
+| Phase 7 | Polish                                              | Contents TBD post-Phase-5 measurement                              |
 
-### Phase 4 — Unified `interactive` module + live color editor
+### Phase 4 — Unified `interactive` module + live color editor — ✅ shipped
+
+**Shipped** in three commits (`89f4512` module reorg, `4f666d3`
+`recolorize_only` + dirty-flag plumbing, `ffd733d` editor widget + live wiring
+
+- key remaps). Two deviations from the plan below, both intentional:
+
+* **The editor's palette lives in its own `Arc<Mutex<ColorPalette>>` on
+  `PixelGrid`, not the pipeline mutex.** The background render holds the
+  pipeline mutex for the whole compute, so editing through it would freeze the
+  editor during a long render. The separate mutex is synced into the fractal at
+  the start of each render / recolorize; the fractal's embedded palette stays
+  authoritative for serialization (Phase 5).
+* **The "editor widget", "live-sync", and "key remap" commits were merged into
+  one.** The pure edit helpers (`set_segment_fraction`, `insert_midpoint`,
+  `delete_keyframe`) are public API the key handlers call, so splitting them
+  would have needed throwaway `#[allow(dead_code)]`.
+
+The original plan follows, for reference.
 
 **Goal:** move the explore app into a new `src/core/interactive/` module, add
 the right-side color editor panel, and wire edits to the preview live. After
