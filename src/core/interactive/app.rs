@@ -229,7 +229,7 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
         // (§7.2 of the roadmap) — the view, palette, and selection are frozen
         // until the gated full-quality render completes. Quit is *not*
         // suppressed.
-        let saving = self.render_window.is_saving();
+        let mut saving = self.render_window.is_saving();
 
         // Quit: `Q`, or `Ctrl+C` (terminal default). `Esc` no longer quits —
         // it clears the keyframe selection instead.
@@ -242,6 +242,10 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
         // while a save is already in flight is ignored.
         if !saving && ctx.input(|i| i.key_pressed(Key::Space)) {
             self.render_window.request_save();
+            // Suppress the rest of this frame's input immediately, so a
+            // simultaneous slider drag or keypress on the press frame can't
+            // mutate the state that is about to be snapshotted.
+            saving = true;
         }
 
         // Keyframe-editor keys are inert while saving.

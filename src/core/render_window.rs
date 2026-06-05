@@ -359,12 +359,27 @@ where
         // (2) the adaptive quality regulator reports that the render quality needs to be modified
         let user_interaction = self.view_control.update(time, center_command, zoom_command);
 
-        // Gated Space-as-save flow. While active it takes over scheduling
-        // entirely and never calls the adaptive regulator, so the regulator
-        // is *frozen* across the save: interaction resumes afterward at its
-        // exact pre-save responsiveness (rather than the roadmap's
-        // reset-and-cache, which is equivalent in effect). `view_control` is
-        // still advanced above each frame, so resuming never sees a time jump.
+        // If a render completed, close out its timing *before* anything else —
+        // including the save flow — can clear the flag or launch the next
+        // render. Doing it here (rather than after the save match) ensures a
+        // render that finishes just as a save begins is still recorded, so the
+        // regulator's `render_start_time` is never left dangling across the
+        // save. Capturing the period before launching also keeps it associated
+        // with the correct command.
+        let redraw_required = self.redraw_required.load(Ordering::Acquire);
+        if redraw_required {
+            self.adaptive_quality_regulator.finish_rendering(time);
+        }
+
+        // Gated Space-as-save flow. While active it takes over scheduling and
+        // never *launches* a regulator-driven render, so the regulator's
+        // mode/command stay frozen across the save: interaction resumes
+        // afterward at its exact pre-save responsiveness (rather than the
+        // roadmap's reset-and-cache, which is equivalent in effect). The
+        // `finish_rendering` above still runs, but the save render bypasses
+        // `begin_rendering`, so once the pre-save render is closed out it is a
+        // no-op. `view_control` is also advanced above, so resuming never sees
+        // a time jump.
         match self.save_state {
             SaveState::Pending => {
                 // Wait for any in-flight render to finish, then launch a
@@ -374,6 +389,12 @@ where
                 // rather than whatever degraded state interaction left behind.
                 if !self.render_task_is_busy.swap(true, Ordering::Acquire) {
                     self.redraw_required.store(false, Ordering::Release);
+                    // The save render is a full render: it clones the current
+                    // (possibly just-edited) palette into the fractal, so it
+                    // already satisfies any pending color edit. Clear the flag
+                    // so a redundant recolorize doesn't fire after the save
+                    // (mirrors the full-render path below).
+                    self.color_dirty.store(false, Ordering::Release);
                     self.pipeline
                         .lock()
                         .unwrap()
@@ -386,9 +407,7 @@ where
                 return false;
             }
             SaveState::Rendering => {
-                if self.redraw_required.load(Ordering::Acquire)
-                    && !self.render_task_is_busy.load(Ordering::Acquire)
-                {
+                if redraw_required && !self.render_task_is_busy.load(Ordering::Acquire) {
                     self.write_snapshot();
                     self.save_state = SaveState::Idle;
                     // Report the completed full-quality frame so the app
@@ -398,14 +417,6 @@ where
                 return false;
             }
             SaveState::Idle => {}
-        }
-
-        // If redraw is required, it tells us that the previous rendering operation has
-        // completed. Capture this timing *before* possibly launching a new render, so that
-        // the measured period is associated with the correct command.
-        let redraw_required = self.redraw_required.load(Ordering::Acquire);
-        if redraw_required {
-            self.adaptive_quality_regulator.finish_rendering(time);
         }
 
         let render_required = self
