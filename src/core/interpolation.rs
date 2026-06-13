@@ -121,22 +121,6 @@ where
     }
 }
 
-/// Step interpolator switches from the lower to upper value above the specified threshold
-#[derive(Default, Clone, Copy, Debug)]
-pub struct StepInterpolator<T: Float + Copy> {
-    pub threshold: T,
-}
-
-impl<T, V> Interpolator<T, V> for StepInterpolator<T>
-where
-    T: Float + Copy,
-    V: Copy + Add<Output = V> + Sub<Output = V> + Mul<T, Output = V>,
-{
-    fn interpolate(&self, alpha: T, low: V, upp: V) -> V {
-        if alpha > self.threshold { upp } else { low }
-    }
-}
-
 /// Linear interpolation: low * (1 - alpha) + upp * alpha
 /// Extrapolate if alpha is not in [0,1]
 #[derive(Default, Clone, Copy, Debug)]
@@ -295,20 +279,6 @@ mod tests {
         // extrapolation clamps
         assert_relative_eq!(interp.interpolate(-0.6, low, upp), low, epsilon = 1e-12);
         assert_relative_eq!(interp.interpolate(1.5, low, upp), upp, epsilon = 1e-12);
-    }
-
-    #[test]
-    fn test_step_interpolator_scalar() {
-        let interp = StepInterpolator { threshold: 0.5 };
-        let low: f64 = 1.0;
-        let upp: f64 = 5.0;
-        assert_eq!(interp.interpolate(-0.5, low, upp), 1.0);
-        assert_eq!(interp.interpolate(0.0, low, upp), 1.0);
-        assert_eq!(interp.interpolate(0.49999, low, upp), 1.0);
-        assert_eq!(interp.interpolate(0.5, low, upp), 1.0);
-        assert_eq!(interp.interpolate(0.50001, low, upp), 5.0);
-        assert_eq!(interp.interpolate(1.0, low, upp), 5.0);
-        assert_eq!(interp.interpolate(1.5, low, upp), 5.0);
     }
 
     #[test]

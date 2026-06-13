@@ -112,14 +112,6 @@ cargo run --release -- explore ./examples/driven_damped_pendulum/ddp_low_res_ant
 
 Note that `explore` mode does not support the barnsley fern or serpinsky triangle.
 
-**Color-Swatch Mode**
-
-The simple "color-swatch" mode is used for debugging and tweaking color map data. It has a slightly different input format.
-
-```
-cargo run  --release -- color-swatch examples/color_swatch/rainbow.json
-```
-
 ## Software Design
 
 The software for the fractal renderer was written with two goals in mind:

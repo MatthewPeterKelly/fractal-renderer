@@ -66,9 +66,7 @@ fn render_image_and_verify_file_hash(test_param_file_name_base: &str, expected_h
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        check_image_file_hash, render_image_and_verify_file_hash, run_cargo_release_with_two_args,
-    };
+    use crate::render_image_and_verify_file_hash;
 
     #[test]
     fn regression_test_cli_render_pipeline() {
@@ -119,23 +117,5 @@ mod tests {
         }
 
         assert!(ok);
-    }
-
-    #[test]
-    fn regression_test_cli_color_swatch() {
-        run_cargo_release_with_two_args(
-            "color-swatch",
-            "./tests/param_files/color_swatch/default_regression_test.json",
-        );
-        match check_image_file_hash(
-            "out/color_swatch/default_regression_test.png",
-            "a8d6ad55aa64624152a9fb9d867ce77aab1a05cf25956b8c6826cf6cd388cf51",
-        ) {
-            Ok(()) => {}
-            Err(diagnostics) => {
-                println!("Hash mismatch! Color swatch hash: {}", diagnostics);
-                panic!()
-            }
-        }
     }
 }

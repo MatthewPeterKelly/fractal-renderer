@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use egui::{Color32, ColorImage};
 #[allow(dead_code)]
 use fractal_renderer::{
-    cli::{color_swatch::generate_color_swatch, explore::explore_fractal, render::render_fractal},
+    cli::{explore::explore_fractal, render::render_fractal},
     core::{
         color_map_editor_ui::run_color_editor,
         file_io::FilePrefix,
@@ -171,17 +171,4 @@ where
             json_text.len(),
         )
     })
-}
-
-#[allow(dead_code)]
-pub fn color_swatch_example_from_string(example_name: &str) {
-    let params_name = String::from("examples/") + example_name + &String::from("/params.json");
-
-    generate_color_swatch(
-        &params_name,
-        FilePrefix {
-            directory_path: build_output_path(example_name),
-            file_base: String::from("result"),
-        },
-    );
 }
