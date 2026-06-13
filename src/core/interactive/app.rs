@@ -34,12 +34,12 @@ const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE;
 /// Minimum repaint period while the user is interacting or a render is in
 /// flight. 100 Hz is faster than any common vsync cap, so the actual cadence
 /// is still limited by the display refresh rate.
-const ACTIVE_TICK: Duration = Duration::from_millis(10);
+const ACTIVE_TICK_DURATION: Duration = Duration::from_millis(10);
 
 /// Defensive repaint period when the UI is otherwise idle. Keeps the app
 /// responsive to silently-dropped resize / input events on WSL/XWayland
 /// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
-const IDLE_TICK: Duration = Duration::from_millis(100);
+const IDLE_TICK_DURATION: Duration = Duration::from_millis(100);
 
 /// Default width of the color-editor side panel, in logical pixels.
 const EDITOR_PANEL_WIDTH: f32 = 260.0;
@@ -225,21 +225,20 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        // While a snapshot is saving, all interactive input is suppressed
-        // (§7.2 of the roadmap) — the view, palette, and selection are frozen
-        // until the gated full-quality render completes. Quit is *not*
-        // suppressed.
+        // While a snapshot is saving, all interactive input is suppressed.
+        // The view, palette, and selection are frozen
+        // until the gated full-quality render completes.
+        // Quit is *not* suppressed.
         let mut saving = self.render_window.is_saving();
 
-        // Quit: `Q`, or `Ctrl+C` (terminal default). `Esc` no longer quits —
-        // it clears the keyframe selection instead.
+        // Quit: `Q`, or `Ctrl+C` (terminal default).
         if ctx.input(|i| i.key_pressed(Key::Q) || (i.modifiers.ctrl && i.key_pressed(Key::C))) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
 
-        // `Space` initiates a gated, restorable save. Debounced: a second press
-        // while a save is already in flight is ignored.
+        // `Space` initiates a gated, restorable save.
+        // Debounced: a second press while a save is already in flight is ignored.
         if !saving && ctx.input(|i| i.key_pressed(Key::Space)) {
             self.render_window.request_save();
             // Suppress the rest of this frame's input immediately, so a
@@ -349,7 +348,11 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
             || self.render_window.redraw_required()
             || self.render_window.adaptive_rendering_required()
             || self.render_window.is_saving();
-        ctx.request_repaint_after(if active { ACTIVE_TICK } else { IDLE_TICK });
+        ctx.request_repaint_after(if active {
+            ACTIVE_TICK_DURATION
+        } else {
+            IDLE_TICK_DURATION
+        });
     }
 }
 
