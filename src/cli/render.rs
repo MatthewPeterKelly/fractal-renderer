@@ -1,7 +1,9 @@
 use crate::core::image_utils;
 use crate::fractals::newtons_method::render_newtons_method;
 use crate::fractals::{
-    barnsley_fern::render_barnsley_fern, common::FractalParams, serpinsky::render_serpinsky,
+    barnsley_fern::render_barnsley_fern,
+    common::{FractalParams, ddp_snapshot_json, julia_snapshot_json, mandelbrot_snapshot_json},
+    serpinsky::render_serpinsky,
 };
 
 use crate::core::file_io::FilePrefix;
@@ -13,15 +15,19 @@ pub fn render_fractal(
     match params {
         FractalParams::Mandelbrot(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("mandelbrot");
-            image_utils::render((**inner_params).clone(), file_prefix)
+            image_utils::render(
+                (**inner_params).clone(),
+                file_prefix,
+                mandelbrot_snapshot_json,
+            )
         }
         FractalParams::Julia(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("julia");
-            image_utils::render((**inner_params).clone(), file_prefix)
+            image_utils::render((**inner_params).clone(), file_prefix, julia_snapshot_json)
         }
         FractalParams::DrivenDampedPendulum(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("driven_damped_pendulum");
-            image_utils::render((**inner_params).clone(), file_prefix)
+            image_utils::render((**inner_params).clone(), file_prefix, ddp_snapshot_json)
         }
         FractalParams::BarnsleyFern(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("barnsley_fern");

@@ -14,7 +14,7 @@ use crate::core::{
     file_io::FilePrefix,
     image_utils::{ImageSpecification, PixelMapper, Renderable},
     interactive::editor::{EditorState, delete_keyframe, show_palette_editor},
-    render_window::{PixelGrid, RenderWindow},
+    render_window::{PixelGrid, RenderWindow, SnapshotSerializer},
     stopwatch::Stopwatch,
     view_control::{
         CenterCommand, CenterTargetCommand, CenterVelocityCommand, ScalarDirection, ViewControl,
@@ -34,12 +34,12 @@ const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE;
 /// Minimum repaint period while the user is interacting or a render is in
 /// flight. 100 Hz is faster than any common vsync cap, so the actual cadence
 /// is still limited by the display refresh rate.
-const ACTIVE_TICK: Duration = Duration::from_millis(10);
+const ACTIVE_TICK_DURATION: Duration = Duration::from_millis(10);
 
 /// Defensive repaint period when the UI is otherwise idle. Keeps the app
 /// responsive to silently-dropped resize / input events on WSL/XWayland
 /// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
-const IDLE_TICK: Duration = Duration::from_millis(100);
+const IDLE_TICK_DURATION: Duration = Duration::from_millis(100);
 
 /// Default width of the color-editor side panel, in logical pixels.
 const EDITOR_PANEL_WIDTH: f32 = 260.0;
@@ -148,6 +148,7 @@ impl<F: Renderable + Send + Sync + 'static> FractalApp<F> {
         file_prefix: FilePrefix,
         image_specification: ImageSpecification,
         renderer: F,
+        serialize_snapshot: SnapshotSerializer<F>,
     ) -> Self {
         // Match the color editor's theme: black panel fill + no separator
         // stroke avoids sub-pixel gap artifacts between panels at fractional
@@ -164,6 +165,7 @@ impl<F: Renderable + Send + Sync + 'static> FractalApp<F> {
             file_prefix,
             ViewControl::new(time, image_specification),
             renderer,
+            serialize_snapshot,
         );
 
         let [res_w, res_h] = image_specification.resolution;
@@ -223,43 +225,61 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        // Quit: `Q`, or `Ctrl+C` (terminal default). `Esc` no longer quits —
-        // it clears the keyframe selection instead.
+        // While a snapshot is saving, all interactive input is suppressed.
+        // The view, palette, and selection are frozen
+        // until the gated full-quality render completes.
+        // Quit is *not* suppressed.
+        let mut saving = self.render_window.is_saving();
+
+        // Quit: `Q`, or `Ctrl+C` (terminal default).
         if ctx.input(|i| i.key_pressed(Key::Q) || (i.modifiers.ctrl && i.key_pressed(Key::C))) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
 
-        // `Esc` clears the keyframe selection (no-op when nothing selected).
-        if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            self.editor_state.selected_keyframe = None;
+        // `Space` initiates a gated, restorable save.
+        // Debounced: a second press while a save is already in flight is ignored.
+        if !saving && ctx.input(|i| i.key_pressed(Key::Space)) {
+            self.render_window.request_save();
+            // Suppress the rest of this frame's input immediately, so a
+            // simultaneous slider drag or keypress on the press frame can't
+            // mutate the state that is about to be snapshotted.
+            saving = true;
         }
 
-        // `Delete` removes the selected keyframe (no-op on the 0.0 / 1.0
-        // anchors), then triggers a color-only re-render.
-        if ctx.input(|i| i.key_pressed(Key::Delete))
-            && let Some(selected) = self.editor_state.selected_keyframe
-        {
-            let active = self.editor_state.active_color_map;
-            let mut deleted = false;
+        // Keyframe-editor keys are inert while saving.
+        if !saving {
+            // `Esc` clears the keyframe selection (no-op when nothing selected).
+            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                self.editor_state.selected_keyframe = None;
+            }
+
+            // `Delete` removes the selected keyframe (no-op on the 0.0 / 1.0
+            // anchors), then triggers a color-only re-render.
+            if ctx.input(|i| i.key_pressed(Key::Delete))
+                && let Some(selected) = self.editor_state.selected_keyframe
             {
-                let mut palette = self.render_window.palette().lock().unwrap();
-                if active < palette.color_maps.len() {
-                    deleted = delete_keyframe(&mut palette.color_maps[active], selected);
+                let active = self.editor_state.active_color_map;
+                let mut deleted = false;
+                {
+                    let mut palette = self.render_window.palette().lock().unwrap();
+                    if active < palette.color_maps.len() {
+                        deleted = delete_keyframe(&mut palette.color_maps[active], selected);
+                    }
+                }
+                if deleted {
+                    self.editor_state.selected_keyframe = None;
+                    self.render_window.mark_color_dirty();
                 }
             }
-            if deleted {
-                self.editor_state.selected_keyframe = None;
-                self.render_window.mark_color_dirty();
-            }
-        }
 
-        // `R` resets the view and the color palette to their initial state.
-        // Edge-triggered (like Space): holding the key should reset once, not
-        // re-clone the palette and re-mark the preview dirty every frame.
-        if ctx.input(|i| i.key_pressed(Key::R)) {
-            self.render_window.reset();
-            self.editor_state.selected_keyframe = None;
+            // `R` resets the view and the color palette to their initial state.
+            // Edge-triggered (like Space): holding the key should reset once,
+            // not re-clone the palette and re-mark the preview dirty every frame.
+            if ctx.input(|i| i.key_pressed(Key::R)) {
+                self.render_window.reset();
+                self.editor_state.selected_keyframe = None;
+            }
         }
 
         let mut palette_changed = false;
@@ -273,8 +293,12 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
                     .inner_margin(egui::Margin::symmetric(8, 4)),
             )
             .show_inside(ui, |ui| {
-                let mut palette = self.render_window.palette().lock().unwrap();
-                palette_changed = show_palette_editor(&mut palette, ui, &mut self.editor_state);
+                // Disabled while saving so widget interactions cannot mutate
+                // the palette mid-snapshot.
+                ui.add_enabled_ui(!saving, |ui| {
+                    let mut palette = self.render_window.palette().lock().unwrap();
+                    palette_changed = show_palette_editor(&mut palette, ui, &mut self.editor_state);
+                });
             });
         if palette_changed {
             self.render_window.mark_color_dirty();
@@ -286,12 +310,19 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
             .show_inside(ui, |ui| self.show_preview(ui))
             .inner;
 
-        let image_specification = *self.render_window.image_specification();
-        let center_command = match click {
-            Some((pos, rect)) => click_to_center_command(pos, rect, &image_specification),
-            None => keyboard_center_command(&ctx),
+        // Suppress view commands while saving (Idle pan, zero zoom). The save
+        // FSM still advances each `update`, and the frozen regulator resumes
+        // afterward.
+        let (center_command, zoom_command) = if saving {
+            (CenterCommand::Idle(), ZoomVelocityCommand::zero())
+        } else {
+            let image_specification = *self.render_window.image_specification();
+            let center_command = match click {
+                Some((pos, rect)) => click_to_center_command(pos, rect, &image_specification),
+                None => keyboard_center_command(&ctx),
+            };
+            (center_command, zoom_command_from_input(&ctx))
         };
-        let zoom_command = zoom_command_from_input(&ctx);
 
         let time = self.stopwatch.total_elapsed_seconds();
         let new_buffer_ready = self
@@ -304,8 +335,9 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
                 .set(self.display_image.clone(), egui::TextureOptions::LINEAR);
         }
 
-        if ctx.input(|i| i.key_pressed(Key::Space)) {
-            self.render_window.render_to_file();
+        // "Saving snapshot…" overlay while the gated render is in flight.
+        if self.render_window.is_saving() {
+            draw_saving_overlay(&ctx);
         }
 
         // Keep the UI ticking while work is in flight or the user is driving
@@ -314,9 +346,35 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
         let active = any_control_key_held(&ctx)
             || self.render_window.render_task_is_busy()
             || self.render_window.redraw_required()
-            || self.render_window.adaptive_rendering_required();
-        ctx.request_repaint_after(if active { ACTIVE_TICK } else { IDLE_TICK });
+            || self.render_window.adaptive_rendering_required()
+            || self.render_window.is_saving();
+        ctx.request_repaint_after(if active {
+            ACTIVE_TICK_DURATION
+        } else {
+            IDLE_TICK_DURATION
+        });
     }
+}
+
+/// Paint a translucent, centered "Saving snapshot…" overlay while a gated save
+/// render is in flight. Drawn as a foreground `Area`, so it sits above the
+/// preview and editor without disturbing the §4.1 black-fill panel layout.
+fn draw_saving_overlay(ctx: &egui::Context) {
+    egui::Area::new(egui::Id::new("save_overlay"))
+        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .order(egui::Order::Foreground)
+        .show(ctx, |ui| {
+            Frame::NONE
+                .fill(Color32::from_black_alpha(220))
+                .inner_margin(egui::Margin::same(16))
+                .show(ui, |ui| {
+                    ui.label(
+                        egui::RichText::new("Saving snapshot…")
+                            .size(20.0)
+                            .color(Color32::WHITE),
+                    );
+                });
+        });
 }
 
 /// Open the interactive fractal explorer window.
@@ -332,10 +390,15 @@ impl<F: Renderable + 'static> eframe::App for FractalApp<F> {
 /// - `Esc`: clear the keyframe selection. `Delete`: remove the selected
 ///   keyframe.
 /// - `Q` / `Ctrl+C`: exit.
+///
+/// `serialize_snapshot` wraps the fractal's inner params back into a reloadable,
+/// tagged `FractalParams` JSON string for the Space-as-save snapshot; the
+/// dispatch site that selected the concrete `F` supplies it.
 pub fn explore<F: Renderable + Send + Sync + 'static>(
     file_prefix: FilePrefix,
     image_specification: ImageSpecification,
     renderer: F,
+    serialize_snapshot: impl Fn(&F::Params) -> String + 'static,
 ) -> eframe::Result<()> {
     let [res_w, res_h] = image_specification.resolution;
     let options = wgpu_native_options(
@@ -351,6 +414,7 @@ pub fn explore<F: Renderable + Send + Sync + 'static>(
                 file_prefix,
                 image_specification,
                 renderer,
+                Box::new(serialize_snapshot),
             )))
         }),
     )

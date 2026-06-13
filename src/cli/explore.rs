@@ -2,7 +2,10 @@ use std::any::type_name;
 
 use crate::{
     core::{file_io::FilePrefix, interactive},
-    fractals::{common::FractalParams, newtons_method},
+    fractals::{
+        common::{FractalParams, ddp_snapshot_json, julia_snapshot_json, mandelbrot_snapshot_json},
+        newtons_method,
+    },
 };
 
 /**
@@ -21,6 +24,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),
+                mandelbrot_snapshot_json,
             )
         }
 
@@ -30,6 +34,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),
+                julia_snapshot_json,
             )
         }
 
@@ -39,6 +44,7 @@ pub fn explore_fractal(params: &FractalParams, mut file_prefix: FilePrefix) -> e
                 file_prefix,
                 inner_params.image_specification,
                 (**inner_params).clone(),
+                ddp_snapshot_json,
             )
         }
 

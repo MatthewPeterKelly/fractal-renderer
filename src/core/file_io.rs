@@ -51,7 +51,25 @@ where
 {
     let serialized_data = serde_json::to_string(data)
         .unwrap_or_else(|_| panic!("ERROR:  Unable to serialize data: {:?}", data));
-    std::fs::write(&filename, serialized_data)
+    write_file_or_panic(filename, &serialized_data);
+}
+
+/// Serialize `data` to pretty-printed JSON, panicking with a descriptive
+/// message on failure. Mirrors `serialize_to_json_or_panic`'s policy, but
+/// returns the string (for callers that wrap the value first) and uses the
+/// human-readable multi-line layout suited to reloadable snapshot files.
+pub fn to_pretty_json_or_panic<T>(data: &T) -> String
+where
+    T: Serialize + Debug,
+{
+    serde_json::to_string_pretty(data)
+        .unwrap_or_else(|_| panic!("ERROR:  Unable to serialize data: {:?}", data))
+}
+
+/// Write `contents` to `filename`, panicking with a descriptive message on
+/// IO failure.
+pub fn write_file_or_panic(filename: std::path::PathBuf, contents: &str) {
+    std::fs::write(&filename, contents)
         .unwrap_or_else(|_| panic!("ERROR:  Unable to write file: {:?}", filename));
 }
 

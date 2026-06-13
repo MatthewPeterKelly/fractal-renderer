@@ -13,6 +13,7 @@ use crate::core::{
     interactive,
     interpolation::ClampedLogInterpolator,
 };
+use crate::fractals::common::newton_snapshot_json;
 
 // Its often more efficient to compute both the value of a complex function
 // and its derivative (slope) at the same time.
@@ -354,10 +355,12 @@ pub fn render_newtons_method(
         SystemType::RootsOfUnity(system_params) => image_utils::render(
             NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
+            |p| newton_snapshot_json(&params.system, p),
         ),
         SystemType::CoshMinusOne(system_params) => image_utils::render(
             NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
             file_prefix,
+            |p| newton_snapshot_json(&params.system, p),
         ),
     }
 }
@@ -369,18 +372,22 @@ pub fn explore_fractal(
     match &params.system {
         SystemType::RootsOfUnity(system_params) => {
             file_prefix.create_and_step_into_sub_directory("roots_of_unity");
+            let system = params.system.clone();
             interactive::explore(
                 file_prefix,
                 params.params.image_specification,
                 NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+                move |p| newton_snapshot_json(&system, p),
             )
         }
         SystemType::CoshMinusOne(system_params) => {
             file_prefix.create_and_step_into_sub_directory("cosh_minus_one");
+            let system = params.system.clone();
             interactive::explore(
                 file_prefix,
                 params.params.image_specification,
                 NewtonsMethodRenderable::new(params.params.clone(), system_params.as_ref().clone()),
+                move |p| newton_snapshot_json(&system, p),
             )
         }
     }

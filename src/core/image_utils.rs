@@ -11,7 +11,7 @@ use crate::core::field_iteration::FieldKernel;
 use crate::core::interpolation::Interpolator;
 use crate::core::render_pipeline::RenderingPipeline;
 
-use super::file_io::{FilePrefix, serialize_to_json_or_panic};
+use super::file_io::{FilePrefix, write_file_or_panic};
 use super::stopwatch::Stopwatch;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -268,9 +268,15 @@ pub trait Renderable: Sync + Send + SpeedOptimizer + FieldKernel {
 
 /// Render a fractal to a PNG file (and a sibling JSON / diagnostics file).
 /// Drives the new `RenderingPipeline` at the user's full sampling level.
+///
+/// `snapshot_json` wraps the renderable's inner params back into a reloadable,
+/// tagged `FractalParams` JSON string. It is supplied by the caller (the CLI
+/// dispatch knows the concrete variant) so this `core` function stays
+/// independent of the `fractals::FractalParams` enum.
 pub fn render<T: Renderable + 'static>(
     renderable: T,
     file_prefix: FilePrefix,
+    snapshot_json: impl Fn(&T::Params) -> String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stopwatch = Stopwatch::new("Render Stopwatch".to_owned());
 
@@ -281,9 +287,9 @@ pub fn render<T: Renderable + 'static>(
     let histogram_max_value = renderable.histogram_max_value();
     let lookup_table_count = renderable.lookup_table_count();
 
-    serialize_to_json_or_panic(
+    write_file_or_panic(
         file_prefix.full_path_with_suffix(".json"),
-        renderable.params(),
+        &snapshot_json(renderable.params()),
     );
     stopwatch.record_split("basic setup".to_owned());
 
@@ -301,12 +307,7 @@ pub fn render<T: Renderable + 'static>(
     pipeline.render(&mut color_image, cached_sampling_level);
     stopwatch.record_split("render pipeline".to_owned());
 
-    let mut imgbuf = image::ImageBuffer::new(spec.resolution[0], spec.resolution[1]);
-    let width = color_image.size[0];
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let c = color_image.pixels[(y as usize) * width + (x as usize)];
-        *pixel = image::Rgb([c.r(), c.g(), c.b()]);
-    }
+    let imgbuf = color_image_to_rgb8(&color_image);
     stopwatch.record_split("copy into image buffer".to_owned());
     write_image_to_file_or_panic(file_prefix.full_path_with_suffix(".png"), |f| {
         imgbuf.save(f)
@@ -511,6 +512,19 @@ impl SubpixelGridMask {
     pub fn count_ones(&self) -> u32 {
         self.bitmask.count_ones()
     }
+}
+
+/// Convert an `egui::ColorImage` (RGBA, row-major) into an RGB8 image buffer
+/// ready to encode to a PNG. Drops the alpha channel.
+pub fn color_image_to_rgb8(color_image: &ColorImage) -> image::RgbImage {
+    let width = color_image.size[0];
+    let height = color_image.size[1];
+    let mut imgbuf = image::ImageBuffer::new(width as u32, height as u32);
+    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
+        let c = color_image.pixels[(y as usize) * width + (x as usize)];
+        *pixel = image::Rgb([c.r(), c.g(), c.b()]);
+    }
+    imgbuf
 }
 
 pub fn write_image_to_file_or_panic<F, T, E>(filename: std::path::PathBuf, save_lambda: F)
