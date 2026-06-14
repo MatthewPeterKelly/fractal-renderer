@@ -1,6 +1,6 @@
 # Fractal Renderer
 
-A utility for quickly rendering high-quality fractal images.
+A utility for rendering and exploring various 2D fractal images.
 
 Currently this library supports six different fractals:
 
@@ -61,7 +61,7 @@ This library is under active development, with plans to add support for more fra
 
 **Render Mode:**
 
-The `render` mode of operation is well developed -- it can be used right now to quickly generate high-quality fractal renders.
+The `render` mode of operation is well developed -- it can be used right now to quickly generate high-quality fractal renders. Each render is fully described by a JSON file, making it easy to reproduce and tweak render images.
 
 **Explore Mode:**
 
@@ -112,7 +112,7 @@ You can interact with the GUI in the following ways:
 - `space`: force a full-quality render and write it to file along with a complete JSON parameter set
 - click a keyframe to select it; `Delete` removes the selected keyframe and `Esc` clears the selection
 
-When actively interacting with the fractal, it renders in "fast mode" at a lower resolution. Once interaction stops, it renders at progressively higher quality, stopping at the original parameters. User events received during a render are condensed and processed once the render completes.
+When actively interacting with the fractal, it dynamically adjusts the resolution and convergence parameters to keep the GUI responsive. Once interaction stops, it renders at progressively higher quality, stopping at the original parameters. User events received during a render are condensed and processed once the render completes.
 
 Note that `explore` mode does not support the Barnsley fern or Sierpiński triangle.
 
