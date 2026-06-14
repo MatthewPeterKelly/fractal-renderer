@@ -58,11 +58,11 @@ The `render` mode of operation is well developed -- it can be used right now to 
 
 **Explore Mode:**
 
-The `explore` mode is still a bit of a work-in-progress, but the prototype is fun to play around with!
+The `explore` mode enables the user to "fly around exploring the fractal" using the arrow keys to pan and WASD to adjust the instantaneous zoom rate. There is also a side-panel for live editing of the color map, including support for a HSV color picket and dynamically adding and removing keyframes.
 
-It is quite responsive for both the Mandelbrot and Julia Sets, provided you run with reasonable settings and don't fill up the screen with "max iteration" data. The Driven-Damped Pendulum is much more computationally expensive, so that one is a bit laggy.
+The color map edits operate on the cached scalar fields from the fractal, so they are super responsive. During interactive pan and zoom operations, the GUI will dynamically adjust the resolution and solve parameters, attempting to hit a 30 FPS render rate. As soon as interaction is done, it will progressively scale up to full quality renders.
 
-I'm actively experimenting with algorithms to dynamically adjust the render parameters for each fractal to hit a target frame rate of 30 Hz.
+Hitting spacebar during explore mode will write the active parameter set to file, along with a full quality render.
 
 ## Examples
 
@@ -95,7 +95,7 @@ You can interact with the GUI in the following ways:
 - arrow keys: pan
 - click: pan to center window on selected point
 - `r` reset to initial view
-- `esc` close the GUI
+- `q` close the GUI
 - `space` write image to file along with (partial) JSON params
 
 When actively interacting with the fractal, it will render in "fast mode", at a lower resolution. Once interaction has stopped, it will render at progressively higher quality, stopping at the original parameters. This feature is still experimental.
