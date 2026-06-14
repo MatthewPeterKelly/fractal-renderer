@@ -3,7 +3,7 @@ use crate::fractals::newtons_method::render_newtons_method;
 use crate::fractals::{
     barnsley_fern::render_barnsley_fern,
     common::{FractalParams, ddp_snapshot_json, julia_snapshot_json, mandelbrot_snapshot_json},
-    serpinsky::render_serpinsky,
+    sierpinski::render_sierpinski,
 };
 
 use crate::core::file_io::FilePrefix;
@@ -33,9 +33,9 @@ pub fn render_fractal(
             file_prefix.create_and_step_into_sub_directory("barnsley_fern");
             render_barnsley_fern(inner_params, file_prefix)
         }
-        FractalParams::Serpinsky(inner_params) => {
-            file_prefix.create_and_step_into_sub_directory("serpinsky");
-            render_serpinsky(inner_params, file_prefix)
+        FractalParams::Sierpinski(inner_params) => {
+            file_prefix.create_and_step_into_sub_directory("sierpinski");
+            render_sierpinski(inner_params, file_prefix)
         }
         FractalParams::NewtonsMethod(inner_params) => {
             file_prefix.create_and_step_into_sub_directory("newtons_method");

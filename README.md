@@ -41,7 +41,7 @@ Visualization of the Mandelbrot Set with a dark blue color map and zoomed in a b
 
 Visualization for the Sierpiński fractal, but generalized to an N-sided polygon. There are many ways to construct this fractal. This approach is implemented by sampling points from a sequence. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/134#issuecomment-2726445693).
 
-![serpinsky](https://github.com/user-attachments/assets/04112cf1-37f3-4671-87cc-622b746f39f6)
+![sierpinski](https://github.com/user-attachments/assets/04112cf1-37f3-4671-87cc-622b746f39f6)
 
 **Julia Quadratic Map**
 
@@ -80,7 +80,7 @@ cargo rex render-mandelbrot-default
 cargo rex render-julia-spiral
 cargo rex render-driven-damped-pendulum
 cargo rex render-barnsley-fern
-cargo rex render-serpinksy-triangle
+cargo rex render-sierpinski-triangle
 cargo rex render-newton-roots-of-unity-4
 ```
 

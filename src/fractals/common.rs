@@ -8,7 +8,7 @@ use super::{
     julia::JuliaParams,
     mandelbrot::MandelbrotParams,
     newtons_method::{CommonParams, NewtonsMethodParams, SystemType},
-    serpinsky::SerpinskyParams,
+    sierpinski::SierpinskiParams,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,7 +17,7 @@ pub enum FractalParams {
     Julia(Box<JuliaParams>),
     DrivenDampedPendulum(Box<DrivenDampedPendulumParams>),
     BarnsleyFern(Box<BarnsleyFernParams>),
-    Serpinsky(Box<SerpinskyParams>),
+    Sierpinski(Box<SierpinskiParams>),
     NewtonsMethod(Box<NewtonsMethodParams>),
 }
 

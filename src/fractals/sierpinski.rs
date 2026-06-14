@@ -7,11 +7,11 @@ use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 /**
- * Complete set of parameters that are fed in from the JSON for the Serpinsky fractal.
+ * Complete set of parameters that are fed in from the JSON for the Sierpinski fractal.
  * The traditional "triangle" fractal is generalized here to work for any regular polygon.
  */
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SerpinskyParams {
+pub struct SierpinskiParams {
     pub fit_image: FitImage,
     pub sample_count: u32,
     pub rng_seed: u64,
@@ -92,8 +92,8 @@ impl SampleGenerator {
 /**
  * Called by main, used to render the fractal using the above data structures.
  */
-pub fn render_serpinsky(
-    params: &SerpinskyParams,
+pub fn render_sierpinski(
+    params: &SierpinskiParams,
     file_prefix: FilePrefix,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let vertices = polygon_verticies(params.vertex_colors_rgb.len());
