@@ -11,9 +11,8 @@ use crate::core::{
 use serde::{Deserialize, Serialize};
 
 /// Default color palette for DDP: black flat color (out-of-basin) and a
-/// degenerate single-keyframe-pair white color map (zeroth-basin).
-/// Matches the previously hard-coded foreground/background, so JSON files
-/// without a `color` field continue to render identically.
+/// degenerate single-keyframe-pair white color map (zeroth-basin). Supplies
+/// the `color` field for JSON files that omit it.
 fn ddp_default_color() -> ColorPalette {
     ColorPalette {
         background_color: [0, 0, 0],
@@ -180,9 +179,8 @@ pub fn driven_damped_pendulum_dynamics(
     nalgebra::Vector2::new(v, v_dot)
 }
 
-// TODO:  move to DDP class
-// This function should be called in-phase with the driving function.
-// The exact phase is not important, only that it is consistent.
+// Should be called in-phase with the driving function. The exact phase is not
+// important, only that it is consistent.
 pub fn driven_damped_pendulum_attractor(
     x: nalgebra::Vector2<f64>,
     x_prev: nalgebra::Vector2<f64>,
@@ -202,11 +200,6 @@ pub fn compute_basin_index(angle: f64) -> i32 {
     (angle * SCALE_TO_UNITY).round() as i32
 }
 
-// TODO:  this should return a custom data structure that includes a variety of
-// information, all of which gets saved to the data set.
-// - iteration count
-// - basin at termination
-// - termination type (converged, max iter)
 pub fn compute_basin_of_attraction(
     x_begin: &[f64; 2],
     time_phase_fraction: f64, // [0, 1] driving function phase offset
@@ -239,10 +232,8 @@ pub fn compute_basin_of_attraction(
 mod tests {
     use super::*;
 
-    /// A pre-Phase-1 DDP params JSON has no `color` field. The
-    /// `#[serde(default)]` shim must fill it with the degenerate
-    /// white-on-black gradient — matching the previously hard-coded
-    /// values — so existing files render identically.
+    /// A DDP params JSON with no `color` field: the `#[serde(default)]` shim
+    /// must fill it with the degenerate white-on-black gradient.
     #[test]
     fn parses_legacy_json_without_color_field_with_default_white_black() {
         let json = r#"{

@@ -163,8 +163,7 @@ where
 /// Parameters shared by multiple fractal types that control how the fractal
 /// is rendered to the screen.
 ///
-/// `sampling_level` collapses the legacy `(subpixel_antialiasing,
-/// downsample_stride)` axes into a single signed integer:
+/// `sampling_level` is a single signed integer controlling sampling density:
 /// - `+n` (`n > 0`): anti-aliasing at `(n+1)²` samples per output pixel.
 /// - `0`: baseline (one sample per output pixel, no averaging).
 /// - `−n` (`n > 0`): block-fill, one sample per `(n+1)²` output pixels.
@@ -179,7 +178,7 @@ pub struct RenderOptions {
 }
 
 /// Most extreme block-fill the regulator pushes to under load
-/// (`-7` ↔ 8×8 block-fill). Mirrors the legacy `MAX_DOWNSAMPLE_STRIDE`.
+/// (`-7` ↔ 8×8 block-fill).
 const MIN_RUNTIME_SAMPLING_LEVEL: i32 = -7;
 
 impl SpeedOptimizer for RenderOptions {
@@ -190,8 +189,7 @@ impl SpeedOptimizer for RenderOptions {
     }
 
     fn set_speed_optimization_level(&mut self, level: f64, cache: &Self::ReferenceCache) {
-        // Three-piece curve (chosen to match the *spirit* of the legacy
-        // two-axis behavior — AA drops fast, downsample activates slow):
+        // Three-piece curve — AA drops fast, then block-fill ramps in slowly:
         // 1. `[0, 0.2]`: AA quality drops from cached → 0 (baseline).
         // 2. `[0.2, 0.5]`: hold at baseline.
         // 3. `[0.5, 1.0]`: block-fill ramps from baseline (or cached, if

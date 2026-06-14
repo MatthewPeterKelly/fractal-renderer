@@ -206,12 +206,9 @@ pub fn par_for_each_populated_cell(
 /// `spec.upsample(subpixel_count)` and looking up the combined index
 /// `pixel_index * subpixel_count + subpixel_index`. Two things follow:
 ///
-/// 1. The sub-pixel correction is consistent — there's no longer a
-///    mix of `width/(W-1)` (from `PixelMapper::map`) and `width/W` (from
-///    a hand-computed `pixel_width / n`) the way the pre-cleanup code
-///    used. Each subpixel slot is exactly `width/(W·n − 1)` apart, which
-///    is what `PixelMapper` would produce if W were the upsampled
-///    resolution all along.
+/// 1. The sub-pixel correction is consistent: each subpixel slot is exactly
+///    `width/(W·n − 1)` apart, which is what `PixelMapper` would produce if W
+///    were the upsampled resolution all along.
 /// 2. At `sampling_level == 0` and at block-fill levels, `subpixel_count`
 ///    is `1`, so `spec.upsample(1) == spec` and the mapper degenerates to
 ///    the base-resolution map — pixel hashes are invariant at those

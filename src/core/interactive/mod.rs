@@ -1,8 +1,7 @@
 //! Unified interactive fractal explorer.
 //!
-//! Houses the `eframe` application that drives fractal exploration. Later
-//! phases of the GUI-unification roadmap add a live color-map editor panel
-//! alongside the preview; this module is the home for both.
+//! Houses the `eframe` application that drives fractal exploration, together
+//! with the live color-map editor panel shown alongside the preview.
 
 pub mod app;
 pub mod editor;

@@ -2,10 +2,14 @@ pub trait RenderQualityPolicy {
     const MAX_COMMAND: f64 = 1.0;
     const MIN_COMMAND: f64 = 0.0;
 
-    /// @param previous_command: last render command that was completed
-    /// @param measured_period: how long did that render command take to complete?
-    /// @return: render quality command (0 = maximum quality; 1 = maximum speed)
-    ///     out of bound commands will be clamped to [0,1]
+    /// Compute the next render quality command from the previous one and how
+    /// long it took to render.
+    ///
+    /// - `previous_command`: the last render command that was completed.
+    /// - `measured_period`: how long that render command took to complete.
+    ///
+    /// Returns the render quality command (0 = maximum quality, 1 = maximum
+    /// speed); out-of-bound commands are clamped to `[0, 1]`.
     fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64;
 
     fn clamp_command(command: f64) -> f64 {
@@ -245,9 +249,7 @@ pub struct AdaptiveOptimizationRegulator {
     render_command: Option<f64>,
 }
 
-/// For now, keep the regulator simple with some hard-coded policies.
-/// Eventually these will be replaced with policies that depend on the
-/// measured frame rate data.
+/// The regulator drives quality from a set of hard-coded heuristic policies.
 impl AdaptiveOptimizationRegulator {
     pub fn new(target_update_period: f64) -> Self {
         Self {
@@ -293,7 +295,7 @@ impl AdaptiveOptimizationRegulator {
     /// This is a separate method from `render_required` because we cannot
     /// run two renders at once, and the rendering happens in a separate
     /// background process. This method will be called immediately at the
-    /// start of each enw render, and is used to collect accurate timing
+    /// start of each new render, and is used to collect accurate timing
     /// data for the finite state machine logic. It caches that data for
     /// use in the `render_required` method.
     pub fn begin_rendering(&mut self, time: f64, command: f64) {
@@ -307,10 +309,9 @@ impl AdaptiveOptimizationRegulator {
     /// is used for accurate data collection on the frame rate. This method
     /// should be called whenever the background thread finishes a render.
     pub fn finish_rendering(&mut self, time: f64) {
-        // Note: this method will sometimes be called twice for a single
-        // `begin_rendering`, so we add this guard while will only update
-        // the period on the first call to `finish_rendering()` after calling
-        // `begin_rendering()`.
+        // This method is sometimes called twice for a single `begin_rendering`,
+        // so this guard only updates the period on the first `finish_rendering`
+        // after each `begin_rendering`.
         if let Some(start_time) = self.render_start_time {
             self.render_period = Some(time - start_time);
             self.render_start_time = None;

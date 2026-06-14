@@ -37,14 +37,13 @@ const FAST_PAN_RATE: f64 = 2.5 * PAN_RATE;
 const ACTIVE_TICK_DURATION: Duration = Duration::from_millis(10);
 
 /// Defensive repaint period when the UI is otherwise idle. Keeps the app
-/// responsive to silently-dropped resize / input events on WSL/XWayland
-/// (see §4.2 of https://github.com/MatthewPeterKelly/fractal-renderer/blob/planning/gui-roadmap/docs/gui-unification-roadmap.md).
+/// responsive to silently-dropped resize / input events on WSL/XWayland.
 const IDLE_TICK_DURATION: Duration = Duration::from_millis(100);
 
 /// Default width of the color-editor side panel, in logical pixels.
 const EDITOR_PANEL_WIDTH: f32 = 260.0;
 /// Resize bounds for the editor side panel. `size_range` (rather than a
-/// fixed exact width) keeps the panel user-resizable (§4.3 of the roadmap).
+/// fixed exact width) keeps the panel user-resizable.
 const EDITOR_PANEL_WIDTH_RANGE: std::ops::RangeInclusive<f32> = 180.0..=520.0;
 
 fn direction_from_key_pair(neg: bool, pos: bool) -> ScalarDirection {
@@ -152,7 +151,7 @@ impl<F: Renderable + Send + Sync + 'static> FractalApp<F> {
     ) -> Self {
         // Match the color editor's theme: black panel fill + no separator
         // stroke avoids sub-pixel gap artifacts between panels at fractional
-        // DPI (§4.1 of the roadmap).
+        // DPI.
         let mut visuals = egui::Visuals::dark();
         visuals.panel_fill = Color32::BLACK;
         visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;

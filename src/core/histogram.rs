@@ -404,7 +404,7 @@ mod tests {
         // edge of the first useful data point:
         assert_eq!(cdf.percentile(4.0), 0.0);
 
-        // now its linear:
+        // linear interpolation across the populated range:
         assert_relative_eq!(cdf.percentile(4.1), 0.05, epsilon = tol);
         assert_relative_eq!(cdf.percentile(5.0), 0.5, epsilon = tol);
         assert_relative_eq!(cdf.percentile(5.9), 0.95, epsilon = tol);
