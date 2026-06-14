@@ -1,9 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use fractal_renderer::{
-        cli::color_swatch::ColorSwatchParams,
-        fractals::{common::FractalParams, mandelbrot::MandelbrotParams},
-    };
+    use fractal_renderer::fractals::{common::FractalParams, mandelbrot::MandelbrotParams};
     use glob::glob;
     use serde::de::DeserializeOwned;
     use std::{any::type_name, fs, path::PathBuf};
@@ -40,22 +37,12 @@ mod tests {
     #[test]
     fn test_ensure_all_example_files_can_be_parsed() {
         let examples_lib_dir = "examples/common";
-        let color_swatch_dir = "examples/visualize-color-swatch-rainbow";
 
-        // Check most of the example code here, skilling the library and color swatch dirs.
-        parse_all_parameter_files_or_panic::<FractalParams>(
-            "examples",
-            &[examples_lib_dir, color_swatch_dir],
-        );
-
-        // Color swatch params use an incompatible parameter type.
-        parse_all_parameter_files_or_panic::<ColorSwatchParams>(color_swatch_dir, &[]);
+        // Check most of the example code here, skipping the library dir.
+        parse_all_parameter_files_or_panic::<FractalParams>("examples", &[examples_lib_dir]);
 
         // Let's also check the tests directory:
-        parse_all_parameter_files_or_panic::<FractalParams>(
-            "tests/param_files",
-            &["tests/param_files/color_swatch"],
-        );
+        parse_all_parameter_files_or_panic::<FractalParams>("tests/param_files", &[]);
 
         // ... and the Benchmarks too...
         parse_all_parameter_files_or_panic::<MandelbrotParams>("benches", &[]);

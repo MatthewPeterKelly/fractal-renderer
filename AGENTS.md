@@ -12,7 +12,7 @@ Key dependencies: `rayon` (parallel iteration), `criterion` (benchmarks), `clap`
 src/
   lib.rs              # Crate root — lint config (forbid unsafe, deny clippy::all)
   main.rs             # Binary entry point, CLI dispatch
-  cli/                # clap argument structs, render/explore/color-swatch subcommands
+  cli/                # clap argument structs, render/explore subcommands
   core/               # Shared infrastructure: histogram, color maps, render window,
                       # image utilities, ODE solvers, view control, render FSM, etc.
   fractals/           # One module per fractal family: mandelbrot, julia,

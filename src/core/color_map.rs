@@ -1,6 +1,5 @@
 use egui::Color32;
 use image::Rgb;
-use iter_num_tools::lin_space;
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
@@ -212,7 +211,7 @@ pub fn colorize_cell(cache: &ColorPaletteCache, cell: Option<(f32, u32)>) -> [u8
 }
 
 /// Trait implemented by anything that maps a query in `[0, 1]` to an RGB
-/// color. Used by `color_swatch` and the editor preview.
+/// color. Used by the editor preview.
 pub trait ColorMapper {
     /// Produce the color at the given query.
     fn compute_pixel(&self, query: f32) -> image::Rgb<u8>;
@@ -275,17 +274,6 @@ where
     }
 }
 
-/// Create a new keyframe vector with the same colors but uniformly spaced
-/// queries.
-pub fn with_uniform_spacing(old_keys: &[ColorMapKeyFrame]) -> Vec<ColorMapKeyFrame> {
-    let queries = lin_space(0.0..=1.0, old_keys.len());
-    let mut new_keys = old_keys.to_vec();
-    for (query, key) in queries.zip(&mut new_keys) {
-        key.query = query;
-    }
-    new_keys
-}
-
 /// Wrapper around a color map that precomputes a lookup table mapping from
 /// query to the resulting color. Makes evaluation much faster on the hot
 /// path.
@@ -295,16 +283,6 @@ pub struct ColorMapLookUpTable {
 }
 
 impl ColorMapLookUpTable {
-    /// Construct a lookup table from a `ColorMapper`.
-    pub fn from_color_map<F: ColorMapper>(
-        color_map: &F,
-        entry_count: usize,
-    ) -> ColorMapLookUpTable {
-        ColorMapLookUpTable::new(entry_count, [0.0, 1.0], &|query: f32| {
-            color_map.compute_pixel(query)
-        })
-    }
-
     /// Construct a lookup table from an arbitrary closure over the query domain.
     pub fn new<F>(entry_count: usize, query_domain: [f32; 2], color_map: &F) -> ColorMapLookUpTable
     where
