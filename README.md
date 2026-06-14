@@ -49,7 +49,7 @@ Visualization of the Julia set. Source [here](https://github.com/MatthewPeterKel
 
 ![brassicas](https://github.com/user-attachments/assets/ff6b465a-d37c-4700-86ee-7a2b7134c369)
 
-**Newtons Method Basin of Attraction**
+**Newton's Method Basin of Attraction**
 
 Visualization of the basin of attraction for each root in a Newton's method solve for various equations. Visualization here is for `f(z) = cosh(z) - 1`. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/173).
 
