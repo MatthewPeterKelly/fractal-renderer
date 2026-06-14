@@ -1,25 +1,21 @@
 //! Top-level orchestrator that owns all reusable buffers and drives the
-//! four-phase render pipeline:
+//! four-step render pipeline:
 //!
-//! 1. (a) `field_iteration::compute_raw_field` — fill the field with raw
-//!    `Option<(f32, u32)>` cells via the fractal's `FieldKernel::evaluate`.
-//! 2. (b) `field_iteration::populate_histograms` — bin populated cells into
-//!    the per-color-map histograms (owned by the cache).
-//! 3. (c) `ColorPaletteCache::refresh_after_compute_pass` — atomically
-//!    rebuild every downstream-visible piece of cache state (per-color-map
-//!    CDFs from the freshly-populated histograms, per-color-map LUTs from
-//!    the palette's keyframes, and the cached background color). Pulling
-//!    all three into one call prevents the cache from drifting into a
-//!    half-updated state between renders.
-//! 4. (d) `field_iteration::colorize_collapse_unified` — walk the output
-//!    `egui::ColorImage`, averaging `(n+1)²` subpixel `[u8; 3]` results
-//!    into each output pixel via `colorize_cell`.
+//! - (a) `field_iteration::compute_raw_field` — fill the field with raw
+//!   `Option<(f32, u32)>` cells via the fractal's `FieldKernel::evaluate`.
+//! - (b) `field_iteration::populate_histograms` — bin populated cells into the
+//!   per-color-map histograms (owned by the cache).
+//! - (c) `ColorPaletteCache::refresh_after_compute_pass` — atomically rebuild
+//!   the per-color-map CDFs, LUTs, and cached background color in one call, so
+//!   the cache is never observed half-updated.
+//! - (d) `field_iteration::colorize_collapse_unified` — walk the output
+//!   `egui::ColorImage`, averaging `(n+1)²` subpixel `[u8; 3]` results into
+//!   each output pixel via `colorize_cell`.
 //!
-//! All buffers are allocated once at construction (or `resize`); per-frame
-//! and per-pixel allocations are zero. Dispatch is fully monomorphized over
-//! `F: Renderable`; there is no `dyn` or runtime variant matching on the hot
-//! path. The field stays raw end-to-end — there is no `normalize_field`
-//! step; CDF lookup happens inside `colorize_cell` at colorize time.
+//! All buffers are allocated once at construction (or `resize`); per-frame and
+//! per-pixel allocations are zero. Dispatch is fully monomorphized over
+//! `F: Renderable` — no `dyn`, no runtime variant matching on the hot path. The
+//! field stays raw end-to-end; CDF lookup happens inside `colorize_cell`.
 
 use egui::ColorImage;
 
@@ -30,7 +26,7 @@ use crate::core::field_iteration::{
 use crate::core::image_utils::Renderable;
 
 /// Top-level orchestrator that owns all reusable buffers for one fractal
-/// instance and runs the four-phase pipeline against them on every render.
+/// instance and runs the four-step pipeline against them on every render.
 pub struct RenderingPipeline<F: Renderable> {
     /// The fractal whose `FieldKernel::evaluate` drives the compute phase.
     fractal: F,

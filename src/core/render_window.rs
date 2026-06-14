@@ -51,9 +51,9 @@ pub trait RenderWindow {
     fn draw(&self, image: &mut ColorImage);
 }
 
-/// State of the gated Space-as-save flow (Phase 5 of the GUI roadmap): a
-/// deliberate "publish this exact state" action that forces a full-quality
-/// render before writing a reloadable params JSON + a matching PNG.
+/// State of the gated Space-as-save flow: a deliberate "publish this exact
+/// state" action that forces a full-quality render before writing a reloadable
+/// params JSON + a matching PNG.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SaveState {
     /// No save in progress.
@@ -118,8 +118,8 @@ pub struct PixelGrid<F: Renderable> {
     // Editor's source-of-truth color palette, held in its own lightweight
     // mutex so the UI thread can read/mutate it every frame without ever
     // locking the (long-held) pipeline mutex. Synced into the fractal at the
-    // start of each render / recolorize. See the Phase-4 roadmap deviation
-    // note: this avoids freezing the editor during a long render.
+    // start of each render / recolorize. A separate mutex (rather than reusing
+    // the pipeline mutex) avoids freezing the editor during a long render.
     palette: Arc<Mutex<ColorPalette>>,
 
     // The palette the fractal was constructed with; restored by `reset` so
@@ -374,8 +374,7 @@ where
         // Gated Space-as-save flow. While active it takes over scheduling and
         // never *launches* a regulator-driven render, so the regulator's
         // mode/command stay frozen across the save: interaction resumes
-        // afterward at its exact pre-save responsiveness (rather than the
-        // roadmap's reset-and-cache, which is equivalent in effect). The
+        // afterward at its exact pre-save responsiveness. The
         // `finish_rendering` above still runs, but the save render bypasses
         // `begin_rendering`, so once the pre-save render is closed out it is a
         // no-op. `view_control` is also advanced above, so resuming never sees
@@ -476,10 +475,3 @@ where
         self.redraw_required.store(false, Ordering::Release);
     }
 }
-
-// The previous `display_buffer_to_color_image_transposition` unit test was
-// removed when the pipeline began writing directly into a row-major
-// `ColorImage`; PixelGrid no longer transposes a column-major buffer. There
-// isn't a useful seam to unit-test here today; the production behavior is
-// covered by the CLI pixel-hash regression tests and the manual
-// `cargo run -- explore` smoke tests.
