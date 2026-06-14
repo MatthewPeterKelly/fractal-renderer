@@ -96,7 +96,7 @@ mod tests {
                 "1ea33ab96e50e47ce09716977681e651df5ff784539bec61370634b0fdb8c7f0",
             ),
             (
-                "serpinsky/default_regression_test",
+                "sierpinski/default_regression_test",
                 "d7776c07094689b9c994f69012eeacccebd0167ab6fcec30e67f73f8ca9cd4c5",
             ),
             (

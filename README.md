@@ -1,14 +1,15 @@
 # Fractal Renderer
 
-A utility for quickly rendering high-quality fractal images.
+A utility for rendering and exploring various 2D fractal images.
 
-Currently this library supports five different fractals:
+Currently this library supports six different fractals:
 
 - [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set)
 - [Julia Set](https://en.wikipedia.org/wiki/Julia_set) (for the 𝑝(𝑧) = 𝑧² + 𝑐 quadratic map)
 - [Barnsley Fern](https://en.wikipedia.org/wiki/Barnsley_fern)
 - Attractor of the Driven-Damped Pendulum
-- Generalized [Serpinsky Triangle](https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle) to support N-sided polygons
+- Generalized [Sierpiński Triangle](https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle) to support N-sided polygons
+- [Newton's Method](https://en.wikipedia.org/wiki/Newton_fractal) fractals (roots of unity and cosh 𝑧 − 1)
 
 The binary produced by this project primarily supports two modes of operation:
 
@@ -36,11 +37,11 @@ Visualization of the Mandelbrot Set with a dark blue color map and zoomed in a b
 
 ![mandelbrot-zoomed-in-dark](https://github.com/user-attachments/assets/4addea8e-6bf9-44d1-be34-527fc5fa2883)
 
-**Serpinksy "Triangle"**
+**Sierpiński "Triangle"**
 
-Visualization for the Serpinksy fractal, but generalized to a N-degree polygon. There are many ways to construct this fractal. This approach is implemented by sampling a sampling points from a sequence. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/134#issuecomment-2726445693).
+Visualization for the Sierpiński fractal, but generalized to an N-sided polygon. There are many ways to construct this fractal. This approach is implemented by sampling points from a sequence. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/134#issuecomment-2726445693).
 
-![serpinsky](https://github.com/user-attachments/assets/04112cf1-37f3-4671-87cc-622b746f39f6)
+![sierpinski](https://github.com/user-attachments/assets/04112cf1-37f3-4671-87cc-622b746f39f6)
 
 **Julia Quadratic Map**
 
@@ -48,45 +49,57 @@ Visualization of the Julia set. Source [here](https://github.com/MatthewPeterKel
 
 ![brassicas](https://github.com/user-attachments/assets/ff6b465a-d37c-4700-86ee-7a2b7134c369)
 
+**Newton's Method Basin of Attraction**
+
+Visualization of the basin of attraction for each root in a Newton's method solve for various equations. Visualization here is for `f(z) = cosh(z) - 1`. Source [here](https://github.com/MatthewPeterKelly/fractal-renderer/pull/173).
+
+![newtons_method_cosh_minus_one](https://github.com/user-attachments/assets/c1fa931b-b87c-4a31-bcaa-c435ce67099d)
+
 ## Status: Active Development
 
 This library is under active development, with plans to add support for more fractals and features over time.
 
 **Render Mode:**
 
-The `render` mode of operation is well developed -- it can be used right now to quickly generate high-quality fractal renders.
+The `render` mode of operation is well developed -- it can be used right now to quickly generate high-quality fractal renders. Each render is fully described by a JSON file, making it easy to reproduce and tweak render images.
 
 **Explore Mode:**
 
-The `explore` mode is still a bit of a work-in-progress, but the prototype is fun to play around with!
+The `explore` mode enables the user to "fly around exploring the fractal" using the arrow keys to pan and WASD to adjust the instantaneous zoom rate. It supports the Mandelbrot set, Julia set, driven-damped pendulum, and Newton's method fractals. There is also a side-panel for live editing of the color map: a color picker, dynamically adding and removing keyframes, dragging to adjust the width of each gradient segment, and setting the background color used for in-set cells.
 
-It is quite responsive for both the Mandelbrot and Julia Sets, provided you run with reasonable settings and don't fill up the screen with "max iteration" data. The Driven-Damped Pendulum is much more computationally expensive, so that one is a bit laggy.
+The color map edits operate on the cached scalar fields from the fractal, so they are super responsive. During interactive pan and zoom operations, the GUI will dynamically adjust the resolution and solve parameters, attempting to hit a 30 FPS render rate. As soon as interaction is done, it will progressively scale up to full quality renders.
 
-I'm actively experimenting with algorithms to dynamically adjust the render parameters for each fractal to hit a target frame rate of 30 Hz.
+Hitting spacebar during explore mode forces a full-quality render and writes it to file, along with a complete parameter set that reproduces the current view and color map.
 
 ## Examples
 
-This project includes a large collection of example files, under the `examples/` directory, covering both `render-*` and `explore-*` modes of operation, across all of the various types of fractals (`*-mandelbrot-*`, `*-julia-*`, `*-driven-damped-pendulum-*`, ...). To see all available examples, run `cargo run --example`.
+This project includes a large collection of examples under the `examples/` directory, covering both `render-*` and `explore-*` modes of operation, across all of the various types of fractals (`*-mandelbrot-*`, `*-julia-*`, `*-driven-damped-pendulum-*`, `*-newton-*`, ...). Each example is a Cargo example: a directory containing a lightweight `main.rs` wrapper plus a `params.json` file. The wrapper just loads the parameters and calls into the library to do the heavy lifting. To list all available examples, run `cargo run --example` with no name.
 
-Many of the examples, especially the Driven Damped Penulum, are computationally intensive, so it is usually good idea to run them with the `--release` flag. There is a cargo alias defined in this project to easily do this, _e.g._ `cargo run --example`.
-
-The examples are all implemented as lightweight wrappers that load a set of parameters from a `.json` file and the call into library functions to do the heavy lifting.
+Many of the examples, especially the driven-damped pendulum, are computationally intensive, so it is usually a good idea to run them with the `--release` flag. This project defines a cargo alias, `rex` (`run --release --example`), so `cargo rex <name>` runs an example in release mode.
 
 **Render Mode**
 
-Run in release mode and pass the `render` argument, followed by a JSON file path:
+Run an example by name. These render a single image to file:
 
 ```
-cargo run --release -- render ./examples/mandelbrot/default.json
-cargo run --release -- render ./examples/julia/default.json
-cargo run --release -- render ./examples/driven_damped_pendulum/default.json
-cargo run --release -- render ./examples/barnsley_fern/default.json
-cargo run --release -- render ./examples/serpinsky/triangle.json
+cargo rex render-mandelbrot-default
+cargo rex render-julia-spiral
+cargo rex render-driven-damped-pendulum
+cargo rex render-barnsley-fern
+cargo rex render-sierpinski-triangle
+cargo rex render-newton-roots-of-unity-4
 ```
 
 **Explore Mode:**
 
-Explore mode will open a GUI and immediately render the fractal with the specified parameters.
+Explore mode opens a GUI and immediately renders the fractal with the specified parameters:
+
+```
+cargo rex explore-mandelbrot-default
+cargo rex explore-julia-spiral
+cargo rex explore-newton-cosh-minus-one
+cargo rex explore-driven-damped-pendulum-quickly
+```
 
 You can interact with the GUI in the following ways:
 
@@ -94,23 +107,14 @@ You can interact with the GUI in the following ways:
 - `w`/`s`: standard zoom
 - arrow keys: pan
 - click: pan to center window on selected point
-- `r` reset to initial view
-- `esc` close the GUI
-- `space` write image to file along with (partial) JSON params
+- `r`: reset the view and color map to their initial state
+- `q` (or `Ctrl+C`): close the GUI
+- `space`: force a full-quality render and write it to file along with a complete JSON parameter set
+- click a keyframe to select it; `Delete` removes the selected keyframe and `Esc` clears the selection
 
-When actively interacting with the fractal, it will render in "fast mode", at a lower resolution. Once interaction has stopped, it will render at progressively higher quality, stopping at the original parameters. This feature is still experimental.
+When actively interacting with the fractal, it dynamically adjusts the resolution and convergence parameters to keep the GUI responsive. Once interaction stops, it renders at progressively higher quality, stopping at the original parameters. User events received during a render are condensed and processed once the render completes.
 
-User events received during rendering will be condensed and processed after rendering. Eventually I plan to add the ability to interrupt a slow render with a GUI event.
-
-The calling pattern matches `render`, and it uses the same JSON files:
-
-```
-cargo run --release -- explore ./examples/mandelbrot/default.json
-cargo run --release -- explore ./examples/julia/default.json
-cargo run --release -- explore ./examples/driven_damped_pendulum/ddp_low_res_antialias.json
-```
-
-Note that `explore` mode does not support the barnsley fern or serpinsky triangle.
+Note that `explore` mode does not support the Barnsley fern or Sierpiński triangle.
 
 ## Software Design
 
@@ -137,4 +141,4 @@ JSON and Markdown formatting uses [Prettier](https://prettier.io/). Run `npm ins
 
 ## Acknowledgements
 
-Thanks to the excellent example from the [pixel.rs](https://docs.rs/pixels), which was really helpful in getting the GUI working: [pixels/examples/conway](https://github.com/parasyte/pixels/tree/39e84aacbe117347e7b8e7201c48184344aed9cc/examples/conway).
+The interactive explore-mode GUI is built on the excellent [`eframe`/`egui`](https://github.com/emilk/egui) immediate-mode UI toolkit, which made the live color-map editor and render window straightforward to build.
