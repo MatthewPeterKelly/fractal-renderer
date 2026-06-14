@@ -9,7 +9,7 @@ pub trait RenderQualityPolicy {
     /// - `measured_period`: how long that render command took to complete.
     ///
     /// Returns the render quality command (0 = maximum quality, 1 = maximum
-    /// speed); out-of-bound commands are clamped to `[0, 1]`.
+    /// speed); out-of-bounds commands are clamped to `[0, 1]`.
     fn evaluate(&mut self, previous_command: f64, measured_period: f64) -> f64;
 
     fn clamp_command(command: f64) -> f64 {
